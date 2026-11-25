@@ -14,13 +14,17 @@ class Position:
     label: str = ""
 
 def build_default_portfolio(initial_market_state: dict[str,float]) -> list[Position]:
-    """Illustrative static positions. Quantities are hypothetical, never bank inventory."""
+    """Hypothetical constant-maturity desk books; no real institution positions."""
     s=float(initial_market_state["sp500"])
     fx=float(initial_market_state["eurusd"])
     return [
-        Position("Equity Options","EQUITY_CALL",quantity=75,maturity=0.85,
-                 strike=s*1.015,multiplier=100,label="Long SPX-style call"),
-        Position("FX Options","FX_CALL",quantity=45,maturity=0.55,
+        Position("Equity Options","EQUITY_CALL",-1200,maturity=.40,strike=s,
+                 multiplier=100,label="Short ATM SPX-style call"),
+        Position("Equity Options","EQUITY_PUT",-1200,maturity=.40,strike=s,
+                 multiplier=100,label="Short ATM SPX-style put"),
+        Position("Equity Options","VARIANCE_SWAP",-35_000_000,maturity=.70,strike=.20,
+                 label="Short implied variance — simplified mark-to-market proxy"),
+        Position("FX Options","FX_CALL",quantity=45,maturity=.55,
                  strike=fx*1.01,multiplier=100_000,label="Long EURUSD call"),
         Position("FX Options","FX_SPOT",quantity=8_000_000,label="EURUSD spot control"),
         Position("Rates","ZERO_BOND_2Y",quantity=35_000_000,maturity=2.0,label="2Y zero coupon"),
