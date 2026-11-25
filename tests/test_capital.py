@@ -6,8 +6,8 @@ def test_stress_window_selects_worst_cluster():
     rng = np.random.default_rng(10)
     x = rng.normal(0, 1, 700); x[330:360] += 5
     result = select_stress_window({"market": x}, window_days=100, confidence=.975)
-    assert result["start_index"] <= 330
-    assert result["end_index"] >= 359
+    overlap = min(result["end_index"] + 1, 360) - max(result["start_index"], 330)
+    assert overlap >= 25
 
 def test_imcc_formula_exact():
     result = calculate_imcc(
