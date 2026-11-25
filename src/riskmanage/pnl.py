@@ -2,7 +2,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 from .portfolio import DESKS, Position, build_default_portfolio
-from .pricing import black_scholes_call, garman_kohlhagen_call, zero_coupon_bond
+from .pricing import black_scholes_call, black_scholes_put, garman_kohlhagen_call, zero_coupon_bond
 
 RATE=0.035
 FOREIGN_RATE=0.020
@@ -36,6 +36,10 @@ def value_position(position: Position, state: dict[str,float], day_offset: int =
     if position.instrument=="EQUITY_CALL":
         return q*position.multiplier*black_scholes_call(
             state["sp500"],position.strike,tau,RATE,state["equity_vol"])
+    if position.instrument=="EQUITY_PUT":
+        return q*position.multiplier*black_scholes_put(state["sp500"],position.strike,tau,RATE,state["equity_vol"])
+    if position.instrument=="VARIANCE_SWAP":
+        return q*(state["equity_vol"]**2-position.strike**2)*tau
     if position.instrument=="FX_CALL":
         return q*position.multiplier*garman_kohlhagen_call(
             state["eurusd"],position.strike,tau,RATE,FOREIGN_RATE,state["eurusd_vol"])
@@ -98,6 +102,11 @@ def _taylor_rtpl(positions,desk,previous_state,current_state,day_offset,model):
 
 def build_desk_pnl(market_data: pd.DataFrame, desk: str, model: str="delta_only",
                    positions: list[Position] | None=None) -> pd.DataFrame:
+    """Mark a constant-maturity hypothetical book; positions stay static during each daily HPL interval.
+
+    After the close-to-close HPL is measured, the test book is re-established at its
+    declared constant maturity for the next day. This is a research test portfolio,
+    not a buy-and-hold record of one trade over the whole history.
     if desk not in DESKS: raise ValueError(f"unknown desk: {desk}")
     if model not in MODEL_FACTORS: raise ValueError(f"unknown risk model: {model}")
     data=enrich_market_data(market_data)
@@ -106,8 +115,8 @@ def build_desk_pnl(market_data: pd.DataFrame, desk: str, model: str="delta_only"
     for i in range(1,len(data)):
         previous=data.iloc[i-1]; current=data.iloc[i]
         state0=market_state(previous); state1=market_state(current)
-        hpl=value_desk(positions,desk,state1,i)-value_desk(positions,desk,state0,i-1)
-        rtpl=_taylor_rtpl(positions,desk,state0,state1,i-1,model)
+        hpl=value_desk(positions,desk,state1,1)-value_desk(positions,desk,state0,0)
+        rtpl=_taylor_rtpl(positions,desk,state0,state1,0,model)
         rows.append({"date":pd.Timestamp(current["date"]),"hpl":float(hpl),
                      "rtpl":float(rtpl),"residual":float(hpl-rtpl),
                      "risk_model":model})
@@ -142,9 +151,9 @@ def build_factor_pnl(market_data: pd.DataFrame,
         contribution={}
         remainder=0.0
         for desk in DESKS:
-            old=value_desk(positions,desk,s0,i-1)
-            time_only=value_desk(positions,desk,s0,i)
-            full_new=value_desk(positions,desk,s1,i)
+            old=value_desk(positions,desk,s0,0)
+            time_only=value_desk(positions,desk,s0,1)
+            full_new=value_desk(positions,desk,s1,1)
             hpl=full_new-old
             desk_hpl[desk].append(float(hpl))
             remainder += time_only-old
@@ -152,7 +161,7 @@ def build_factor_pnl(market_data: pd.DataFrame,
             for factor in DESK_FACTORS[desk]:
                 shocked=dict(s0)
                 shocked[factor]=s1[factor]
-                partial=value_desk(positions,desk,shocked,i)-time_only
+                partial=value_desk(positions,desk,shocked,1)-time_only
                 contribution[factor]=contribution.get(factor,0.0)+float(partial)
                 partial_total += partial
             remainder += hpl-(time_only-old)-partial_total
