@@ -19,7 +19,7 @@ The deterministic reference run uses 1,800 **synthetic** business-day observatio
 
 The full risk-factor model reduces the mean absolute P&L residual by **89.7%**. Yet the delta-only model records just **3 VaR exceptions in 250 observations at 99%**, which falls in the green backtesting zone. That contrast is deliberate: a quiet VaR exception count does not prove that the model captures the desk's economic P&L drivers.
 
-<text>Run it yourself with the deterministic seed to reproduce the figures.</text>
+Run it yourself with the deterministic seed to reproduce the figures.
 
 ## What is implemented
 
