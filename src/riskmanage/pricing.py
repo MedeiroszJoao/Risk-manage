@@ -42,3 +42,11 @@ def zero_coupon_bond(face_value: float, maturity: float, yield_percent: float) -
     if maturity<0 or yield_percent<=-100:
         raise ValueError("invalid maturity or yield")
     return face_value*exp(-(yield_percent/100.0)*maturity)
+
+def black_scholes_put(spot: float, strike: float, tau: float, rate: float,
+                      volatility: float, dividend: float = 0.0) -> float:
+    """European put from put-call parity, sharing the validated call implementation."""
+    if tau < 0:
+        raise ValueError("tau must be non-negative")
+    call = black_scholes_call(spot, strike, tau, rate, volatility, dividend)
+    return call - spot*exp(-dividend*tau) + strike*exp(-rate*tau)
