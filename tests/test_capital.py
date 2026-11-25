@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from riskmanage.capital import select_stress_window, calculate_imcc, aggregate_nmrf_ses
+from riskmanage.capital import select_stress_window, select_reduced_factor_set, calculate_imcc, aggregate_nmrf_ses
 
 def test_stress_window_selects_worst_cluster():
     rng = np.random.default_rng(10)
