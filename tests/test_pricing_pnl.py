@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 import pytest
 from riskmanage.pricing import black_scholes_call, garman_kohlhagen_call
 from riskmanage.fixtures import build_synthetic_market_data
