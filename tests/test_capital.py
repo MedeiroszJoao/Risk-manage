@@ -26,3 +26,15 @@ def test_nmrf_aggregation_separates_special_groups():
     result=aggregate_nmrf_ses(charges,groups,.6)
     expected=3+4+np.sqrt((.6*17)**2+(1-.6**2)*(5**2+12**2))
     assert result["aggregate"] == pytest.approx(expected)
+
+def test_reduced_factor_set_has_12_week_rolling_coverage():
+    rng=np.random.default_rng(77)
+    common=rng.normal(0,1,700)
+    factors={"equity":common,"rates":.7*common+rng.normal(0,.4,700),
+             "fx":rng.normal(0,.25,700)}
+    result=select_reduced_factor_set(factors,.975,.75)
+    coverage=result["coverage_12w"]
+    assert coverage["status"]=="computed"
+    assert coverage["observations"]==60
+    assert result["target_met"]
+    assert coverage["mean_ratio"]>=.75
