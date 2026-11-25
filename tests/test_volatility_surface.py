@@ -155,3 +155,78 @@ def test_calibration_rejects_inconsistent_atm_theta_within_expiry():
         fit_ssvi_power_law(
             log_moneyness, theta, market, expiry_times=expiry_times
         )
+
+
+
+def test_price_calibration_recovers_synthetic_ssvi_parameters():
+    from riskmanage.black76 import black76_price
+    from riskmanage.volatility_surface import fit_ssvi_power_law_to_black76_prices
+
+    rho, eta, gamma = -0.42, 0.90, 0.45
+    expiry_grid = np.array([0.25, 0.5, 1.0, 2.0])
+    theta_grid = np.array([0.02, 0.05, 0.10, 0.20])
+    k_grid = np.linspace(-0.6, 0.6, 9)
+    expiry = np.repeat(expiry_grid, 9)
+    theta = np.repeat(theta_grid, 9)
+    log_moneyness = np.tile(k_grid, expiry_grid.size)
+    forward = np.full(log_moneyness.size, 100.0)
+    strike = forward*np.exp(log_moneyness)
+    discount = np.exp(-0.03*expiry)
+    kinds = np.where(log_moneyness < 0.0, "put", "call")
+    total = ssvi_total_variance(log_moneyness, theta, rho, eta, gamma)
+    volatility = np.sqrt(total/expiry)
+    prices = black76_price(forward, strike, expiry, discount, volatility, kinds)
+
+    result = fit_ssvi_power_law_to_black76_prices(
+        forward, strike, expiry, discount, theta, kinds, prices, n_starts=5
+    )
+    assert result["success"]
+    assert result["rho"] == pytest.approx(rho, abs=3e-3)
+    assert result["eta"] == pytest.approx(eta, abs=3e-3)
+    assert result["gamma"] == pytest.approx(gamma, abs=3e-3)
+    assert result["rmse_mid_price"] < 1e-7
+    assert result["arbitrage_certificate"]["certified_static_arbitrage_free"]
+
+
+def test_price_calibration_bid_ask_interval_loss_is_zero_inside_spread():
+    from riskmanage.black76 import black76_price
+    from riskmanage.volatility_surface import fit_ssvi_power_law_to_black76_prices
+
+    expiry_grid = np.array([0.25, 0.5])
+    theta_grid = np.array([0.02, 0.05])
+    k_grid = np.linspace(-0.5, 0.5, 7)
+    expiry = np.repeat(expiry_grid, k_grid.size)
+    theta = np.repeat(theta_grid, k_grid.size)
+    log_moneyness = np.tile(k_grid, expiry_grid.size)
+    forward = np.full(log_moneyness.size, 100.0)
+    strike = forward*np.exp(log_moneyness)
+    discount = np.exp(-0.02*expiry)
+    kinds = np.where(log_moneyness < 0.0, "put", "call")
+    total = ssvi_total_variance(log_moneyness, theta, -0.3, 0.8, 0.4)
+    volatility = np.sqrt(total/expiry)
+    mid = black76_price(forward, strike, expiry, discount, volatility, kinds)
+    intrinsic = np.where(kinds == "call", discount*np.maximum(forward-strike, 0.0),
+                         discount*np.maximum(strike-forward, 0.0))
+    bid = np.maximum(mid-0.02, intrinsic+1e-8)
+    ask = mid+0.02
+
+    result = fit_ssvi_power_law_to_black76_prices(
+        forward, strike, expiry, discount, theta, kinds, mid,
+        bid_prices=bid, ask_prices=ask, n_starts=3,
+    )
+    assert result["success"]
+    assert result["objective"] == "bid_ask_interval_distance"
+    assert result["quotes_inside_bid_ask"] == len(mid)
+    assert result["cost"] == pytest.approx(0.0, abs=1e-14)
+
+
+def test_price_calibration_rejects_decreasing_atm_variance_by_expiry():
+    from riskmanage.volatility_surface import fit_ssvi_power_law_to_black76_prices
+
+    with pytest.raises(ValueError, match="non-decreasing"):
+        fit_ssvi_power_law_to_black76_prices(
+            [100]*6, [90, 100, 110, 90, 100, 110],
+            [0.25]*3+[0.5]*3, [0.99]*6,
+            [0.08]*3+[0.04]*3, ["put", "call", "call"]*2,
+            [10, 5, 2, 12, 6, 3],
+        )

@@ -57,7 +57,7 @@ Generated files are written to `reports/generated/`: daily HPL/RTPL, factor attr
 
 ## Financial engineering expansion — SSVI volatility surface
 
-The branch now includes a power-law SSVI surface, total-variance calibration, deterministic multi-start least squares and a conservative global sufficient-region certificate for static arbitrage. See [SSVI derivation, calibration and validation](docs/VOLATILITY_SURFACE.md). The calibration currently fits total implied variance, not option prices; it uses no live option chain and does not model dynamic smile evolution.
+The branch now includes a power-law SSVI surface, total-variance calibration, Black-76 pricing and implied-volatility inversion, plus direct SSVI calibration to Black-76 prices with optional bid-ask interval loss and a conservative global sufficient-region certificate for static arbitrage. See [SSVI derivation, calibration and validation](docs/VOLATILITY_SURFACE.md). The total-variance and price-space calibrators are deterministic research routines; no live option chain has yet been ingested and dynamic smile evolution is not modeled.
 
 ## Important limits — read before interpreting results
 

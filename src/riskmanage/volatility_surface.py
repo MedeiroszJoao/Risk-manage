@@ -334,3 +334,168 @@ def fit_ssvi_power_law(
         "residuals_total_variance": raw_residuals,
         "arbitrage_certificate": certificate,
     }
+
+
+def fit_ssvi_power_law_to_black76_prices(
+    forward,
+    strike,
+    expiry_times,
+    discount_factors,
+    theta,
+    option_types,
+    market_prices,
+    weights=None,
+    bid_prices=None,
+    ask_prices=None,
+    initial_guess: tuple[float, float, float] | None = None,
+    n_starts: int = 5,
+    loss: str = "linear",
+    f_scale: float = 1.0,
+    max_nfev: int = 10000,
+):
+    """Calibrate common SSVI parameters directly to European Black-76 option prices."""
+    from .black76 import black76_price
+
+    fwd = _finite_array(forward, "forward")
+    strikes = _finite_array(strike, "strike")
+    expiry = _finite_array(expiry_times, "expiry_times")
+    discounts = _finite_array(discount_factors, "discount_factors")
+    theta_array = _finite_array(theta, "theta")
+    market = _finite_array(market_prices, "market_prices")
+    kinds = np.asarray(option_types, dtype=str)
+    arrays = (fwd, strikes, expiry, discounts, theta_array, market, kinds)
+    if any(array.ndim != 1 for array in arrays):
+        raise ValueError("price-calibration inputs must be 1D vectors")
+    n = market.size
+    if n < 6 or any(array.size != n for array in arrays):
+        raise ValueError("price-calibration inputs must have equal lengths and at least 6 quotes")
+    if np.unique(expiry).size < 2:
+        raise ValueError("price calibration requires at least 2 distinct expiries")
+    if (np.any(fwd <= 0.0) or np.any(strikes <= 0.0) or np.any(expiry <= 0.0)
+            or np.any(discounts <= 0.0) or np.any(theta_array <= 0.0)):
+        raise ValueError("forwards, strikes, expiries, discount factors and theta must be positive")
+    if not np.isin(kinds, ("call", "put")).all():
+        raise ValueError("option_types must contain only 'call' or 'put'")
+    if np.any(market < 0.0):
+        raise ValueError("market option prices must be non-negative")
+    if n_starts < 1 or max_nfev < 1:
+        raise ValueError("n_starts and max_nfev must be positive integers")
+    if not np.isfinite(f_scale) or f_scale <= 0.0:
+        raise ValueError("f_scale must be finite and strictly positive")
+    if loss not in {"linear", "soft_l1", "huber", "cauchy", "arctan"}:
+        raise ValueError("unsupported least-squares loss")
+
+    expiry_theta = []
+    for tenor in np.unique(expiry):
+        values = theta_array[expiry == tenor]
+        if not np.allclose(values, values[0], rtol=1e-10, atol=1e-12):
+            raise ValueError("ATM total variance must be constant within each expiry")
+        expiry_theta.append(float(values[0]))
+    expiry_theta = np.asarray(expiry_theta, dtype=float)
+    if np.any(np.diff(expiry_theta) < -1e-12):
+        raise ValueError("ATM total variance must be non-decreasing with expiry")
+
+    is_call = kinds == "call"
+    lower = np.where(is_call, discounts*np.maximum(fwd-strikes, 0.0),
+                     discounts*np.maximum(strikes-fwd, 0.0))
+    upper = np.where(is_call, discounts*fwd, discounts*strikes)
+    tolerance = 1e-10*np.maximum(upper, 1.0)
+    if np.any(market < lower-tolerance):
+        raise ValueError("market option price violates the Black-76 lower bound")
+    if np.any(market >= upper-tolerance):
+        raise ValueError("market option price is at or too close to the Black-76 upper bound")
+
+    use_bid_ask = bid_prices is not None or ask_prices is not None
+    if use_bid_ask and (bid_prices is None or ask_prices is None):
+        raise ValueError("bid_prices and ask_prices must be supplied together")
+    if use_bid_ask:
+        bids = _finite_array(bid_prices, "bid_prices")
+        asks = _finite_array(ask_prices, "ask_prices")
+        if bids.ndim != 1 or asks.ndim != 1 or bids.size != n or asks.size != n:
+            raise ValueError("bid and ask vectors must match market_prices")
+        if np.any(bids < lower-tolerance) or np.any(bids < 0.0):
+            raise ValueError("one or more bid prices violate the Black-76 lower bound")
+        if np.any(asks >= upper-tolerance) or np.any(asks < bids):
+            raise ValueError("one or more ask prices violate the Black-76 upper bound or cross the bid")
+    else:
+        bids = asks = None
+
+    if weights is None:
+        root_weights = np.ones(n, dtype=float)
+    else:
+        weight_array = _finite_array(weights, "weights")
+        if weight_array.ndim != 1 or weight_array.size != n:
+            raise ValueError("weights must be a 1D vector matching the quotes")
+        if np.any(weight_array < 0.0) or np.count_nonzero(weight_array) < 3:
+            raise ValueError("weights must be non-negative with at least 3 positive entries")
+        mean_weight = float(np.mean(weight_array[weight_array > 0.0]))
+        root_weights = np.sqrt(weight_array/mean_weight)
+
+    log_moneyness = np.log(strikes/fwd)
+    starts = [
+        (-0.75, 0.75, 0.15), (-0.35, 1.40, 0.40), (0.00, 1.00, 0.25),
+        (0.35, 1.40, 0.40), (0.75, 0.75, 0.15),
+    ]
+    if initial_guess is not None:
+        if len(initial_guess) != 3:
+            raise ValueError("initial_guess must be (rho, eta, gamma)")
+        starts = [tuple(float(x) for x in initial_guess)] + starts
+    starts = starts[:n_starts]
+
+    def decode(parameters):
+        rho, beta, gamma = parameters
+        return float(rho), float(beta/(1.0+abs(rho))), float(gamma)
+
+    def model_prices(parameters):
+        rho, eta, gamma = decode(parameters)
+        total_variance = ssvi_total_variance(log_moneyness, theta_array, rho, eta, gamma)
+        volatility = np.sqrt(np.asarray(total_variance)/expiry)
+        return np.asarray(black76_price(fwd, strikes, expiry, discounts, volatility, kinds))
+
+    def residual(parameters):
+        model = model_prices(parameters)
+        if use_bid_ask:
+            distance = np.maximum(np.maximum(bids-model, model-asks), 0.0)
+        else:
+            distance = model-market
+        return distance*root_weights
+
+    fits = []
+    for rho0, eta0, gamma0 in starts:
+        if not -0.999 < rho0 < 0.999:
+            raise ValueError("initial rho must lie in (-0.999, 0.999)")
+        if eta0 <= 0.0 or gamma0 <= 0.0 or gamma0 > 0.5:
+            raise ValueError("initial eta must be positive and initial gamma in (0, 0.5]")
+        beta0 = eta0*(1.0+abs(rho0))
+        if beta0 > 2.0:
+            beta0 = 1.95
+        result = least_squares(
+            residual,
+            x0=np.array([rho0, beta0, gamma0], dtype=float),
+            bounds=(np.array([-0.999, 1e-8, 1e-4]), np.array([0.999, 2.0, 0.5])),
+            method="trf", loss=loss, f_scale=f_scale, x_scale="jac",
+            max_nfev=max_nfev,
+        )
+        fits.append(result)
+
+    best = min(fits, key=lambda result: float(result.cost))
+    rho, eta, gamma = decode(best.x)
+    model = model_prices(best.x)
+    mid_residual = model-market
+    singular = np.linalg.svd(best.jac, compute_uv=False)
+    condition = float(singular[0]/singular[-1]) if singular.size and singular[-1] > 0.0 else float("inf")
+    certificate = ssvi_static_arbitrage_certificate(expiry_theta, rho, eta, gamma)
+    inside = int(np.count_nonzero((model >= bids) & (model <= asks))) if use_bid_ask else None
+    return {
+        "success": bool(best.success), "status": int(best.status), "message": str(best.message),
+        "rho": rho, "eta": eta, "gamma": gamma,
+        "objective": "bid_ask_interval_distance" if use_bid_ask else "weighted_mid_price_least_squares",
+        "loss": loss, "cost": float(best.cost),
+        "rmse_mid_price": float(np.sqrt(np.mean(mid_residual**2))),
+        "max_abs_mid_price_residual": float(np.max(np.abs(mid_residual))),
+        "quotes_inside_bid_ask": inside,
+        "jacobian_condition_number": condition,
+        "nfev": int(best.nfev), "number_of_starts": len(fits),
+        "fitted_prices": model, "mid_price_residuals": mid_residual,
+        "arbitrage_certificate": certificate,
+    }

@@ -124,3 +124,27 @@ The synthetic recovery test checks implementation and optimizer behavior under a
 ## Primary reference
 
 Gatheral, J. and Jacquier, A. (2014), “Arbitrage-free SVI volatility surfaces,” *Quantitative Finance*, 14(1), 59–71. DOI: https://doi.org/10.1080/14697688.2013.819986. Open preprint: https://arxiv.org/abs/1204.0646.
+
+
+## Black-76 price-space calibration
+
+The project also includes Black-76 pricing and implied-volatility inversion for European options on forwards/futures. For forward \(F\), strike \(K\), discount factor \(D\), annualized volatility \(\sigma\), and maturity \(\tau>0\),
+
+\[
+d_1=\frac{\ln(F/K)+\frac12\sigma^2\tau}{\sigma\sqrt\tau},
+\qquad d_2=d_1-\sigma\sqrt\tau,
+\]
+\[
+C=D[F\Phi(d_1)-K\Phi(d_2)],\qquad
+P=D[K\Phi(-d_2)-F\Phi(-d_1)].
+\]
+
+The implementation enforces discounted intrinsic lower bounds and discounted forward/strike upper bounds before inversion. It solves the monotone price equation using a bracketed Brent root solver rather than relying solely on Newton iteration, which can become unstable when Black vega is small. Analytic vega is available for diagnostics and finite-difference comparison.
+
+The new price-space calibrator fits SSVI parameters directly to Black-76 prices using quote-aligned forwards, strikes, discount factors, maturities and ATM total variances. It supports weighted mid-price least squares and a bid/ask interval objective: a model price incurs no quote-fit residual while it remains inside the observed spread. The expiry ATM variance term structure is checked against actual maturities before calibration.
+
+These routines are not yet connected to a live quote feed. Synthetic calibration recovery is an implementation test, not empirical evidence of market fit.
+
+## Black (1976) reference
+
+Black, F. (1976), “The Pricing of Commodity Contracts,” *Journal of Financial Economics*, 3(1–2), 167–179. DOI: https://doi.org/10.1016/0304-405X(76)90024-6.
