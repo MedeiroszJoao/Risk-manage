@@ -148,6 +148,13 @@ def main():
           "remediation_improves_residual":metrics["residual_reduction_full_greeks"]>0}
     scenario_stress=build_scenario_reports(market)
     scenario_stress.to_csv(out/"scenario_stress.csv",index=False)
+    stress_history_assessment={
+      "minimum_required_start_date":"2007-01-01",
+      "observed_start_date":str(market.date.min().date()),
+      "starts_on_or_before_2007":bool(market.date.min()<=pd.Timestamp("2007-01-01")),
+      "regulatory_stress_history_requirement_met":bool(market.date.min()<=pd.Timestamp("2007-01-01")),
+      "note":"If false, the dataset does not provide the full historical stress span used by the Basel IMA framework."
+    }
     summary={
       "project":"RISK-MANAGE — FRTB IMA Desk Validation & Capital Lab",
       "run_utc":datetime.now(timezone.utc).isoformat(),"data_classification":data_kind,
@@ -155,6 +162,7 @@ def main():
       "date_range":{"start":str(market.date.min().date()),"end":str(market.date.max().date())},
       "desks":validation,"desk_status":desk_status,"factor_pnl_reconciliation":factor_reconciliation,
       "liquidity_adjusted_es":liquidity,"stress_window":stress,"ima_capital":capital,
+      "stress_history_assessment":stress_history_assessment,
       "rfet":rfet,"scenario_stress":scenario_stress.to_dict("records"),
       "scope_limitations":[
         "Synthetic runs contain no observed market data.",
@@ -200,8 +208,10 @@ def main():
     md += ["","## Capital and stress outputs","",
       f"- Liquidity-adjusted ES: USD {liquidity['liquidity_adjusted_es']:,.2f} (10-day base, 97.5%).",
       f"- Selected 250-day stress window: {stress['start_date']} to {stress['end_date']}.",
+      f"- Historical span starts on/before 2007: {stress_history_assessment['starts_on_or_before_2007']} (not a regulatory back-history claim).",
       f"- Illustrative IMCC: USD {capital['imcc']['imcc']:,.2f}.",
       f"- Reduced-factor current ES coverage: {capital['reduced_set']['explained_ratio']:.1%}.",
+      f"- Reduced-factor 12-week mean coverage: {capital['reduced_set']['coverage_12w'].get('mean_ratio')}.",
       "- RFET: public-close-only evidence is not used to certify modellability.",
       "","## Interpretation guardrails","",
       "- HPL backtesting is not APL backtesting.",
