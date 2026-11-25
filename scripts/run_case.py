@@ -10,7 +10,7 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"src"))
 from riskmanage.data import load_market_data, validate_market_data
 from riskmanage.fixtures import build_synthetic_market_data
-from riskmanage.pnl import DESK_FACTORS, build_desk_pnl, build_factor_pnl, market_state, value_desk
+from riskmanage.pnl import DESK_FACTORS, build_desk_pnl, build_factor_pnl, enrich_market_data, market_state, value_desk
 from riskmanage.portfolio import DESKS, build_default_portfolio
 from riskmanage.risk import historical_var_es, rolling_historical_var, liquidity_adjusted_es
 from riskmanage.capital import select_stress_window, build_ima_capital
@@ -31,7 +31,8 @@ def json_safe(obj):
     return obj
 
 def build_scenario_reports(market):
-    current=market_state(market.iloc[-1])
+    enriched = enrich_market_data(market)
+    current = market_state(enriched.iloc[-1])
     positions=build_default_portfolio(current)
     base={d:value_desk(positions,d,current,0) for d in DESKS}
     scenarios={
