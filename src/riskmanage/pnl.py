@@ -120,3 +120,44 @@ def build_all_desk_pnl(market_data: pd.DataFrame, model: str="delta_only"):
     for desk in DESKS:
         result[desk]=build_desk_pnl(data,desk,model,positions)
     return result
+
+
+def build_factor_pnl(market_data: pd.DataFrame,
+                     positions: list[Position] | None = None) -> pd.DataFrame:
+    """Full-revaluation HPL attribution by one-factor-at-a-time market shocks.
+
+    The remainder explicitly contains theta and cross-factor interactions; it is
+    not disguised as a directly observed market risk factor.
+    """
+    data=enrich_market_data(market_data)
+    if positions is None:
+        positions=build_default_portfolio(market_state(data.iloc[0]))
+    rows=[]
+    desk_hpl={desk:[] for desk in DESKS}
+    for i in range(1,len(data)):
+        previous=data.iloc[i-1]
+        current=data.iloc[i]
+        s0=market_state(previous)
+        s1=market_state(current)
+        contribution={}
+        remainder=0.0
+        for desk in DESKS:
+            old=value_desk(positions,desk,s0,i-1)
+            time_only=value_desk(positions,desk,s0,i)
+            full_new=value_desk(positions,desk,s1,i)
+            hpl=full_new-old
+            desk_hpl[desk].append(float(hpl))
+            remainder += time_only-old
+            partial_total=0.0
+            for factor in DESK_FACTORS[desk]:
+                shocked=dict(s0)
+                shocked[factor]=s1[factor]
+                partial=value_desk(positions,desk,shocked,i)-time_only
+                contribution[factor]=contribution.get(factor,0.0)+float(partial)
+                partial_total += partial
+            remainder += hpl-(time_only-old)-partial_total
+        rows.append({"date":pd.Timestamp(current["date"]),**contribution,
+                     "unexplained_pnl":float(remainder)})
+    result=pd.DataFrame(rows)
+    result.attrs["desk_hpl"]={k:np.asarray(v,dtype=float) for k,v in desk_hpl.items()}
+    return result
