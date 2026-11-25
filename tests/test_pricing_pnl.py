@@ -33,3 +33,12 @@ def test_delta_only_option_model_misses_non_linear_risk():
     delta = build_desk_pnl(data, "Equity Options", model="delta_only")
     full = build_desk_pnl(data, "Equity Options", model="full_greeks")
     assert delta.residual.abs().mean() > full.residual.abs().mean()
+
+def test_equity_options_delta_only_fails_pla_and_full_greeks_repairs_it():
+    from riskmanage.validation import pla_test
+    data=build_synthetic_market_data(1800,seed=20261124)
+    delta=build_desk_pnl(data,"Equity Options",model="delta_only")
+    full=build_desk_pnl(data,"Equity Options",model="full_greeks")
+    assert pla_test(delta.hpl,delta.rtpl)["zone"]=="red"
+    assert pla_test(full.hpl,full.rtpl)["zone"]=="green"
+    assert full.residual.abs().mean() < .2*delta.residual.abs().mean()
