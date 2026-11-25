@@ -25,7 +25,7 @@ Run it yourself with the deterministic seed to reproduce the figures.
 
 - **Market data:** reproducible public FRED CSV downloader for S&P 500, VIX, EUR/USD, USD/JPY, WTI and US Treasury yields; source URLs, retrieval timestamps, missingness and SHA-256 hashes are recorded.
 - **Four hypothetical desks:** Equity Options, FX Options, Rates and Commodities.
-- **Pricing:** Black–Scholes calls and puts, Garman–Kohlhagen FX calls, zero-coupon bond proxies and a clearly labelled simplified variance-swap mark.
+- **Pricing:** Black–Scholes calls and puts, Garman–Kohlhagen FX calls, zero-coupon bond proxies, a clearly labelled simplified variance-swap mark, and a calibrated power-law SSVI implied-volatility surface with a sufficient static-arbitrage certificate.
 - **HPL / RTPL:** close-to-close full revaluation of positions held static during each daily interval; constant-maturity test books are rolled only after daily valuation. RTPL is independently built from sensitivities and explicitly selected risk factors.
 - **VaR backtesting:** rolling 97.5% / 99% historical VaR, exceptions, Kupiec unconditional-coverage and Christoffersen independence diagnostics.
 - **PLA:** the latest 250 matched observations, Spearman rank correlation, empirical CDF / KS distance and Basel-style green / amber / red zones.
@@ -54,6 +54,10 @@ ruff check src tests scripts
 ```
 
 Generated files are written to `reports/generated/`: daily HPL/RTPL, factor attribution, backtesting / PLA, capital diagnostics, RFET evidence status, stress scenarios, figures and an executive report.
+
+## Financial engineering expansion — SSVI volatility surface
+
+The branch now includes a power-law SSVI surface, total-variance calibration, deterministic multi-start least squares and a conservative global sufficient-region certificate for static arbitrage. See [SSVI derivation, calibration and validation](docs/VOLATILITY_SURFACE.md). The calibration currently fits total implied variance, not option prices; it uses no live option chain and does not model dynamic smile evolution.
 
 ## Important limits — read before interpreting results
 
