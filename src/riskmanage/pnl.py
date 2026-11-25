@@ -107,6 +107,7 @@ def build_desk_pnl(market_data: pd.DataFrame, desk: str, model: str="delta_only"
     After the close-to-close HPL is measured, the test book is re-established at its
     declared constant maturity for the next day. This is a research test portfolio,
     not a buy-and-hold record of one trade over the whole history.
+    """
     if desk not in DESKS: raise ValueError(f"unknown desk: {desk}")
     if model not in MODEL_FACTORS: raise ValueError(f"unknown risk model: {model}")
     data=enrich_market_data(market_data)
