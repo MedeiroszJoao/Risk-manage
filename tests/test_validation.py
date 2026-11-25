@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from riskmanage.validation import kupiec_pof, christoffersen_independence, pla_test, backtest_var, rfet_diagnostic
+from riskmanage.validation import kupiec_pof, christoffersen_independence, pla_test, rfet_diagnostic
 
 def test_kupiec_no_exceptions_is_finite():
     result=kupiec_pof(0,250,.99)
