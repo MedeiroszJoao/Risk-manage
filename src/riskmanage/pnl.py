@@ -74,6 +74,10 @@ def _bump_size(name: str, value: float) -> float:
 def _taylor_rtpl(positions,desk,previous_state,current_state,day_offset,model):
     tau0=max(0.0, min((p.maturity for p in positions if p.desk==desk and p.maturity>0),default=0.0)-day_offset/TRADING_DAYS)
     # Theta is isolated as time passage at the old market state.
+    if desk=="Commodities":
+        # Exact analytical delta for a linear WTI future; avoids finite-difference cancellation.
+        quantity=sum(p.quantity for p in positions if p.desk==desk and p.instrument=="WTI_FUTURE")
+        return float(quantity*(current_state["wti"]-previous_state["wti"]))
     old_value=value_desk(positions,desk,previous_state,day_offset)
     theta_value=value_desk(positions,desk,previous_state,day_offset+1)
     result=theta_value-old_value
