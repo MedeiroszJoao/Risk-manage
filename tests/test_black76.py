@@ -52,7 +52,7 @@ def test_black76_implied_volatility_at_intrinsic_is_zero():
 @pytest.mark.parametrize(
     "args",
     [
-        (0.5, 100.0, 100.0, 1.0, 0.95, "call"),
+        (-0.5, 100.0, 100.0, 1.0, 0.95, "call"),
         (100.0, 100.0, 100.0, 1.0, 0.95, "call"),
         (1.0, 100.0, 100.0, 0.0, 0.95, "put"),
     ],
