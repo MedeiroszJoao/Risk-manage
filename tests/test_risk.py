@@ -40,7 +40,7 @@ def test_historical_es_does_not_overweight_ties_at_var():
     assert result["strict_tail_observations"] == 3
     assert result["fractional_var_boundary_mass"] == pytest.approx(0.5)
     assert result["expected_shortfall"] == pytest.approx(50.0 / 7.0)
-    assert result["expected_shortfall"] < naive_inclusive_tail_mean
+    assert result["expected_shortfall"] > naive_inclusive_tail_mean
 
 
 def test_historical_es_is_well_defined_when_all_losses_are_tied():
