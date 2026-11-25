@@ -1,18 +1,31 @@
 # Data provenance
 
-## Public data
-The downloader uses Federal Reserve Bank of St. Louis FRED public CSV graph endpoints for:
-- SP500 — S&P 500 index
-- VIXCLS — CBOE Volatility Index
-- DEXUSEU — U.S. dollars to one euro
-- DEXJPUS — Japanese yen to one U.S. dollar
-- DCOILWTICO — WTI spot price
-- DGS2 / DGS10 — 2-year / 10-year Treasury constant-maturity yields
+## Public source pipeline
 
-The ingestion script records data series IDs, endpoint URLs, retrieval UTC timestamp, row count, missingness and SHA-256 hashes of downloaded CSV bytes. The current market data files are generated locally and are not silently bundled into repository history.
+The downloader uses Federal Reserve Bank of St. Louis FRED public CSV graph endpoints:
 
-## Synthetic test data
-The fixture is generated deterministically from a fixed seed and regime-switching correlated shocks. It is labelled synthetic in metadata and reports. It is used only to verify software behavior, not to infer real risk.
+| Field | FRED series | Description |
+|---|---|---|
+| sp500 | SP500 | S&P 500 index |
+| vix | VIXCLS | CBOE Volatility Index |
+| eurusd | DEXUSEU | U.S. dollars to one euro |
+| usdjpy | DEXJPUS | Japanese yen to one U.S. dollar |
+| wti | DCOILWTICO | WTI spot price |
+| ust2y | DGS2 | 2-year Treasury constant maturity yield |
+| ust10y | DGS10 | 10-year Treasury constant maturity yield |
 
-## Important distinction
-Historical closing prices are not proof of qualifying RFET transactions / committed quotes. The model's RFET output must remain “not evidenced” without a separately supplied real-price evidence ledger.
+The ingestion script stores raw CSV bytes and records series IDs, source URLs, UTC retrieval timestamps, row counts, missingness, date coverage and SHA-256 digests. Short calendar gaps are aligned onto business dates with a maximum four-business-day forward fill; remaining missing values are rejected.
+
+## Reference run
+
+The reference outputs linked from the README are generated from the deterministic synthetic fixture (seed 20261124), not downloaded market observations. The reference history has 1,800 business-day rows from 2016-01-04 through 2022-11-25.
+
+The public FRED ingestion pipeline is implemented. A successfully downloaded public-data run must retain its source manifest alongside generated reports before any values are described as public empirical results.
+
+## RFET distinction
+
+Public daily closes do not prove qualifying transaction or committed-quote evidence. The RFET module refuses to certify modellability from close-only inputs. An independently checked evidence ledger is required.
+
+## Licensing
+
+Observe the FRED / source-provider terms for redistribution and derivative use. This repository does not claim ownership of underlying market observations.
