@@ -96,8 +96,14 @@ def test_calibration_recovers_synthetic_ssvi_parameters():
         log_moneyness, theta, true_rho, true_eta, true_gamma
     )
 
+    expiry_times = np.repeat(np.array([0.25, 0.5, 1.0, 2.0]), strike_grid.size)
     result = fit_ssvi_power_law(
-        log_moneyness, theta, market, n_starts=5, loss="linear"
+        log_moneyness,
+        theta,
+        market,
+        expiry_times=expiry_times,
+        n_starts=5,
+        loss="linear",
     )
 
     assert result["success"]
@@ -114,11 +120,38 @@ def test_calibration_rejects_insufficient_or_misaligned_quotes():
             np.array([-0.1, 0.1, 0.2, 0.3, 0.4]),
             np.array([0.04, 0.04, 0.08, 0.08, 0.08]),
             np.array([0.04, 0.05, 0.07, 0.08, 0.09]),
+            expiry_times=np.array([0.25, 0.25, 0.25, 0.5, 0.5]),
         )
     with pytest.raises(ValueError):
         fit_ssvi_power_law(
             np.array([-0.2, -0.1, 0.0, 0.1, 0.2, 0.3]),
             np.array([0.04, 0.04, 0.04, 0.04, 0.08, 0.08]),
             np.array([0.04, 0.04, 0.04, 0.04, 0.08, 0.08]),
+            expiry_times=np.array([0.25, 0.25, 0.25, 0.25, 0.5, 0.5]),
             weights=np.array([1, 1, -1, 1, 1, 1]),
+        )
+
+
+
+def test_calibration_rejects_decreasing_atm_total_variance_by_expiry():
+    log_moneyness = np.array([-0.2, 0.0, 0.2, -0.2, 0.0, 0.2])
+    theta = np.array([0.08, 0.08, 0.08, 0.05, 0.05, 0.05])
+    expiry_times = np.array([0.25, 0.25, 0.25, 0.5, 0.5, 0.5])
+    market = ssvi_total_variance(
+        log_moneyness, theta, rho=-0.3, eta=0.8, gamma=0.4
+    )
+    with pytest.raises(ValueError, match="non-decreasing"):
+        fit_ssvi_power_law(
+            log_moneyness, theta, market, expiry_times=expiry_times
+        )
+
+
+def test_calibration_rejects_inconsistent_atm_theta_within_expiry():
+    log_moneyness = np.array([-0.2, 0.0, 0.2, -0.2, 0.0, 0.2])
+    theta = np.array([0.04, 0.04, 0.05, 0.08, 0.08, 0.08])
+    expiry_times = np.array([0.25, 0.25, 0.25, 0.5, 0.5, 0.5])
+    market = np.array([0.04, 0.05, 0.06, 0.08, 0.09, 0.10])
+    with pytest.raises(ValueError, match="constant within each expiry"):
+        fit_ssvi_power_law(
+            log_moneyness, theta, market, expiry_times=expiry_times
         )

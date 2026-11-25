@@ -180,6 +180,7 @@ def fit_ssvi_power_law(
     log_moneyness,
     theta,
     market_total_variance,
+    expiry_times,
     weights=None,
     initial_guess: tuple[float, float, float] | None = None,
     n_starts: int = 5,
@@ -189,7 +190,10 @@ def fit_ssvi_power_law(
 ):
     """Fit global (rho, eta, gamma) to observed total implied variances.
 
-    theta is the observed ATM total variance repeated for each quote at its expiry.
+    theta and expiry_times are quote-aligned vectors. ATM total variance must
+    be constant within each expiry and non-decreasing across sorted expiries;
+    this makes the calendar-spread check meaningful rather than sorting theta
+    values and accidentally certifying an unordered term structure.
     weights are non-negative objective weights (for example, inverse quote-error
     variance); they are normalized internally. The optimizer parameterizes
     beta = eta * (1 + abs(rho)) in (0, 2], keeping the fit inside the global
@@ -198,12 +202,32 @@ def fit_ssvi_power_law(
     k = _finite_array(log_moneyness, "log_moneyness")
     theta_array = _finite_array(theta, "theta")
     observed = _finite_array(market_total_variance, "market_total_variance")
-    if k.ndim != 1 or theta_array.ndim != 1 or observed.ndim != 1:
+    expiry_array = _finite_array(expiry_times, "expiry_times")
+    if (
+        k.ndim != 1
+        or theta_array.ndim != 1
+        or observed.ndim != 1
+        or expiry_array.ndim != 1
+    ):
         raise ValueError("calibration inputs must be 1D vectors")
-    if not (k.size == theta_array.size == observed.size):
+    if not (
+        k.size == theta_array.size == observed.size == expiry_array.size
+    ):
         raise ValueError("calibration inputs must have equal lengths")
-    if k.size < 6 or np.unique(theta_array).size < 2:
+    if k.size < 6 or np.unique(expiry_array).size < 2:
         raise ValueError("calibration requires at least 6 quotes across 2 or more expiries")
+    if np.any(expiry_array <= 0.0):
+        raise ValueError("expiry_times must be strictly positive")
+
+    expiry_theta = []
+    for expiry in np.unique(expiry_array):
+        theta_at_expiry = theta_array[expiry_array == expiry]
+        if not np.allclose(theta_at_expiry, theta_at_expiry[0], rtol=1e-10, atol=1e-12):
+            raise ValueError("ATM total variance must be constant within each expiry")
+        expiry_theta.append(float(theta_at_expiry[0]))
+    expiry_theta = np.asarray(expiry_theta, dtype=float)
+    if np.any(np.diff(expiry_theta) < -1e-12):
+        raise ValueError("ATM total variance must be non-decreasing with expiry")
     if np.any(theta_array <= 0.0) or np.any(observed <= 0.0):
         raise ValueError("theta and observed total variance must be strictly positive")
     if n_starts < 1 or max_nfev < 1:
@@ -288,7 +312,7 @@ def fit_ssvi_power_law(
         else float("inf")
     )
     certificate = ssvi_static_arbitrage_certificate(
-        np.unique(theta_array), fitted_rho, fitted_eta, fitted_gamma
+        expiry_theta, fitted_rho, fitted_eta, fitted_gamma
     )
 
     return {

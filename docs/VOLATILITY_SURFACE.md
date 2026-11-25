@@ -110,7 +110,7 @@ This is a fit in **total-variance space**, not a price-space calibration. It doe
 - Recovery of known parameters from a deterministic synthetic surface.
 - Input validation for non-finite data, invalid parameters, weights and insufficient quote coverage.
 
-The synthetic recovery test checks implementation and optimizer behavior under a correctly specified model. It is not empirical evidence that SSVI fits real option markets, and it does not establish parameter identifiability under noisy or sparse quotes.
+The synthetic recovery test checks implementation and optimizer behavior under a correctly specified model. The calibration function rejects inconsistent ATM total variance within one expiry and a decreasing ATM total-variance term structure. It is not empirical evidence that SSVI fits real option markets, and it does not establish parameter identifiability under noisy or sparse quotes.
 
 ## Next research stages
 
