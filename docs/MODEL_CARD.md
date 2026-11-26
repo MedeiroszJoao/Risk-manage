@@ -18,7 +18,7 @@ HPL / RTPL, VaR, ES, backtesting diagnostics, PLA zones, liquidity-adjusted ES, 
 - Static positions during each daily HPL interval, followed by a constant-maturity roll at the next valuation point.
 - Full HPL repricing.
 - Delta-only RTPL versus a more complete per-factor delta / gamma / vega approximation.
-- Black–Scholes, Garman–Kohlhagen, zero-coupon Treasury proxies and WTI linear exposure.
+- Black–Scholes, Garman–Kohlhagen, zero-coupon Treasury proxies and a WTI Cushing linear spot-proxy exposure (not listed futures).
 - 250-day rolling historical VaR and 250-observation PLA.
 
 ## Known limitations
