@@ -514,7 +514,7 @@ The dividend term uses trapezoidal integration of the stock value over the inter
 \Pi_T=B_N+\Delta_{N-1}S_T-H(S_T).
 \]
 
-The code reports both gross P&L (transaction costs added back) and net P&L (costs debited), plus average turnover and transaction costs.
+The code reports gross P&L (each transaction cost added back at its maturity value, including foregone funding) and net P&L (costs debited), plus average turnover and paid transaction costs.
 
 ### Hedging loss VaR and Expected Shortfall
 
