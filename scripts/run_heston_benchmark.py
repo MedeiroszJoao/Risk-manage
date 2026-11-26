@@ -93,6 +93,46 @@ def main() -> None:
                 }
             )
 
+    convergence = []
+    for maturity in (0.5, 1.0):
+        strike = params.spot
+        fourier_price = heston_price_fourier(strike, maturity, params, "call")["price"]
+        for step_count in (16, 32, 64, 128, 256):
+            monte_carlo = heston_monte_carlo_price(
+                strike,
+                maturity,
+                params,
+                n_paths=args.paths,
+                n_steps=step_count,
+                seed=args.seed + 10_000 + int(100 * maturity) + step_count,
+                pilot_paths=args.pilot_paths,
+            )
+            standard_error = monte_carlo["standard_error"]
+            convergence.append(
+                {
+                    "maturity_years": maturity,
+                    "strike": strike,
+                    "n_steps": step_count,
+                    "qe_monte_carlo_price": monte_carlo["price"],
+                    "monte_carlo_standard_error": standard_error,
+                    "monte_carlo_confidence_interval": monte_carlo[
+                        "confidence_interval"
+                    ],
+                    "fourier_reference_price": fourier_price,
+                    "price_difference_mc_minus_fourier": (
+                        monte_carlo["price"] - fourier_price
+                    ),
+                    "difference_in_standard_errors": (
+                        (monte_carlo["price"] - fourier_price) / standard_error
+                        if standard_error > 0.0
+                        else None
+                    ),
+                    "stock_martingale_relative_error": monte_carlo[
+                        "stock_martingale_relative_error"
+                    ],
+                }
+            )
+
     report = {
         "title": "Heston Fourier vs QE-M Monte Carlo benchmark",
         "classification": "synthetic_parameters_not_market_calibration",
@@ -122,6 +162,7 @@ def main() -> None:
             "Fourier quadrature error is reported separately."
         ),
         "cases": cases,
+        "time_step_convergence": convergence,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
