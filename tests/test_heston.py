@@ -26,6 +26,50 @@ def baseline(**overrides):
     return HestonParameters(**values)
 
 
+def test_qe_variance_transition_matches_conditional_first_two_moments():
+    from riskmanage.heston import _qe_variance_step
+
+    rng = np.random.default_rng(91)
+    cases = [
+        (baseline(vol_of_variance=0.35), 0.04, 1.0 / 252.0),
+        (
+            baseline(
+                variance0=0.005,
+                mean_reversion=0.25,
+                long_run_variance=0.16,
+                vol_of_variance=1.25,
+                correlation=-0.45,
+            ),
+            0.005,
+            0.25,
+        ),
+    ]
+    for params, variance_now, dt in cases:
+        draws = np.full(150_000, variance_now)
+        shocks = rng.standard_normal(draws.size)
+        simulated, mean, psi = _qe_variance_step(draws, shocks, params, dt, 1.5)
+        decay = math.exp(-params.mean_reversion * dt)
+        target_mean = params.long_run_variance + (
+            variance_now - params.long_run_variance
+        ) * decay
+        target_variance = (
+            variance_now
+            * params.vol_of_variance**2
+            * decay
+            * (1.0 - decay)
+            / params.mean_reversion
+            + params.long_run_variance
+            * params.vol_of_variance**2
+            * (1.0 - decay) ** 2
+            / (2.0 * params.mean_reversion)
+        )
+        assert np.mean(simulated) == pytest.approx(target_mean, rel=0.012)
+        assert np.var(simulated, ddof=1) == pytest.approx(target_variance, rel=0.035)
+        assert np.all(simulated >= 0.0)
+        assert np.allclose(mean, target_mean)
+        assert np.all(psi >= 0.0)
+
+
 def test_characteristic_function_normalization_and_risk_neutral_forward():
     params = baseline()
     assert heston_characteristic_function(0.0, 1.0, params) == pytest.approx(1.0 + 0j, abs=1e-12)
