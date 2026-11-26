@@ -12,7 +12,7 @@ def enrich_market_data(frame: pd.DataFrame) -> pd.DataFrame:
     data=frame.copy().sort_values("date").reset_index(drop=True)
     for source,target,fallback in [
         ("eurusd","eurusd_vol",.12),("usdjpy","usdjpy_vol",.10),
-        ("wti","wti_vol",.30),("brent","brent_vol",.30)
+        ("wti","wti_vol",.30)
     ]:
         if source == "wti":
             # WTI Cushing spot can be zero or negative. Use additive price changes
@@ -29,7 +29,7 @@ def enrich_market_data(frame: pd.DataFrame) -> pd.DataFrame:
 def market_state(row: pd.Series) -> dict[str,float]:
     return {k:float(row[k]) for k in (
         "sp500","vix","eurusd","usdjpy","wti","brent","ust2y","ust10y",
-        "equity_vol","eurusd_vol","usdjpy_vol","wti_vol","brent_vol"
+        "equity_vol","eurusd_vol","usdjpy_vol","wti_vol"
     )}
 
 def _bond_yield(state: dict[str,float], maturity: float) -> float:
