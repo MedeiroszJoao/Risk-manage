@@ -559,3 +559,244 @@ def heston_monte_carlo_price(
         "feller_condition_satisfied": bool(params.feller_condition_satisfied),
         "discretization_bias_included_in_interval": False,
     }
+
+
+
+def heston_option_price_delta_fourier_batch(
+    spots,
+    variances,
+    strike: float,
+    maturity: float,
+    params: HestonParameters,
+    option_type: str = "call",
+    epsabs: float = 1e-8,
+    epsrel: float = 1e-8,
+    limit: int = 300,
+):
+    """Vector Heston European prices and spot deltas for heterogeneous states.
+
+    All states share maturity, strike and risk-neutral model parameters, but
+    each path may have a different spot and current variance. The characteristic
+    function is vectorized over current variance. Delta is obtained by
+    differentiating the Lewis integrand with respect to log-moneyness.
+    """
+    spots = np.asarray(spots, dtype=float)
+    variances = np.asarray(variances, dtype=float)
+    if spots.ndim != 1 or variances.ndim != 1 or spots.size == 0:
+        raise ValueError("spots and variances must be non-empty one-dimensional arrays")
+    if spots.shape != variances.shape:
+        raise ValueError("spots and variances must have identical shapes")
+    if not np.isfinite(spots).all() or np.any(spots <= 0.0):
+        raise ValueError("spots must be finite and positive")
+    if not np.isfinite(variances).all() or np.any(variances < 0.0):
+        raise ValueError("variances must be finite and non-negative")
+    if not np.isfinite(strike) or strike <= 0.0:
+        raise ValueError("strike must be finite and positive")
+    if not np.isfinite(maturity) or maturity <= 0.0:
+        raise ValueError("maturity must be finite and positive")
+    if option_type not in {"call", "put"}:
+        raise ValueError("option_type must be 'call' or 'put'")
+    if (
+        not np.isfinite(epsabs)
+        or not np.isfinite(epsrel)
+        or epsabs <= 0.0
+        or epsrel <= 0.0
+        or limit < 50
+    ):
+        raise ValueError("invalid Fourier quadrature settings")
+
+    kappa = params.mean_reversion
+    theta = params.long_run_variance
+    xi = params.vol_of_variance
+    rho = params.correlation
+    r = params.risk_free_rate
+    q = params.dividend_yield
+    log_moneyness = np.log(spots / strike)
+
+    def integrand(frequency: float) -> np.ndarray:
+        z = frequency - 0.5j
+        iu = 1j * z
+        if xi == 0.0:
+            integrated_variance = (
+                theta * maturity
+                + (variances - theta)
+                * (-np.expm1(-kappa * maturity))
+                / kappa
+            )
+            log_return_cf = np.exp(
+                iu * (r - q) * maturity
+                - 0.5 * (z * z + 1j * z) * integrated_variance
+            )
+        else:
+            beta = kappa - rho * xi * iu
+            d = np.sqrt(beta * beta + xi * xi * (z * z + 1j * z))
+            g = (beta - d) / (beta + d)
+            exp_minus_dt = np.exp(-d * maturity)
+            one_minus_g_exp = 1.0 - g * exp_minus_dt
+            one_minus_g = 1.0 - g
+            c = (
+                iu * (r - q) * maturity
+                + (kappa * theta / (xi * xi))
+                * (
+                    (beta - d) * maturity
+                    - 2.0 * np.log(one_minus_g_exp / one_minus_g)
+                )
+            )
+            d_coefficient = (
+                (beta - d)
+                / (xi * xi)
+                * (-np.expm1(-d * maturity))
+                / one_minus_g_exp
+            )
+            log_return_cf = np.exp(c + d_coefficient * variances)
+        phase = np.exp(1j * frequency * log_moneyness)
+        base = phase * log_return_cf / (frequency * frequency + 0.25)
+        return np.concatenate((np.real(base), np.real(1j * frequency * base)))
+
+    integral, error_norm = quad_vec(
+        integrand, 0.0, np.inf, epsabs=epsabs, epsrel=epsrel, limit=limit
+    )
+    count = spots.size
+    price_integral = integral[:count]
+    delta_integral = integral[count:]
+    calls = (
+        spots * math.exp(-q * maturity)
+        - np.sqrt(spots * strike)
+        * math.exp(-r * maturity)
+        * price_integral
+        / math.pi
+    )
+    call_deltas = (
+        math.exp(-q * maturity)
+        - math.exp(-r * maturity)
+        * np.sqrt(strike / spots)
+        * (0.5 * price_integral + delta_integral)
+        / math.pi
+    )
+    lower_call = math.exp(-r * maturity) * np.maximum(
+        spots * math.exp((r - q) * maturity) - strike, 0.0
+    )
+    upper_call = spots * math.exp(-q * maturity)
+    tolerance = max(
+        20.0 * error_norm * float(np.max(np.sqrt(spots * strike)))
+        * math.exp(-r * maturity) / math.pi,
+        1e-7,
+    )
+    if (
+        not np.isfinite(calls).all()
+        or not np.isfinite(call_deltas).all()
+        or np.any(calls < lower_call - tolerance)
+        or np.any(calls > upper_call + tolerance)
+    ):
+        raise ArithmeticError("Vector Heston price/delta inversion violated no-arbitrage checks")
+    calls = np.minimum(np.maximum(calls, lower_call), upper_call)
+    if option_type == "call":
+        prices, deltas = calls, call_deltas
+    else:
+        prices = calls - spots * math.exp(-q * maturity) + strike * math.exp(-r * maturity)
+        deltas = call_deltas - math.exp(-q * maturity)
+    return {
+        "prices": prices,
+        "deltas": deltas,
+        "call_prices": calls,
+        "call_deltas": call_deltas,
+        "quadrature_error_norm": float(error_norm),
+        "quadrature_error_norm_units": "joint_price_delta_integrand_l2",
+        "method": "Vector Lewis Fourier price and analytic spot differentiation",
+    }
+
+
+def heston_simulate_paths(
+    params: HestonParameters,
+    maturity: float,
+    n_steps: int,
+    n_paths: int,
+    seed: int = 20261125,
+    psi_c: float = 1.5,
+    asset_total_return: float | None = None,
+):
+    """Simulate full QE-M Heston paths under Q or a supplied physical drift.
+
+    If asset_total_return is supplied, it replaces r in the ex-dividend stock
+    drift, which becomes asset_total_return - q. Variance dynamics are governed
+    by the separate parameters supplied in params.
+    """
+    if not np.isfinite(maturity) or maturity <= 0.0:
+        raise ValueError("maturity must be finite and positive")
+    if n_steps < 1 or n_paths < 2:
+        raise ValueError("n_steps must be positive and n_paths at least two")
+    if not np.isfinite(psi_c) or psi_c <= 0.0:
+        raise ValueError("psi_c must be finite and positive")
+    drift = params.risk_free_rate if asset_total_return is None else asset_total_return
+    if not np.isfinite(drift):
+        raise ValueError("asset_total_return must be finite")
+
+    dt = maturity / n_steps
+    rho = params.correlation
+    kappa = params.mean_reversion
+    xi = params.vol_of_variance
+    gamma1 = gamma2 = 0.5
+    if xi > 0.0:
+        k1 = gamma1 * dt * (kappa * rho / xi - 0.5) - rho / xi
+        k2 = gamma2 * dt * (kappa * rho / xi - 0.5) + rho / xi
+    else:
+        k1 = k2 = 0.0
+    k3 = gamma1 * dt * (1.0 - rho * rho)
+    k4 = gamma2 * dt * (1.0 - rho * rho)
+
+    spots = np.empty((n_paths, n_steps + 1), dtype=float)
+    variances = np.empty_like(spots)
+    spots[:, 0] = params.spot
+    variances[:, 0] = params.variance0
+    log_spot = np.full(n_paths, math.log(params.spot), dtype=float)
+    variance = np.full(n_paths, params.variance0, dtype=float)
+    rng = np.random.default_rng(seed)
+
+    for step in range(n_steps):
+        z_variance = rng.standard_normal(n_paths)
+        z_stock = rng.standard_normal(n_paths)
+        if xi > 0.0:
+            next_variance, conditional_mean, psi = _qe_variance_step(
+                variance, z_variance, params, dt, psi_c
+            )
+            log_mgf = _qe_conditional_log_mgf(
+                k2 + 0.5 * k4, conditional_mean, psi, psi_c
+            )
+            correction = -(k1 + 0.5 * k3) * variance - log_mgf
+            conditional_variance = np.maximum(
+                k3 * variance + k4 * next_variance, 0.0
+            )
+            log_spot += (
+                (drift - params.dividend_yield) * dt
+                + correction
+                + k1 * variance
+                + k2 * next_variance
+                + np.sqrt(conditional_variance) * z_stock
+            )
+        else:
+            next_variance = np.full(n_paths, params.variance0, dtype=float)
+            log_spot += (
+                (drift - params.dividend_yield - 0.5 * params.variance0) * dt
+                + math.sqrt(params.variance0 * dt) * z_stock
+            )
+        variance = next_variance
+        spots[:, step + 1] = np.exp(log_spot)
+        variances[:, step + 1] = variance
+
+    if not np.isfinite(spots).all() or not np.isfinite(variances).all():
+        raise ArithmeticError("Heston path simulation produced non-finite values")
+    return {
+        "spots": spots,
+        "variances": variances,
+        "dt": dt,
+        "seed": int(seed),
+        "n_paths": int(n_paths),
+        "n_steps": int(n_steps),
+        "scheme": "Heston QE-M full-path simulation",
+        "asset_total_return": float(drift),
+        "measure_note": (
+            "Risk-neutral drift when asset_total_return is absent; otherwise "
+            "user-specified physical/scenario total-return drift. Variance "
+            "dynamics are supplied separately by HestonParameters."
+        ),
+    }
