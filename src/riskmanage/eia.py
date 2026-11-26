@@ -149,6 +149,8 @@ def download_eia_petroleum_spot_prices(
             page_rows, page_total = _parse_page(payload, series_id)
             if total is None:
                 total = page_total
+                if total == 0:
+                    raise ValueError(f"EIA returned no observations for requested series {series_id}")
             elif page_total != total:
                 raise ValueError(
                     f"EIA total changed during pagination for {series_id}: {total} -> {page_total}"
@@ -176,6 +178,10 @@ def download_eia_petroleum_spot_prices(
                     raise ValueError(
                         f"Invalid EIA period/value for {series_id}: {period!r}/{value_raw!r}"
                     ) from exc
+                if start_date and observation_date.isoformat() < start_date:
+                    raise ValueError(f"EIA returned {series_id} observation before requested start date")
+                if end_date and observation_date.isoformat() > end_date:
+                    raise ValueError(f"EIA returned {series_id} observation after requested end date")
                 if not math.isfinite(value) or value <= 0:
                     raise ValueError(f"Non-positive or non-finite EIA value for {series_id}: {value}")
                 returned_series = item.get("series")
