@@ -141,3 +141,12 @@ The new experiment values the short European option under risk-neutral Q paramet
 The self-financing hedge cash account accrues at the flat risk-free rate, receives trapezoidal dividend cashflows, pays for stock rebalancing and proportional transaction costs, and settles the option payoff at maturity. Gross/net P&L, turnover, transaction costs, empirical inverse-CDF VaR and integrated fractional-boundary ES are reported. The physical inputs are hypothetical scenario parameters. VaR/ES describe the finite simulated P&L sample and are not regulatory capital or a market forecast.
 
 See [HESTON_MONTE_CARLO.md](HESTON_MONTE_CARLO.md) for the Fourier Delta derivation, cash-account equations, tail estimator and limitations.
+
+
+## Randomized quasi-Monte Carlo for Heston valuation
+
+A second simulation estimator uses scrambled Sobol nets of (2^m) points, inverse-normal mapping, Brownian-bridge path construction for both Gaussian drivers and the QE-M Heston transition. Discounted-stock control-variate beta is estimated on a separate scrambled pilot net. Integration error is estimated across independent randomizations of the Sobol net; Sobol payoff points are not treated as iid observations.
+
+The benchmark compares Brownian-bridge RQMC, standard-order RQMC and antithetic pseudo-MC against the same Fourier price, with equal valuation and pilot path budgets. This is a path-count comparison, not a wall-clock benchmark. All standard errors are conditional on the QE time grid and exclude discretization bias, pilot-beta uncertainty, parameter uncertainty and model risk. The use of scrambled Sobol nets is an estimator option, not an assumption of superiority over pseudo-MC.
+
+See HESTON_MONTE_CARLO.md for the bridge construction, randomized error estimator, fair comparison protocol and references.
