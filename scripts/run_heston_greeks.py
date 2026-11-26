@@ -63,6 +63,17 @@ def main() -> None:
         maturity,
         replace(params, variance0=(sigma0 - volatility_bump) ** 2),
     )["price"]
+    mixed_prices = {}
+    for spot_sign, spot_value in (("up", params.spot + spot_bump), ("down", params.spot - spot_bump)):
+        for vol_sign, vol_value in (
+            ("up", (sigma0 + volatility_bump) ** 2),
+            ("down", (sigma0 - volatility_bump) ** 2),
+        ):
+            mixed_prices[f"{spot_sign}_{vol_sign}"] = heston_price_fourier(
+                strike,
+                maturity,
+                replace(params, spot=spot_value, variance0=vol_value),
+            )["price"]
 
     fourier_reference = {
         "price": base,
@@ -73,6 +84,15 @@ def main() -> None:
         "vega_initial_volatility_central_difference": (
             vol_up - vol_down
         ) / (2.0 * volatility_bump),
+        "vanna_spot_initial_volatility_central_difference": (
+            mixed_prices["up_up"]
+            - mixed_prices["up_down"]
+            - mixed_prices["down_up"]
+            + mixed_prices["down_down"]
+        ) / (4.0 * spot_bump * volatility_bump),
+        "volga_initial_volatility_central_difference": (
+            vol_up - 2.0 * base + vol_down
+        ) / (volatility_bump**2),
         "spot_bump": spot_bump,
         "initial_volatility_bump": volatility_bump,
     }
@@ -116,6 +136,28 @@ def main() -> None:
             ]["standard_error"],
             "fourier_reference": fourier_reference[
                 "vega_initial_volatility_central_difference"
+            ],
+        },
+        "vanna_spot_initial_volatility_common_random_numbers": {
+            "estimate": monte_carlo[
+                "vanna_spot_initial_volatility_common_random_numbers"
+            ]["estimate"],
+            "standard_error": monte_carlo[
+                "vanna_spot_initial_volatility_common_random_numbers"
+            ]["standard_error"],
+            "fourier_reference": fourier_reference[
+                "vanna_spot_initial_volatility_central_difference"
+            ],
+        },
+        "volga_initial_volatility_common_random_numbers": {
+            "estimate": monte_carlo[
+                "volga_initial_volatility_common_random_numbers"
+            ]["estimate"],
+            "standard_error": monte_carlo[
+                "volga_initial_volatility_common_random_numbers"
+            ]["standard_error"],
+            "fourier_reference": fourier_reference[
+                "volga_initial_volatility_central_difference"
             ],
         },
     }
