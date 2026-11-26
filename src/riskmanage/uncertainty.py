@@ -144,12 +144,12 @@ def bootstrap_heston_calibration(
     market: HestonParameters,
     fitted_parameters: HestonParameters,
     *,
-    n_bootstrap: int = 100,
+    n_bootstrap: int = 250,
     seed: int = 20261126,
     noise_scale: float = 1.0,
     min_price_scale: float = 0.01,
-    n_starts: int = 1,
-    max_nfev: int = 100,
+    n_starts: int = 2,
+    max_nfev: int = 120,
 ) -> dict:
     """Parametric quote bootstrap conditional on a fitted Heston model.
 
