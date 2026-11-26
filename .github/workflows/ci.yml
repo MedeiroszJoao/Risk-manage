@@ -57,3 +57,12 @@ jobs:
         with:
           name: heston-greeks-python-${{ matrix.python-version }}
           path: /tmp/heston_greeks.json
+      - name: Run Heston Monte Carlo Greeks benchmark
+        run: |
+          python scripts/run_heston_greeks.py --paths 5000 --steps 32 --output /tmp/heston_greeks.json
+          python -m json.tool /tmp/heston_greeks.json > /dev/null
+      - name: Upload Heston Greeks report
+        uses: actions/upload-artifact@v4
+        with:
+          name: heston-greeks-python-${{ matrix.python-version }}
+          path: /tmp/heston_greeks.json
