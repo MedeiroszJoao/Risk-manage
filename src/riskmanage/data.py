@@ -12,7 +12,7 @@ FRED_SERIES = {
     "usdjpy": "DEXJPUS", "wti": "DCOILWTICO", "ust2y": "DGS2", "ust10y": "DGS10",
 }
 REQUIRED_COLUMNS = ("date", *FRED_SERIES.keys())
-SPOT_COLUMNS = ("sp500", "eurusd", "usdjpy", "wti")
+STRICTLY_POSITIVE_COLUMNS = ("sp500", "eurusd", "usdjpy")
 
 
 def validate_market_data(frame: pd.DataFrame) -> None:
@@ -33,8 +33,8 @@ def validate_market_data(frame: pd.DataFrame) -> None:
         raise ValueError("market data contains missing or non-numeric values")
     if not np.isfinite(numeric.to_numpy(dtype=float)).all():
         raise ValueError("market data contains non-finite values")
-    if (numeric[list(SPOT_COLUMNS)] <= 0).any().any():
-        raise ValueError("spot prices and FX rates must be positive")
+    if (numeric[list(STRICTLY_POSITIVE_COLUMNS)] <= 0).any().any():
+        raise ValueError("equity index levels and FX rates must be positive; WTI spot may be zero or negative")
     if (numeric["vix"] <= 0).any():
         raise ValueError("VIX observations must be positive")
     if ((numeric["ust2y"] < -5) | (numeric["ust2y"] > 30)).any() or (
