@@ -148,6 +148,67 @@ def _bootstrap_gpd_tail(
     }
 
 
+def _stability_summary(values: Sequence[float]) -> dict:
+    sample = np.asarray(values, dtype=float)
+    sample = sample[np.isfinite(sample)]
+    if sample.size < 2:
+        return {
+            "successful_threshold_fits": int(sample.size),
+            "minimum": float(sample[0]) if sample.size else None,
+            "maximum": float(sample[0]) if sample.size else None,
+            "range": 0.0 if sample.size == 1 else None,
+            "mean": float(sample[0]) if sample.size else None,
+            "standard_deviation": 0.0 if sample.size == 1 else None,
+            "relative_range_to_absolute_mean": None,
+        }
+    mean = float(np.mean(sample))
+    spread = float(np.max(sample) - np.min(sample))
+    return {
+        "successful_threshold_fits": int(sample.size),
+        "minimum": float(np.min(sample)),
+        "maximum": float(np.max(sample)),
+        "range": spread,
+        "mean": mean,
+        "standard_deviation": float(np.std(sample, ddof=1)),
+        "relative_range_to_absolute_mean": (
+            float(spread / abs(mean)) if abs(mean) > 1e-12 else None
+        ),
+    }
+
+
+def _threshold_stability(fits: Sequence[dict], confidence_levels: Sequence[float]) -> dict:
+    successful = [row for row in fits if row["status"] == "fitted"]
+    result = {
+        "successful_threshold_fit_count": int(len(successful)),
+        "shape": _stability_summary(
+            [row["fit"]["shape"] for row in successful]
+        ),
+        "scale": _stability_summary(
+            [row["fit"]["scale"] for row in successful]
+        ),
+        "confidence_level_metrics": {},
+        "automatic_threshold_selection": False,
+    }
+    for alpha in confidence_levels:
+        key = str(alpha)
+        var_values = []
+        es_values = []
+        for row in successful:
+            estimate = row["confidence_levels"][key]
+            if estimate["var"] is not None and np.isfinite(estimate["var"]):
+                var_values.append(estimate["var"])
+            if (
+                estimate["expected_shortfall"] is not None
+                and np.isfinite(estimate["expected_shortfall"])
+            ):
+                es_values.append(estimate["expected_shortfall"])
+        result["confidence_level_metrics"][key] = {
+            "var": _stability_summary(var_values),
+            "expected_shortfall": _stability_summary(es_values),
+        }
+    return result
+
+
 def fit_pot_gpd_tail_risk(
     losses,
     confidence_levels: Sequence[float] = (0.975, 0.99),
@@ -287,6 +348,7 @@ def fit_pot_gpd_tail_risk(
         str(alpha): _empirical_var_es(values, alpha)
         for alpha in alphas
     }
+    stability = _threshold_stability(fits, alphas)
     return {
         "method": "Peaks-over-Threshold Generalized Pareto MLE",
         "sample_size": int(values.size),
@@ -295,6 +357,7 @@ def fit_pot_gpd_tail_risk(
         "threshold_quantiles": list(sorted(thresholds)),
         "empirical_var_es": empirical,
         "threshold_fits": fits,
+        "threshold_stability": stability,
         "threshold_selection": (
             "No automatic threshold is selected. Assess stability of shape, scale, "
             "VaR and ES across thresholds; inspect the mean-excess behavior and tail "
