@@ -87,6 +87,7 @@ def _execute_hedge(
     initial_cost = transaction_cost_rate * initial_spot * np.abs(deltas[:, 0])
     cash -= initial_cost
     transaction_costs = initial_cost.copy()
+    transaction_costs_future_value = initial_cost.copy()
     turnover = initial_spot * np.abs(deltas[:, 0])
     previous_delta = deltas[:, 0].copy()
     discount_growth = math.exp(rate * dt)
@@ -95,6 +96,7 @@ def _execute_hedge(
         old_spot = spots[:, step - 1]
         new_spot = spots[:, step]
         cash *= discount_growth
+        transaction_costs_future_value *= discount_growth
         cash += dividend_yield * previous_delta * 0.5 * (old_spot + new_spot) * dt
 
         new_delta = deltas[:, step]
@@ -103,22 +105,25 @@ def _execute_hedge(
         cost = transaction_cost_rate * trade_notional
         cash -= new_spot * trade + cost
         transaction_costs += cost
+        transaction_costs_future_value += cost
         turnover += trade_notional
         previous_delta = new_delta
 
     old_spot = spots[:, -2]
     terminal_spot = spots[:, -1]
     cash *= discount_growth
+    transaction_costs_future_value *= discount_growth
     cash += dividend_yield * previous_delta * 0.5 * (
         old_spot + terminal_spot
     ) * dt
-    gross_pnl = cash + previous_delta * terminal_spot - payoff
-    net_pnl = gross_pnl
-    # Transaction costs have already been debited from the self-financing cash account.
+    net_pnl = cash + previous_delta * terminal_spot - payoff
+    # Gross PnL adds back each cost at maturity value, including foregone funding.
+    gross_pnl = net_pnl + transaction_costs_future_value
     return {
-        "gross_pnl": gross_pnl + transaction_costs,
+        "gross_pnl": gross_pnl,
         "net_pnl": net_pnl,
         "transaction_costs": transaction_costs,
+        "transaction_costs_future_value": transaction_costs_future_value,
         "turnover": turnover,
     }
 
