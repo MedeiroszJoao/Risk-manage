@@ -112,11 +112,15 @@ def test_randomized_qmc_put_call_parity_on_common_scrambled_paths():
     )
     call = heston_randomized_qmc_price(100.0, option_type="call", **common)
     put = heston_randomized_qmc_price(100.0, option_type="put", **common)
-    parity = (
-        params.spot * np.exp(-params.dividend_yield * common["maturity"])
+    # Common random numbers imply sample-path parity exactly. The finite
+    # simulated stock mean is not required to equal its theoretical expectation.
+    sample_parity = (
+        call["discounted_terminal_stock_mean"]
         - 100.0 * np.exp(-params.risk_free_rate * common["maturity"])
     )
-    assert call["price"] - put["price"] == pytest.approx(parity, abs=1e-10)
+    assert call["price"] - put["price"] == pytest.approx(
+        sample_parity, abs=1e-10
+    )
 
 
 def test_randomized_qmc_deterministic_variance_limit_matches_fourier():
