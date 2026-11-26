@@ -1,0 +1,14 @@
+# Local market-data snapshots and source payloads
+data/raw/
+data/processed/
+
+# Generated research reports
+reports/generated/
+
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
