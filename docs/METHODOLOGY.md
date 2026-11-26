@@ -166,3 +166,10 @@ The bootstrap parameter samples now flow through the Heston dynamic hedge. The s
 The distribution across bootstrap draws captures risk-neutral calibration uncertainty under common Gaussian innovations and fixed non-initial P dynamics; the initial P variance state follows each draw's (v_0). It does not include physical parameter uncertainty, scenario resampling uncertainty or model risk. Within-draw VaR/ES precision remains governed by the finite path count and tail depth. The comparison is not a claim of universal Heston hedge superiority.
 
 See [HESTON_UNCERTAINTY.md](HESTON_UNCERTAINTY.md) for the nested design and interpretation limits.
+
+
+## Crossed calibration/scenario hedge-risk uncertainty decomposition
+
+FE-010 creates a balanced matrix with risk-neutral bootstrap draws in rows and independent physical/scenario seeds in columns. Within each seed, Gaussian QE-M innovations are common across calibration draws; the P initial variance follows each draw's (v_0), and other P dynamics remain fixed. Across seeds, the scenario innovations are independent.
+
+Two-way random-effects method-of-moments estimates split the variance of each net VaR/ES metric into a Q-calibration component, a physical-scenario sampling component and a residual combining parameter-by-scenario interaction with within-cell Monte Carlo error. The decomposition is produced for Heston, frozen-BS and paired Heston-minus-BS metrics. Raw negative variance-component estimates are retained for diagnosis and truncated estimates/proportions are reported separately. This is not a confidence interval; small B/R and finite tail depth make estimates noisy. See [HESTON_UNCERTAINTY.md](HESTON_UNCERTAINTY.md) for the equations and limitations.
