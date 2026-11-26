@@ -16,7 +16,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-nfev", type=int, default=60)
     parser.add_argument("--seed", type=int, default=20261125)
     parser.add_argument(
-        "--objective", choices=("mid", "bid_ask"), default="bid_ask"
+        "--objective", choices=("mid", "bid_ask"), default="mid"
     )
     parser.add_argument(
         "--output",
