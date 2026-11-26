@@ -68,6 +68,16 @@ def main() -> None:
         "aligned_rows": int(len(market)),
         "aligned_start": market["date"].min().date().isoformat(),
         "aligned_end": market["date"].max().date().isoformat(),
+        "coverage_warnings": [
+            *fred_manifest.get("coverage_warnings", []),
+            *(
+                [
+                    f"Final panel starts {market['date'].min().date().isoformat()}, later than requested {args.start}, because every required factor must have a valid observation."
+                ]
+                if market["date"].min().date().isoformat() > args.start
+                else []
+            ),
+        ],
         "aligned_sha256": sha256(
             market.to_csv(index=False, date_format="%Y-%m-%d", lineterminator="\n").encode("utf-8")
         ).hexdigest(),
@@ -86,6 +96,7 @@ def main() -> None:
                 "eia_archive_sha256": eia_manifest["download"]["sha256"],
                 "eia_csv": "data/processed/eia_petroleum_spot.csv",
                 "fred_series": [item["series_id"] for item in fred_manifest["series"]],
+                "coverage_warnings": provenance["coverage_warnings"],
                 "market_csv": args.output,
                 "manifest": args.manifest,
             },
