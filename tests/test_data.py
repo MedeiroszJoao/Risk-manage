@@ -1,9 +1,13 @@
+from hashlib import sha256
+from urllib.parse import parse_qs, urlparse
+
 import pandas as pd
 import pytest
 
 from riskmanage.data import (
     REQUIRED_COLUMNS,
     load_market_data,
+    download_fred_series,
     merge_eia_petroleum_into_market_data,
     validate_market_data,
 )
@@ -122,3 +126,67 @@ def test_adding_brent_preserves_original_seeded_market_factor_paths():
     assert first["wti"] == pytest.approx(48.633322510891944, abs=1e-10)
     assert first["ust2y"] == pytest.approx(2.417550522693182, abs=1e-10)
     assert first["ust10y"] == pytest.approx(3.022248441738302, abs=1e-10)
+
+
+
+class FakeFREDResponse:
+    def __init__(self, content: bytes):
+        self.content = content
+        self.status_code = 200
+
+    def raise_for_status(self):
+        return None
+
+
+class FakeFREDSession:
+    def __init__(self):
+        self.responses = {
+            "SP500": "observation_date,SP500\n2024-01-01,.\n2024-01-02,4700\n2024-01-03,4705\n",
+            "VIXCLS": "observation_date,VIXCLS\n2024-01-01,12\n2024-01-02,13\n2024-01-03,12.5\n",
+            "DEXUSEU": "observation_date,DEXUSEU\n2024-01-01,1.10\n2024-01-02,1.11\n2024-01-03,1.12\n",
+            "DEXJPUS": "observation_date,DEXJPUS\n2024-01-01,140\n2024-01-02,141\n2024-01-03,142\n",
+            "DGS2": "observation_date,DGS2\n2024-01-01,4.0\n2024-01-02,4.1\n2024-01-03,4.2\n",
+            "DGS10": "observation_date,DGS10\n2024-01-01,4.1\n2024-01-02,4.2\n2024-01-03,4.3\n",
+        }
+        self.calls = []
+
+    def get(self, url, timeout):
+        query = parse_qs(urlparse(url).query)
+        series_id = query["id"][0]
+        self.calls.append({"url": url, "timeout": timeout})
+        return FakeFREDResponse(self.responses[series_id].encode("utf-8"))
+
+
+
+def test_fred_ingestion_keeps_immutable_raw_snapshots_and_true_valid_coverage(tmp_path):
+    session = FakeFREDSession()
+
+    first_frame, first_manifest = download_fred_series(
+        start="2007-01-01",
+        end="2024-01-03",
+        output_dir=tmp_path / "fred",
+        session=session,
+    )
+    second_frame, second_manifest = download_fred_series(
+        start="2007-01-01",
+        end="2024-01-03",
+        output_dir=tmp_path / "fred",
+        session=session,
+    )
+
+    assert first_frame["date"].min() == pd.Timestamp("2024-01-02")
+    assert second_frame["date"].min() == pd.Timestamp("2024-01-02")
+    assert first_manifest["snapshot_id"] != second_manifest["snapshot_id"]
+    assert first_manifest["raw_snapshot_directory"] != second_manifest["raw_snapshot_directory"]
+
+    sp500 = next(item for item in first_manifest["series"] if item["series_id"] == "SP500")
+    assert sp500["first_date"] == "2024-01-02"
+    assert sp500["last_date"] == "2024-01-03"
+    raw_path = Path(sp500["raw_path"])
+    assert raw_path.exists()
+    assert sha256(raw_path.read_bytes()).hexdigest() == sp500["raw_sha256"]
+    assert raw_path.parent == Path(first_manifest["raw_snapshot_directory"])
+
+    parsed_query = parse_qs(urlparse(session.calls[0]["url"]).query)
+    assert set(parsed_query) == {"id", "cosd", "coed"}
+    assert all("api_key" not in parse_qs(urlparse(call["url"]).query) for call in session.calls)
