@@ -16,6 +16,7 @@ def test_pot_gpd_recovers_finite_mean_tail_and_reports_bootstrap_intervals():
         threshold_quantiles=(0.80, 0.85, 0.90),
         min_exceedances=100,
         n_bootstrap=30,
+        n_full_sample_bootstrap=15,
         seed=99,
     )
     assert len(result["threshold_fits"]) == 3
@@ -95,6 +96,7 @@ def test_pot_gpd_bootstrap_is_reproducible_for_fixed_seed():
         threshold_quantiles=(0.90,),
         min_exceedances=50,
         n_bootstrap=20,
+        n_full_sample_bootstrap=12,
         seed=81,
     )
     first = fit_pot_gpd_tail_risk(losses, **kwargs)
@@ -118,6 +120,7 @@ def test_pot_gpd_reports_empirical_tail_and_no_extrapolation_p_value():
         threshold_quantiles=(0.90, 0.95),
         min_exceedances=20,
         n_bootstrap=0,
+        n_full_sample_bootstrap=0,
     )
     assert result["empirical_var_es"]["0.975"]["status"] == "estimated"
     for fit in result["threshold_fits"]:
