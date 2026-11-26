@@ -23,7 +23,7 @@ Run it yourself with the deterministic seed to reproduce the figures.
 
 ## What is implemented
 
-- **Market data:** reproducible FRED CSV ingestion for S&P 500, VIX, FX and Treasury yields, plus EIA API v2 daily WTI Cushing (RWTC) and Europe Brent (RBRTE) spot prices. Raw EIA JSON pages, retrieval timestamps, pagination metadata, missingness and SHA-256 hashes are recorded.
+- **Market data:** reproducible FRED CSV ingestion for S&P 500, VIX, FX and Treasury yields, plus a no-key EIA Petroleum bulk-file collector for daily WTI Cushing (PET.RWTC.D) and Europe Brent (PET.RBRTE.D) spot prices. The exact EIA ZIP snapshot, retrieval metadata, series coverage, null counts and SHA-256 hashes are retained; negative WTI spot prices are preserved.
 - **Four hypothetical desks:** Equity Options, FX Options, Rates and Commodities.
 - **Pricing:** Black–Scholes calls and puts, Garman–Kohlhagen FX calls, Black-76 forward options, a calibrated power-law SSVI implied-volatility surface, and a Heston stochastic-volatility engine with Lewis Fourier inversion, QE-M Monte Carlo bid–ask-aware cross-sectional calibration, and Heston Monte Carlo Greeks (pathwise Delta plus CRN Delta/Gamma/Vega).
 - **HPL / RTPL:** close-to-close full revaluation of positions held static during each daily interval; constant-maturity test books are rolled only after daily valuation. RTPL is independently built from sensitivities and explicitly selected risk factors.
@@ -50,7 +50,7 @@ python scripts/run_case.py --synthetic
 python scripts/download_market_data.py --start 2007-01-01
 python scripts/run_case.py
 
-# Retrieve EIA WTI/Brent daily spot benchmarks (requires EIA_API_KEY)
+# Retrieve EIA WTI/Brent daily spot benchmarks (no API key required)
 python scripts/download_eia_petroleum_spot.py --start 2007-01-01
 pytest -q
 ruff check src tests scripts
@@ -105,7 +105,7 @@ This is not a bank's regulatory FRTB implementation, supervisory-approved IMA mo
 - Basel Committee, [MAR33 — IMA capital requirements](https://www.bis.org/committees/bcbs/basel-framework/standard/mar/33/inforce/2023-01-01/published/2020-06-05)
 - ECB, [Guide to internal models, July 2025](https://www.bankingsupervision.europa.eu/ecb/pub/pdf/ssm.supervisory_guide202507.en.pdf)
 - Federal Reserve Bank of St. Louis, [FRED API documentation](https://fred.stlouisfed.org/docs/api/fred/)
-- U.S. Energy Information Administration, [API v2 documentation](https://www.eia.gov/opendata/documentation.php)
+- U.S. Energy Information Administration, [Bulk download facility and PET archive](https://www.eia.gov/opendata/v1/bulkfiles.php)
 
 ---
 Independent research case study. No affiliation with the BIS, ECB, Federal Reserve, FRED or any financial institution.
