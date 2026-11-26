@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import math
 
 import numpy as np
-from scipy.integrate import quad
+from scipy.integrate import quad, quad_vec
 from scipy.special import ndtr
 from scipy.stats import t as student_t
 
@@ -202,6 +202,103 @@ def heston_price_fourier(
         "option_type": option_type,
         "maturity": float(maturity),
         "strike": float(strike),
+    }
+
+
+def heston_prices_fourier_batch(
+    strikes,
+    maturity: float,
+    params: HestonParameters,
+    option_types=None,
+    epsabs: float = 1e-8,
+    epsrel: float = 1e-8,
+    limit: int = 300,
+):
+    """Price a same-expiry panel with one vector-valued Lewis quadrature.
+
+    The common characteristic function is evaluated once per quadrature node,
+    while strike-dependent phases are vectorized. The error is the adaptive
+    quadrature's L2 norm estimate for the vector integral, not a per-option CI.
+    """
+    strikes = np.asarray(strikes, dtype=float)
+    if strikes.ndim != 1 or strikes.size == 0:
+        raise ValueError("strikes must be a non-empty one-dimensional array")
+    if not np.isfinite(strikes).all() or np.any(strikes <= 0.0):
+        raise ValueError("strikes must be finite and positive")
+    if not np.isfinite(maturity) or maturity <= 0.0:
+        raise ValueError("maturity must be finite and positive")
+    if (
+        not np.isfinite(epsabs)
+        or not np.isfinite(epsrel)
+        or epsabs <= 0.0
+        or epsrel <= 0.0
+    ):
+        raise ValueError("quadrature tolerances must be finite and positive")
+    if limit < 50:
+        raise ValueError("quadrature limit must be at least 50")
+    option_types = ["call"] * strikes.size if option_types is None else list(option_types)
+    if len(option_types) != strikes.size or any(
+        kind not in {"call", "put"} for kind in option_types
+    ):
+        raise ValueError("option_types must contain one 'call' or 'put' per strike")
+
+    s0 = params.spot
+    r = params.risk_free_rate
+    q = params.dividend_yield
+    log_moneyness = np.log(s0 / strikes)
+
+    def integrand(x: float) -> np.ndarray:
+        shifted_cf = heston_characteristic_function(x - 0.5j, maturity, params)
+        log_return_cf = shifted_cf * np.exp(-1j * (x - 0.5j) * math.log(s0))
+        phases = np.exp(1j * x * log_moneyness)
+        return np.real(phases * log_return_cf / (x * x + 0.25))
+
+    integral, error_norm = quad_vec(
+        integrand,
+        0.0,
+        np.inf,
+        epsabs=epsabs,
+        epsrel=epsrel,
+        limit=limit,
+    )
+    calls = (
+        s0 * math.exp(-q * maturity)
+        - np.sqrt(s0 * strikes)
+        * math.exp(-r * maturity)
+        * integral
+        / math.pi
+    )
+    lower = np.exp(-r * maturity) * np.maximum(
+        s0 * np.exp((r - q) * maturity) - strikes, 0.0
+    )
+    upper = s0 * math.exp(-q * maturity)
+    price_tolerances = np.maximum(
+        20.0 * error_norm * np.sqrt(s0 * strikes) * math.exp(-r * maturity) / math.pi,
+        1e-8,
+    )
+    if (
+        not np.isfinite(calls).all()
+        or np.any(calls < lower - price_tolerances)
+        or np.any(calls > upper + price_tolerances)
+    ):
+        raise ArithmeticError(
+            "Vector Fourier inversion returned a price outside discounted no-arbitrage bounds"
+        )
+    calls = np.minimum(np.maximum(calls, lower), upper)
+    prices = calls.copy()
+    for index, option_type in enumerate(option_types):
+        if option_type == "put":
+            prices[index] = (
+                calls[index]
+                - s0 * math.exp(-q * maturity)
+                + strikes[index] * math.exp(-r * maturity)
+            )
+    return {
+        "prices": prices,
+        "call_prices": calls,
+        "quadrature_error_norm": float(error_norm),
+        "quadrature_error_norm_units": "vector_integrand_l2",
+        "method": "Lewis vector-valued square-root Fourier inversion",
     }
 
 
