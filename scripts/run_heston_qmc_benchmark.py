@@ -98,7 +98,8 @@ def main() -> None:
             "price": reference,
             "quadrature_error_estimate": fourier["quadrature_error_estimate"],
         },
-        "randomized_qmc_brownian_bridge": qmc_bridge,\n        "randomized_qmc_standard_order": qmc_standard_order,
+        "randomized_qmc_brownian_bridge": qmc_bridge,
+        "randomized_qmc_standard_order": qmc_standard_order,
         "pseudo_monte_carlo": {
             "price": pseudo_mc["price"],
             "standard_error": pseudo_mc["standard_error"],
