@@ -422,3 +422,131 @@ The JSON report includes pathwise Delta, CRN Delta, Gamma, initial-volatility Ve
 ### Primary reference
 
 Broadie, M. and Glasserman, P. (1996), “Estimating Security Price Derivatives Using Simulation,” *Management Science*, 42(2), 269–285. https://doi.org/10.1287/mnsc.42.2.269. Their pathwise and likelihood-ratio estimators provide the classical foundation for simulation Greeks, including stochastic-volatility settings. The current module implements the pathwise Delta and CRN finite-difference Gamma/Vega slice; likelihood-ratio and adjoint estimators remain future work.
+
+
+## Dynamic delta hedging and hedging-loss tail risk
+
+The new hedging experiment connects option valuation to a self-financing trading strategy. It deliberately separates two probability measures:
+
+- **Pricing measure Q:** the option premium and Heston hedge delta use risk-neutral parameters, flat discounting and carry.
+- **Physical/scenario measure P:** underlying paths use a separately supplied expected total-return drift and a separately supplied Heston variance parameter set. These are explicit hypothetical scenario inputs, not fitted forecasts.
+
+The initial option premium is the Heston Fourier value. The physical path process is simulated with QE-M; the conditional stock drift is \(\mu-q\), where \(\mu\) is the supplied total-return drift and \(q\) is the continuous dividend yield. The current variance state from each simulated path is passed into the Q valuation model at each hedge date.
+
+### Vector Fourier Heston Delta
+
+For current state \((S_t,v_t)\), strike \(K\), remaining maturity \(\tau\), and Q parameters, write the Lewis call price as
+
+\[
+C(S_t,v_t,\tau)
+=S_te^{-q\tau}
+-\frac{e^{-r\tau}\sqrt{S_tK}}{\pi}I(x,v_t,\tau),
+\quad
+x=\log(S_t/K),
+\]
+
+where
+
+\[
+I(x,v,\tau)=\int_0^\infty
+\operatorname{Re}\left[
+\frac{e^{iux}\phi_Y(u-i/2;v,\tau)}{u^2+1/4}
+\right]du.
+\]
+
+Differentiate under the integral sign:
+
+\[
+\frac{\partial I}{\partial S}
+=\frac{1}{S}\int_0^\infty
+\operatorname{Re}\left[
+\frac{iu\,e^{iux}\phi_Y(u-i/2;v,\tau)}{u^2+1/4}
+\right]du
+=\frac{J(x,v,\tau)}{S}.
+\]
+
+Therefore
+
+\[
+\boxed{
+\Delta_H
+=e^{-q\tau}
+-\frac{e^{-r\tau}}{\pi}\sqrt{\frac{K}{S_t}}
+\left(\frac12 I(x,v_t,\tau)+J(x,v_t,\tau)\right)
+}
+\]
+
+for a call. Put Delta follows from put-call parity:
+\(\Delta_P=\Delta_C-e^{-q\tau}\).
+
+The implementation uses quad_vec to evaluate the Lewis price and Delta integrals across many heterogeneous path states \((S_i,v_i)\) in one vector-valued quadrature. It checks that the calculated prices satisfy discounted no-arbitrage bounds. This is not a numerical spot bump for each path: the spot derivative is taken analytically inside the Fourier integrand.
+
+### Comparator: frozen-volatility Black–Scholes hedge
+
+The comparison strategy uses Black–Scholes Delta with volatility frozen at
+
+\[
+\sigma_{frozen}=\sqrt{\theta_Q},
+\]
+
+the square root of the Q long-run variance. It does not update volatility as the simulated variance changes. Both strategies use the same path set, same initial Heston premium, hedge dates, funding rate, dividend yield and proportional transaction-cost assumption. This isolates the effect of using a state-dependent Heston Delta versus a frozen-volatility Delta within this experiment.
+
+### Self-financing hedge account
+
+For a short option, let \(B_j\) be the cash account after rebalancing at time \(t_j\), \(\Delta_j\) the shares held, and \(c\) the proportional trading-cost rate. Initial cash is
+
+\[
+B_0=C_0-\Delta_0S_0-cS_0|\Delta_0|.
+\]
+
+For each subsequent rebalancing date,
+
+\[
+B_j=B_{j-1}e^{r\Delta t}
++\frac{q\Delta_{j-1}}{2}(S_{j-1}+S_j)\Delta t
+-S_j(\Delta_j-\Delta_{j-1})
+-cS_j|\Delta_j-\Delta_{j-1}|.
+\]
+
+The dividend term uses trapezoidal integration of the stock value over the interval. At maturity, the portfolio surplus after settling the short option is
+
+\[
+\Pi_T=B_N+\Delta_{N-1}S_T-H(S_T).
+\]
+
+The code reports both gross P&L (transaction costs added back) and net P&L (costs debited), plus average turnover and transaction costs.
+
+### Hedging loss VaR and Expected Shortfall
+
+For each strategy, define loss \(L=-\Pi_T\). Empirical VaR uses the inverse empirical CDF:
+
+\[
+VaR_\alpha=\inf\{x:F_N(x)\geq\alpha\}.
+\]
+
+Expected Shortfall uses the integrated empirical quantile with a fractional boundary mass. With \(m=N(1-\alpha)\), \(q_\alpha=VaR_\alpha\), and \(k=\#\{i:L_i>q_\alpha\}\),
+
+\[
+ES_\alpha=
+\frac{\sum_{L_i>q_\alpha}L_i+(m-k)q_\alpha}{m}.
+\]
+
+This avoids over-weighting observations tied at the VaR threshold. Both gross and net VaR/ES are reported. The paired comparison uses the same simulated underlying paths for the Heston and frozen-Black–Scholes strategies.
+
+### Interpretation boundary
+
+- The physical drift and variance parameters are hypothetical scenario inputs, not an estimated P-measure model.
+- Q pricing and P path generation are separated; the variance risk premium is not calibrated.
+- The strategy uses discrete rebalancing, flat rates/carry and a trapezoidal dividend approximation.
+- Transaction costs are proportional only; market impact, bid/ask dynamics, liquidity constraints, borrow fees, funding spreads and option execution costs are not modeled.
+- QE time-discretization error, hedge-frequency error, parameter uncertainty and model risk remain.
+- VaR/ES describe only the finite scenario sample; they are not regulatory capital or an empirical forecast.
+- The Heston Delta is evaluated state by state from a vector Fourier derivative, while the comparator freezes volatility at \(\sqrt{\theta_Q}\). The result is not proof that a Heston hedge dominates under every calibration or scenario.
+
+Run:
+
+\`\`\`bash
+python scripts/run_heston_delta_hedging.py --paths 2000 --steps 12 --cost-bps 2
+\`\`\`
+
+The runner evaluates multiple hedge grids and writes strategy P&L, turnover, transaction costs, VaR/ES and paired comparisons to reports/generated/heston_delta_hedging.json.
