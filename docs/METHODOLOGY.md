@@ -122,3 +122,10 @@ The Heston model's five pricing parameters are estimated from an option-price cr
 Quotes of a common maturity are priced together using vector-valued Lewis Fourier quadrature. The local weighted-residual Jacobian is decomposed by SVD; singular values, numerical rank and condition number flag weakly identified parameter combinations. This is not a confidence interval or proof of unique parameters. The calibration panel and its executable are synthetic, not actual option-market data.
 
 See [Heston Fourier, QE-M and calibration](HESTON_MONTE_CARLO.md) for the full derivation, conventions and limitations.
+
+
+## Monte Carlo sensitivity estimation under Heston
+
+For European vanilla options, the QE-M engine now estimates pathwise Delta using the homogeneity relation \(\partial S_T/\partial S_0=S_T/S_0\). An independent Delta estimate and Gamma use central common-random-number bumps; initial-volatility Vega is \(\partial V/\partial\sqrt{v_0}\), not implied-volatility Vega. Antithetic path pairs are averaged before standard errors and Student-t intervals are calculated. Finite-difference truncation and QE-M time-grid bias are not included in those intervals.
+
+The comparison runner reports the Monte Carlo estimators against Fourier finite-difference reference values. See [Heston Fourier, QE-M, calibration and Greeks](HESTON_MONTE_CARLO.md) for estimator derivations and interpretation limits.
