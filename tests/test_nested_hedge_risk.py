@@ -121,3 +121,21 @@ def test_nested_hedge_risk_requires_independent_scenario_seeds():
             n_steps=2,
             confidence_level=0.90,
         )
+
+
+def test_two_way_random_effects_retains_negative_raw_components_and_truncates():
+    interaction_only = np.array([[1.0, -1.0], [-1.0, 1.0]])
+    result = two_way_random_effects_decomposition(interaction_only)
+    raw = result["raw_variance_component_estimates"]
+    clipped = result["nonnegative_variance_components"]
+    assert raw["calibration_parameter"] < 0.0
+    assert raw["scenario_sampling"] < 0.0
+    assert clipped["calibration_parameter"] == 0.0
+    assert clipped["scenario_sampling"] == 0.0
+    assert clipped["interaction_and_within_cell_mc"] > 0.0
+
+
+def test_two_way_random_effects_zero_total_variance_has_no_proportions():
+    result = two_way_random_effects_decomposition(np.ones((2, 2)))
+    assert result["estimated_total_variance"] == 0.0
+    assert result["variance_component_proportions"] is None
