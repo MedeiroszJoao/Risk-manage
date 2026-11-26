@@ -124,7 +124,14 @@ def test_bulk_download_filters_wti_brent_and_preserves_negative_spot_price(tmp_p
 
 def test_bulk_download_counts_null_values_without_forward_fill(tmp_path):
     content = _pet_zip(
-        _series("PET.RWTC.D", [["20240102", "70.0"], ["20240103", None], ["20240105", "72.0"]]),
+        _series("PET.RWTC.D", [
+            ["20240102", "70.0"],
+            ["20240103", None],
+            ["20240104", "null"],
+            ["20240105", "72.0"],
+            ["20240106", "w"],
+            ["20240107", "*"],
+        ]),
         _series("PET.RBRTE.D", [["20240102", "76.0"], ["20240104", "77.0"]]),
     )
     frame, manifest = download_eia_petroleum_spot_prices(
@@ -134,8 +141,12 @@ def test_bulk_download_counts_null_values_without_forward_fill(tmp_path):
     wti_dates = frame.loc[frame["series_id"] == "PET.RWTC.D", "date"].tolist()
     assert wti_dates == ["2024-01-02", "2024-01-05"]
     wti_metadata = next(row for row in manifest["series"] if row["series_id"] == "PET.RWTC.D")
-    assert wti_metadata["null_observations_in_range"] == 1
-    assert manifest["parser"]["null_observations"] == 1
+    assert wti_metadata["null_observations_in_range"] == 2
+    assert wti_metadata["withheld_observations_in_range"] == 1
+    assert wti_metadata["insignificant_observations_in_range"] == 1
+    assert manifest["parser"]["null_observations"] == 2
+    assert manifest["parser"]["withheld_observations"] == 1
+    assert manifest["parser"]["insignificant_observations"] == 1
 
 
 def test_bulk_download_saves_archive_manifest_and_csv(tmp_path):
