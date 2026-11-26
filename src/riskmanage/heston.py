@@ -77,7 +77,6 @@ def heston_characteristic_function(frequency, maturity: float, params: HestonPar
         return complex(result) if result.ndim == 0 else result
 
     kappa = params.mean_reversion
-    theta = params.long_run_variance
     sigma = params.vol_of_variance
     rho = params.correlation
     v0 = params.variance0
