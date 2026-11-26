@@ -6,8 +6,11 @@ on:
       - "src/riskmanage/eia.py"
       - "src/riskmanage/commodity.py"
       - "src/riskmanage/risk.py"
+      - "src/riskmanage/data.py"
       - "scripts/download_eia_petroleum_spot.py"
       - "scripts/run_commodity_spot_case.py"
+      - "scripts/download_market_data.py"
+      - "scripts/run_case.py"
       - ".github/workflows/eia-live-ingestion.yml"
   workflow_dispatch:
 
@@ -21,7 +24,7 @@ concurrency:
 jobs:
   download-and-validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -103,3 +106,52 @@ jobs:
             reports/generated/commodity_spot_risk.json
           if-no-files-found: error
           retention-days: 7
+
+      - name: Build integrated FRED/EIA panel and run four-desk validation
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            if python scripts/download_market_data.py --start 2007-01-01 --fred-timeout 60 --eia-timeout 300; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "Integrated FRED/EIA download failed after three attempts."
+              exit 1
+            fi
+            echo "Integrated download attempt $attempt failed; retrying in 15 seconds."
+            sleep 15
+          done
+          python scripts/run_case.py --data data/market_data.csv --output /tmp/riskmanage-integrated-public-run > /tmp/riskmanage-integrated-public-run.stdout.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+
+          panel = pd.read_csv("data/market_data.csv")
+          manifest = json.loads(Path("data/source_manifest.json").read_text(encoding="utf-8"))
+          summary = json.loads(
+              Path("/tmp/riskmanage-integrated-public-run/executive_summary.json").read_text(encoding="utf-8")
+          )
+          required = {"date", "sp500", "vix", "eurusd", "usdjpy", "ust2y", "ust10y", "wti", "brent"}
+          assert required.issubset(panel.columns), "integrated panel is missing required factors"
+          assert len(panel) >= 310, "integrated panel is too short for the risk validation protocol"
+          assert not panel["date"].duplicated().any(), "integrated panel has duplicate dates"
+          assert summary["data_classification"] == "public_fred_eia_spot_panel"
+          assert summary["observations"] == len(panel)
+          assert len(summary["desks"]) == 4, "four-desk validation did not complete"
+          assert summary["stress_history_assessment"]["starts_on_or_before_2007"] is False, (
+              "unexpectedly claims full 2007 regulatory stress-history coverage"
+          )
+          assert manifest["classification"] == "public_observed_source_data_with_limited_calendar_alignment"
+          assert manifest["coverage_warnings"], "expected source-coverage warning was not recorded"
+
+          print(json.dumps({
+              "integrated_panel_rows": len(panel),
+              "date_range": summary["date_range"],
+              "desk_count": len(summary["desks"]),
+              "coverage_warning_count": len(manifest["coverage_warnings"]),
+              "full_2007_stress_history_available": summary["stress_history_assessment"]["starts_on_or_before_2007"],
+              "rfet_status": summary["rfet"]["status"],
+              "classification": manifest["classification"],
+          }, indent=2))
+          PY
