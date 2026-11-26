@@ -60,7 +60,7 @@ The code reports an insufficient-sample state unless 250 paired observations exi
 - Equity European options: Black–Scholes calls and puts.
 - FX European calls: Garman–Kohlhagen.
 - Rates: zero-coupon Treasury-yield proxies, with yield inputs expressed in percent.
-- Commodities: WTI Cushing spot-linked linear proxy. The historical risk factor is the EIA WTI Cushing spot benchmark, not a listed futures settlement; no futures basis, expiry or roll model is implemented.
+- Commodities: long WTI Cushing and short Europe Brent linear spot proxies. The historical risk factors are daily EIA spot benchmarks, not listed futures settlements. WTI/Brent relative-price risk is represented, but no listed-contract basis, futures curve, expiry or roll model is implemented.
 - Volatility exposure: a deliberately simplified variance-swap mark \(q\times(\sigma^2-K^2)\times\tau\). This proxy is used to test whether a model sees volatility risk; it is not a complete variance-swap fair-value model.
 
 HPL fully revalues the constant-maturity hypothetical positions. The RTPL approximation includes first-order sensitivities; the expanded model additionally includes per-factor second-order curvature. Cross-gamma / vanna, volatility-surface dynamics and production curve conventions remain outside scope.
