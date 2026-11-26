@@ -13,7 +13,7 @@ The downloader uses Federal Reserve Bank of St. Louis FRED public CSV graph endp
 | ust2y | DGS2 | 2-year Treasury constant maturity yield |
 | ust10y | DGS10 | 10-year Treasury constant maturity yield |
 
-The ingestion script stores raw CSV bytes and records series IDs, source URLs, UTC retrieval timestamps, row counts, missingness, date coverage and SHA-256 digests. Short calendar gaps are aligned onto business dates with a maximum four-business-day forward fill; remaining missing values are rejected.
+The ingestion script stores each run in a unique timestamped raw-snapshot directory, retaining the exact CSV bytes and a SHA-256 digest per series. Its manifest records the first and last dates with actual numeric observations (not merely the requested or first calendar date), the total source rows, missing-value count and source URL. FRED public graph CSV does not require an API key. Short calendar gaps are aligned onto business dates with a maximum four-business-day forward fill; remaining missing values are rejected. The series do not all share the same historical start: the combined panel begins at the first date on which every required factor is valid.
 
 ## EIA daily petroleum spot prices
 
