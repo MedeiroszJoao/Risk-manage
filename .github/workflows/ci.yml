@@ -39,3 +39,12 @@ jobs:
         with:
           name: heston-benchmark-python-${{ matrix.python-version }}
           path: /tmp/heston_benchmark.json
+      - name: Run Heston calibration recovery
+        run: |
+          python scripts/run_heston_calibration.py --objective mid --starts 2 --max-nfev 40 --output /tmp/heston_calibration.json
+          python -m json.tool /tmp/heston_calibration.json > /dev/null
+      - name: Upload Heston calibration report
+        uses: actions/upload-artifact@v4
+        with:
+          name: heston-calibration-python-${{ matrix.python-version }}
+          path: /tmp/heston_calibration.json
