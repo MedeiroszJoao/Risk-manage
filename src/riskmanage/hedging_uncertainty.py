@@ -315,7 +315,8 @@ def propagate_heston_uncertainty_to_hedging(
             "n_paths": int(n_paths),
             "n_steps": int(n_steps),
             "same_standard_normal_innovations_for_all_parameter_draws": True,
-            "identical_path_states_for_all_parameter_draws": False,
+            "path_states_depend_on_draw_specific_initial_variance": True,
+            "identical_parameter_draws_produce_identical_path_states": True,
             "initial_variance_state": (
                 "Each Q bootstrap draw's v0 is also used as the P/scenario initial "
                 "variance state; all other P parameters and Gaussian innovations are fixed."
