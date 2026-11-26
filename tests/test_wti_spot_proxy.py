@@ -74,9 +74,13 @@ def test_wti_brent_spot_spread_pnl_explains_both_benchmarks_exactly():
 
 
 def test_oil_collapse_scenario_uses_additive_spot_shocks_when_wti_is_negative():
-    from riskmanage.fixtures import build_synthetic_market_data
-    from scripts.run_case import build_scenario_reports
+    import runpy
+    from pathlib import Path
 
+    from riskmanage.fixtures import build_synthetic_market_data
+
+    run_case_path = Path(__file__).resolve().parents[1] / "scripts" / "run_case.py"
+    build_scenario_reports = runpy.run_path(str(run_case_path))["build_scenario_reports"]
     market = build_synthetic_market_data(n=300)
     market.loc[market.index[-1], "wti"] = -36.98
     market.loc[market.index[-1], "brent"] = 10.0
