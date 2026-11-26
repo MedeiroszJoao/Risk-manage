@@ -136,3 +136,8 @@ The uncertainty engine now carries each risk-neutral Heston bootstrap draw into 
 ## Crossed calibration/scenario uncertainty decomposition
 
 FE-010 evaluates every Heston calibration bootstrap draw over multiple independent physical/scenario seeds. Within each seed, the same Gaussian innovations are reused across Q draws; between seeds, independent scenarios are generated. A balanced two-way random-effects method-of-moments decomposition estimates calibration-parameter, scenario-sampling and interaction/within-cell Monte Carlo variance components for Heston ES, frozen-BS ES and paired ES/VaR differences. Run `python scripts/run_heston_nested_hedge_risk.py --bootstrap-replicates 20 --scenario-replicates 6 --paths 1000 --steps 8`. Small crossed designs are diagnostics; variance components are noisy and are not confidence intervals.
+
+
+## Extreme-value theory for hedge-loss tails
+
+The project now compares empirical VaR/ES with Peaks-over-Threshold Generalized Pareto (POT-GPD) extrapolation for Heston and frozen-Black–Scholes hedge losses, gross and net. It reports multiple thresholds, exceedance counts, MLE shape/scale, mean-excess diagnostics, descriptive KS distance, and conditional exceedance-bootstrap intervals. No threshold is auto-selected. Run \`python scripts/run_heston_hedge_evt.py --paths 10000 --steps 12 --cost-bps 2 --confidence-levels 0.975 0.99 --thresholds 0.90 0.925 0.95 --min-exceedances 50 --bootstrap 200\`. ES is undefined under the fitted GPD when shape \(\xi\geq1\); threshold and dependence uncertainty remain outside its bootstrap interval.
