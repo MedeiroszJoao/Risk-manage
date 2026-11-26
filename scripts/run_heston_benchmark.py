@@ -31,6 +31,8 @@ def main() -> None:
     args = build_parser().parse_args()
     if args.paths < 4 or args.steps < 1 or args.pilot_paths < 4:
         raise SystemExit("paths, steps and pilot-paths must be positive (minimum 4 paths)")
+    if args.paths % 2 or args.pilot_paths % 2:
+        raise SystemExit("paths and pilot-paths must be even when antithetic sampling is enabled")
 
     params = HestonParameters(
         spot=100.0,
