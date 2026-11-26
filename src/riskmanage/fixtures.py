@@ -22,14 +22,14 @@ def build_synthetic_market_data(n: int = 1800, seed: int = 20261124) -> pd.DataF
         [-0.06, 0.16, 0.02, 0.02, -0.05, 1.00, 0.72],
         [-0.08, 0.18, 0.01, 0.03, -0.06, 0.72, 1.00],
     ])
-    # Preserve the original seven-factor random draw exactly so adding Brent
-    # does not change existing synthetic equity, FX, WTI or rates reference paths.
+    # Preserve the original seven-factor random draw and stress-window RNG
+    # sequence exactly so the existing reference paths remain unchanged.
     z = rng.multivariate_normal(np.zeros(7), corr, size=n)
-    brent_specific = rng.standard_normal(n)
     stress = np.zeros(n, dtype=bool)
     for start in (int(n * .22), int(n * .58), int(n * .82)):
         end = min(n, start + int(rng.integers(12, 28)))
         stress[start:end] = True
+    brent_specific = rng.standard_normal(n)
     scale = np.where(stress, 2.8, 1.0)
     z *= scale[:, None]
     brent_specific *= scale
