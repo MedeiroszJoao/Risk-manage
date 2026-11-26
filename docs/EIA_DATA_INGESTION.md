@@ -36,6 +36,18 @@ The standalone EIA collector is also available:
 python scripts/download_eia_petroleum_spot.py --start 2007-01-01
 ```
 
+## Standalone commodity risk diagnostic
+
+The EIA-only history can be used independently of the full four-desk panel. FRED's current SP500 daily feed has a shorter history, so the common multi-asset panel may start much later than 2007. To retain the longer oil history, run:
+
+```powershell
+python scripts/run_commodity_spot_case.py
+```
+
+This reads the normalized EIA CSV and uses only dates with actual WTI **and** Brent observations (inner join; no forward fill). The default hypothetical book is long 150,000 barrels of WTI spot and short 100,000 barrels of Europe Brent spot. It writes daily HPL/RTPL and residuals to `reports/generated/commodity_spot_pnl.csv`, and daily / 10-observation historical VaR and ES plus a rolling-window stress-period selection to `reports/generated/commodity_spot_risk.json`.
+
+This standalone output is a descriptive spot-risk diagnostic, not an aggregated four-desk portfolio or regulatory IMA result. Quantities are hypothetical; no futures basis, forward curve, expiry, roll, financing or transaction costs are modeled.
+
 Python 3.11+ and the project dependencies are required. No EIA credential or API environment variable is needed.
 
 Python 3.11+ and the project dependencies are required. No EIA credential or API environment variable is needed.
