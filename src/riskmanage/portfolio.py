@@ -29,5 +29,5 @@ def build_default_portfolio(initial_market_state: dict[str,float]) -> list[Posit
         Position("FX Options","FX_SPOT",quantity=8_000_000,label="EURUSD spot control"),
         Position("Rates","ZERO_BOND_2Y",quantity=35_000_000,maturity=2.0,label="2Y zero coupon"),
         Position("Rates","ZERO_BOND_10Y",quantity=-27_000_000,maturity=10.0,label="10Y zero coupon short"),
-        Position("Commodities","WTI_FUTURE",quantity=150_000,label="WTI future delta-one"),
+        Position("Commodities","WTI_SPOT_PROXY",quantity=150_000,label="WTI Cushing spot-linked linear proxy; not a listed futures contract"),
     ]
