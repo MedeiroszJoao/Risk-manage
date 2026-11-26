@@ -774,10 +774,21 @@ def heston_simulate_paths(
                 + np.sqrt(conditional_variance) * z_stock
             )
         else:
-            next_variance = np.full(n_paths, params.variance0, dtype=float)
+            decay = math.exp(-kappa * dt)
+            integrated_variance = (
+                params.long_run_variance * dt
+                + (variance - params.long_run_variance)
+                * (1.0 - decay)
+                / kappa
+            )
+            next_variance = (
+                params.long_run_variance
+                + (variance - params.long_run_variance) * decay
+            )
             log_spot += (
-                (drift - params.dividend_yield - 0.5 * params.variance0) * dt
-                + math.sqrt(params.variance0 * dt) * z_stock
+                (drift - params.dividend_yield) * dt
+                - 0.5 * integrated_variance
+                + np.sqrt(np.maximum(integrated_variance, 0.0)) * z_stock
             )
         variance = next_variance
         spots[:, step + 1] = np.exp(log_spot)
