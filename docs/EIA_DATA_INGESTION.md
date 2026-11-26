@@ -1,87 +1,82 @@
 # EIA petroleum spot-price ingestion
 
-## Purpose and data contract
+## Purpose and source
 
-The EIA adapter retrieves daily observations from the official API v2 route:
+The collector downloads the official, public EIA Petroleum bulk archive:
 
-- Route: `petroleum/pri/spt/data`
-- WTI Cushing spot: `RWTC`
-- Europe Brent spot: `RBRTE`
-- Frequency: daily
-- Data column: `value`
+- Download: https://www.eia.gov/opendata/bulk/PET.zip
+- Dataset: PET.zip (Petroleum)
+- Selected daily WTI Cushing spot series: PET.RWTC.D
+- Selected daily Europe Brent spot series: PET.RBRTE.D
+- Units reported by EIA: dollars per barrel
+- Authentication: **no API key is required**
 
-Every execution writes into a new timestamped raw-snapshot subdirectory, so a later download does not overwrite an earlier API response. The normalized output has one row per observation and these fields:
+The EIA bulk-download documentation states that each ZIP contains one same-named .txt file and that each line in the text file is a complete JSON object. Series objects contain metadata and a data array of period/value pairs. The collector streams the ZIP to disk, then parses PET.txt one line at a time directly from the archive. It does not extract the full text file and does not load the entire Petroleum dataset into memory.
+
+The selected identifiers are the full legacy series IDs used in the Petroleum bulk file. They are not the shorter API v2 facet values (RWTC and RBRTE).
+
+## Local execution
+
+Python 3.11+ and the project dependencies are required. No EIA credential or API environment variable is needed.
+
+Command: python scripts/download_eia_petroleum_spot.py --start 2007-01-01
+
+Optional bounds and paths:
+
+- python scripts/download_eia_petroleum_spot.py --start 2012-01-01 --end 2025-12-31
+- python scripts/download_eia_petroleum_spot.py --start 2007-01-01 --timeout 240
+
+Outputs:
+
+- data/raw/eia/petroleum_spot/<snapshot_id>/PET.zip — exact downloaded archive, retained and never overwritten by a later run
+- data/processed/eia_petroleum_spot.csv — normalized long-form observations
+- data/processed/eia_petroleum_spot_manifest.json — provenance and validation metadata
+
+The data/raw/ and data/processed/ outputs are local artifacts and are excluded from Git. Keep the archive, CSV and manifest together when archiving a research run.
+
+## Data contract
+
+The normalized output has one row per actual observation:
 
 | Field | Meaning |
 |---|---|
-| `date` | EIA period, represented as ISO date |
-| `series` | Stable project field name |
-| `series_id` | EIA series identifier |
-| `value` | Numeric spot-price observation |
-| `units` | Unit returned by EIA, when supplied |
-| `series_description` | Description returned by EIA, when supplied |
+| date | EIA period normalized to ISO YYYY-MM-DD |
+| series | Stable project field name |
+| series_id | Full EIA identifier, e.g. PET.RWTC.D |
+| value | Numeric spot-price observation |
+| units | Unit string supplied by EIA |
+| series_description | Series description supplied by EIA |
 
-The observations are daily spot benchmarks, not NYMEX/ICE futures settlements, executable bid/ask quotes, a full forward curve, or the actual positions of a trading desk. WTI Cushing and Europe Brent are useful reference risk factors for the commodities desk, but a futures-book HPL must not mark listed futures directly from these spot observations without an explicit basis/curve model and documented contract rolls.
+The manifest records the source URL, final URL, HTTP status and selected response headers, UTC retrieval timestamp, snapshot ID, archive byte count and SHA-256, ZIP member name and uncompressed size, parsed line count, selected series metadata, source coverage, requested date bounds, null counts, normalized row count and normalized CSV SHA-256.
 
-## Authentication and local execution
+No weekend/holiday observations are synthesized. Null source values are omitted and counted. There is no forward fill or interpolation. Prices are required to be finite, but **zero and negative prices are not rejected**: negative crude-oil spot prices are economically possible, and the WTI Cushing series recorded a negative observation on April 20, 2020. This is a deliberate data-integrity rule, not an exception or data-cleaning workaround.
 
-Set the API key as a user-level environment variable in Windows PowerShell. The command prompts without echoing the key:
+## Reproducibility and validation
 
-```powershell
-$secure = Read-Host "EIA API Key" -AsSecureString
-$ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+Each run receives a unique timestamped directory. The ZIP is streamed in fixed-size chunks to a temporary file, hashed while downloading, checked against Content-Length when provided, and atomically renamed to PET.zip only after the transfer completes. The ZIP is then opened without extracting its large text member. The parser verifies:
 
-try {
-    $key = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)
-    [Environment]::SetEnvironmentVariable("EIA_API_KEY", $key, "User")
-    Write-Host "EIA_API_KEY configured for this Windows user."
-}
-finally {
-    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr)
-    $secure.Dispose()
-    Remove-Variable key, secure, ptr -ErrorAction SilentlyContinue
-}
-```
+1. The downloaded file is a valid ZIP containing exactly one PET.txt member.
+2. The two requested daily series occur exactly once in the archive.
+3. Series metadata identifies daily frequency (D).
+4. Each observation is a valid daily date and a finite numeric value.
+5. Duplicate dates are rejected; returned rows are normalized to ascending date order.
+6. Requested date bounds are applied without generating observations.
+7. The raw archive digest and normalized CSV digest are recorded.
 
-Open a new PowerShell window, then run:
+Unit tests use small synthetic ZIP archives matching the documented EIA line-oriented JSON format. They cover filtering, metadata, missing values, duplicate dates, invalid values, missing series, incomplete downloads, invalid ZIPs, immutable snapshots, output serialization and negative WTI prices. These deterministic tests do not replace the first live download from EIA.
 
-```powershell
-python scripts/download_eia_petroleum_spot.py --start 2007-01-01
-```
+## Interpretation and limits
 
-Optional bounds and output paths:
+WTI Cushing and Europe Brent are daily spot benchmarks. They are not NYMEX/ICE futures settlements, executable bid/ask quotes, a full forward curve or actual trading-desk positions. They can be used as spot risk-factor histories, but a listed-futures HPL must not mark futures directly from these spot observations without an explicit basis/curve model, contract months, expiry and documented roll rules.
 
-```powershell
-python scripts/download_eia_petroleum_spot.py --start 2012-01-01 --end 2025-12-31
-```
+The ZIP hash identifies the exact archive retrieved for a run. It does not reconstruct historical EIA publication vintages or the information set available to traders on each historical observation date. Strict point-in-time backtests require vintage/publication-time data separately.
 
-The downloader reads `EIA_API_KEY` from the environment. It has no command-line API-key argument. The credential is not written to the output CSV, raw response files, manifest, or normal success output. Request and HTTP error messages are deliberately redacted because the EIA documentation requires the key as a query parameter.
-
-## Reproducibility and provenance
-
-For each series, the downloader:
-1. Calls EIA API v2 with explicit daily frequency, series facet, ascending period sort and bounded date range.
-2. Retrieves pages using `offset` and `length`; the page size is capped at 5,000 JSON rows.
-3. Saves each exact raw JSON response page separately.
-4. Stores the SHA-256 digest, offset, row count and raw path for every page.
-5. Produces a normalized CSV and manifest with retrieval time (UTC), unique snapshot ID/path, requested period, actual coverage, series metadata, units and normalized CSV SHA-256.
-
-No missing daily observations are forward-filled, interpolated or synthesized. Weekends and market holidays therefore remain absent. A changed result on a later retrieval is a new snapshot, not a silent rewrite of an earlier one. Preserve the raw pages and manifest for each research run.
-
-The EIA API may be updated as underlying source data are revised. The retrieval timestamp and raw-page hashes identify the exact response snapshot retrieved; they do not establish point-in-time vintage history for what was known to the market on each historical date. For strict historical information-set backtests, source publication/vintage timestamps are a separate requirement.
-
-The EIA API returns at most 5,000 JSON rows per request. Pagination is explicit rather than assuming a single response contains the full history. API usage should remain measured; do not recursively enumerate large parts of the EIA data hierarchy.
-
-## Tests and validation boundary
-
-The unit tests use deterministic mocked EIA responses. They validate pagination, row/total reconciliation, credential omission from saved manifests, SHA-256 provenance, duplicate-date rejection, invalid-value rejection, date bounds and output serialization. CI does not need an EIA credential and does not make live API calls.
-
-A successful local run is still required before marking live ingestion as verified. The run must retain the CSV, all raw pages and the manifest together. Review the actual returned units and data coverage before connecting these observations to portfolio valuation.
+The collector is a research data pipeline, not a certified regulatory feed or a representation of any institution's actual trading book.
 
 ## Official references
 
-- [EIA API technical documentation](https://www.eia.gov/opendata/documentation.php)
-- [EIA petroleum spot-prices route](https://www.eia.gov/opendata/browser/petroleum/pri/spt)
-- [EIA API FAQ](https://www.eia.gov/opendata/faqs.php)
-
-This adapter is a research data collector, not a representation of any institution's actual trading book and not a certified regulatory data feed.
+- EIA bulk download facility and file format: https://www.eia.gov/opendata/v1/bulkfiles.php
+- EIA Petroleum bulk archive: https://www.eia.gov/opendata/bulk/PET.zip
+- EIA WTI Cushing daily spot-price series: https://www.eia.gov/dnav/pet/hist/rwtcD.htm
+- EIA Europe Brent daily spot-price series: https://www.eia.gov/dnav/pet/hist/rbrteD.htm
+- EIA explanation of negative oil prices and Cushing storage constraints: https://www.eia.gov/todayinenergy/detail.php?id=43875
