@@ -128,7 +128,7 @@ p=\frac{\psi-1}{\psi+1},
 Set $v_{t+\Delta t}=0$ with probability $p$; otherwise draw an exponential random variable with rate $\beta$. The inverse transform used in the code is
 
 \[
-v_{t+\Delta t}=\frac{\log[(1-p)/(1-U)]}{\beta},
+v_{t+\Delta t}=\frac{\log[(1-p)/(1-U)]}{\lambda_{QE}},
 \qquad U\sim U(0,1),\quad U>p.
 \]
 
