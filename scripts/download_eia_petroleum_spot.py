@@ -8,6 +8,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from riskmanage.eia import (  # noqa: E402
+    EIA_PETROLEUM_SPOT_BULK_URL,
     download_eia_petroleum_spot_prices,
     save_eia_petroleum_spot_prices,
 )
@@ -15,7 +16,7 @@ from riskmanage.eia import (  # noqa: E402
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Download daily EIA WTI and Brent spot prices with provenance."
+        description="Download daily EIA WTI and Brent spot prices from the public PET.zip bulk file."
     )
     parser.add_argument("--start", default="2007-01-01", help="First observation date (YYYY-MM-DD).")
     parser.add_argument("--end", default=None, help="Last observation date (YYYY-MM-DD); defaults to latest.")
@@ -32,16 +33,25 @@ def main() -> None:
     parser.add_argument(
         "--raw-dir",
         default="data/raw/eia/petroleum_spot",
-        help="Directory for exact raw JSON response pages.",
+        help="Directory for immutable timestamped PET.zip snapshots.",
     )
-    parser.add_argument("--page-size", type=int, default=5000)
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=180,
+        help="HTTP connect/read timeout in seconds (default: 180).",
+    )
     args = parser.parse_args()
 
+    if args.timeout <= 0:
+        parser.error("--timeout must be positive")
+
+    print(f"Downloading public EIA bulk archive (no API key required): {EIA_PETROLEUM_SPOT_BULK_URL}")
     try:
         frame, manifest = download_eia_petroleum_spot_prices(
             start=args.start,
             end=args.end,
-            page_size=args.page_size,
+            timeout=(20, args.timeout),
             raw_dir=args.raw_dir,
         )
         save_eia_petroleum_spot_prices(frame, manifest, args.output, args.manifest)
@@ -58,12 +68,17 @@ def main() -> None:
                 "first_date": item["first_date"],
                 "last_date": item["last_date"],
                 "units": item["units"],
+                "negative_or_zero_values": int(
+                    (frame.loc[frame["series_id"] == item["series_id"], "value"] <= 0).sum()
+                ),
             }
             for item in manifest["series"]
         ],
         "csv": args.output,
         "manifest": args.manifest,
-        "raw_pages_directory": manifest["raw_snapshot_directory"],
+        "raw_archive": manifest["download"]["archive_path"],
+        "archive_bytes": manifest["download"]["bytes"],
+        "archive_sha256": manifest["download"]["sha256"],
         "normalized_sha256": manifest["normalized_sha256"],
     }
     print(json.dumps(summary, indent=2))
