@@ -173,3 +173,12 @@ See [HESTON_UNCERTAINTY.md](HESTON_UNCERTAINTY.md) for the nested design and int
 FE-010 creates a balanced matrix with risk-neutral bootstrap draws in rows and independent physical/scenario seeds in columns. Within each seed, Gaussian QE-M innovations are common across calibration draws; the P initial variance follows each draw's (v_0), and other P dynamics remain fixed. Across seeds, the scenario innovations are independent.
 
 Two-way random-effects method-of-moments estimates split the variance of each net VaR/ES metric into a Q-calibration component, a physical-scenario sampling component and a residual combining parameter-by-scenario interaction with within-cell Monte Carlo error. The decomposition is produced for Heston, frozen-BS and paired Heston-minus-BS metrics. Raw negative variance-component estimates are retained for diagnosis and truncated estimates/proportions are reported separately. This is not a confidence interval; small B/R and finite tail depth make estimates noisy. See [HESTON_UNCERTAINTY.md](HESTON_UNCERTAINTY.md) for the equations and limitations.
+
+
+## Crossed decomposition of calibration and scenario hedge-risk uncertainty
+
+A balanced crossed design evaluates each risk-neutral Heston bootstrap draw under every independent physical/scenario seed. Within a seed, the same Gaussian innovations are reused across Q draws; the initial variance state follows the draw's (v_0), while the remaining P dynamics are fixed. Different seeds generate independent scenario innovation sets.
+
+For each risk metric, the two-way random-effects method of moments uses row/column means and residual sums of squares to estimate the calibration component, scenario component and interaction/within-cell Monte Carlo residual. It is applied to Heston ES/VaR, frozen-BS ES/VaR and paired differences. Raw variance components are retained; negative calibration/scenario estimates are reported and separately truncated at zero for non-negative proportions. The residual is not a pure interaction term.
+
+This is not REML, a Bayesian hierarchical model or a confidence interval. Small numbers of bootstrap draws/seeds and finite tail depth produce noisy estimates; model risk and physical parameter uncertainty remain outside the decomposition. See [HESTON_UNCERTAINTY.md](HESTON_UNCERTAINTY.md) and Formula Register §72 for formulas and limitations.
