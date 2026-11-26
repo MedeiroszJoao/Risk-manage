@@ -51,8 +51,9 @@ def propagate_heston_uncertainty_to_hedging(
     comparator uses sqrt(theta_Q) separately for each Q draw.
 
     The empirical VaR/ES distribution across bootstrap draws is conditional on
-    this one finite physical scenario sample. It captures parameter-induced
-    hedge-risk dispersion, not scenario-sampling uncertainty or model risk.
+    common Gaussian innovations, fixed physical dynamics, and draw-specific
+    initial variance states. It captures parameter-induced hedge-risk dispersion,
+    not independent scenario-resampling uncertainty or model risk.
     """
     parameter_samples = tuple(parameter_samples)
     if len(parameter_samples) < 2:
