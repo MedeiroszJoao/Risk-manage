@@ -11,6 +11,8 @@ from riskmanage.heston import (
     heston_monte_carlo_price,
     heston_price_fourier,
     heston_prices_fourier_batch,
+    heston_option_price_delta_fourier_batch,
+    heston_simulate_paths,
 )
 
 def baseline(**overrides):
@@ -237,3 +239,73 @@ def test_vector_fourier_validation_rejects_mismatched_option_types():
     params = baseline()
     with pytest.raises(ValueError, match="one 'call' or 'put'"):
         heston_prices_fourier_batch([90.0, 100.0], 1.0, params, ["call"])
+
+
+
+def test_state_vector_fourier_prices_and_deltas_match_scalar_reference():
+    params = baseline()
+    spots = np.array([90.0, 100.0, 110.0])
+    variances = np.array([0.025, 0.04, 0.075])
+    batch = heston_option_price_delta_fourier_batch(
+        spots, variances, 100.0, 0.8, params, "call"
+    )
+    for index, (spot, variance) in enumerate(zip(spots, variances, strict=True)):
+        state = baseline(spot=float(spot), variance0=float(variance))
+        scalar = heston_price_fourier(100.0, 0.8, state, "call")["price"]
+        bump = 0.02
+        up = heston_price_fourier(
+            100.0, 0.8, baseline(spot=float(spot + bump), variance0=float(variance))
+        )["price"]
+        down = heston_price_fourier(
+            100.0, 0.8, baseline(spot=float(spot - bump), variance0=float(variance))
+        )["price"]
+        delta_reference = (up - down) / (2.0 * bump)
+        assert batch["prices"][index] == pytest.approx(scalar, rel=2e-7, abs=2e-7)
+        assert batch["deltas"][index] == pytest.approx(delta_reference, rel=2e-5, abs=2e-5)
+
+
+def test_state_vector_fourier_put_call_parity():
+    params = baseline()
+    spots = np.array([90.0, 100.0, 110.0])
+    variances = np.array([0.025, 0.04, 0.075])
+    call = heston_option_price_delta_fourier_batch(
+        spots, variances, 100.0, 0.8, params, "call"
+    )
+    put = heston_option_price_delta_fourier_batch(
+        spots, variances, 100.0, 0.8, params, "put"
+    )
+    assert call["prices"] - put["prices"] == pytest.approx(
+        spots * math.exp(-params.dividend_yield * 0.8)
+        - 100.0 * math.exp(-params.risk_free_rate * 0.8),
+        abs=2e-7,
+    )
+    assert call["deltas"] - put["deltas"] == pytest.approx(
+        math.exp(-params.dividend_yield * 0.8), abs=2e-7
+    )
+
+
+def test_full_path_simulation_risk_neutral_stock_martingale():
+    params = baseline()
+    paths = heston_simulate_paths(
+        params, 1.0, n_steps=32, n_paths=30_000, seed=717
+    )
+    discounted = math.exp(-params.risk_free_rate) * paths["spots"][:, -1]
+    target = params.spot * math.exp(-params.dividend_yield)
+    assert np.mean(discounted) == pytest.approx(target, rel=0.008)
+
+
+def test_full_path_simulation_supports_deterministic_variance_limit():
+    params = baseline(
+        variance0=0.04,
+        long_run_variance=0.09,
+        vol_of_variance=0.0,
+    )
+    paths = heston_simulate_paths(
+        params, 1.0, n_steps=24, n_paths=3_000, seed=81
+    )
+    expected_variance = params.long_run_variance + (
+        params.variance0 - params.long_run_variance
+    ) * math.exp(-params.mean_reversion)
+    assert paths["variances"][:, -1] == pytest.approx(
+        expected_variance, abs=1e-12
+    )
