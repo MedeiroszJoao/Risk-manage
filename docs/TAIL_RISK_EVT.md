@@ -101,6 +101,8 @@ No single threshold is automatically selected. The runner reports, for each thre
 - POT VaR/ES and extrapolation ratio at each target confidence level.
 - Conditional non-parametric bootstrap percentile intervals.
 
+It also provides a numerical threshold-stability summary across successful fits: range, mean, standard deviation and relative range-to-absolute-mean for GPD shape/scale and each target VaR/ES. This summary is a diagnostic only; it does not select an optimal threshold or provide a formal stability test.
+
 The KS distance is descriptive only. No p-value is reported because the GPD parameters were estimated on the same exceedance observations; the standard uniform KS null distribution is not valid without parameter-estimation adjustment.
 
 Threshold stability matters more than a good fit at one chosen quantile. Shape estimates, scale estimates, VaR and ES should remain reasonably stable over a defensible range of high thresholds. The mean-excess plot should be approximately linear above a candidate threshold. If the estimates change materially across thresholds, the GPD extrapolation is not stable enough for an operational conclusion.
