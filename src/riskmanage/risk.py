@@ -168,13 +168,14 @@ def select_stress_window(
     window_days: int = 250,
     confidence: float = 0.975,
 ):
-    """Select the contiguous window with the largest cumulative portfolio loss.
+    """Select the contiguous window with the largest empirical 10-observation ES.
 
-    Inputs are aligned daily loss series (positive values are losses). The
-    selected window maximizes the sum of all factor losses over exactly
-    window_days observations. Ties resolve to the earliest window.
-    This is a descriptive historical stress-window selector, not the
-    supervisory FRTB stress-period selection procedure.
+    Inputs are aligned daily loss series (positive values are losses). For each
+    candidate window, the function computes overlapping 10-observation portfolio
+    losses and their empirical expected shortfall at the requested confidence.
+    The window with the highest ES is selected; ties resolve to the earliest.
+    This is a descriptive historical selector, not the supervisory FRTB
+    stress-period selection procedure.
     """
     if not factor_losses:
         raise ValueError("factor loss mapping cannot be empty")
