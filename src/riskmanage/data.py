@@ -9,15 +9,15 @@ import requests
 
 FRED_SERIES = {
     "sp500": "SP500", "vix": "VIXCLS", "eurusd": "DEXUSEU",
-    "usdjpy": "DEXJPUS", "wti": "DCOILWTICO", "ust2y": "DGS2", "ust10y": "DGS10",
+    "usdjpy": "DEXJPUS", "ust2y": "DGS2", "ust10y": "DGS10",
 }
-REQUIRED_COLUMNS = ("date", *FRED_SERIES.keys(), "brent")
+REQUIRED_COLUMNS = ("date", *FRED_SERIES.keys(), "wti", "brent")
 STRICTLY_POSITIVE_COLUMNS = ("sp500", "eurusd", "usdjpy", "brent")
 
 
 def validate_market_data(frame: pd.DataFrame, *, require_oil: bool = True) -> None:
     """Validate the full panel, or the FRED-only intermediate before EIA oil is merged."""
-    fred_intermediate = tuple(name for name in FRED_SERIES if name != "wti")
+    fred_intermediate = tuple(FRED_SERIES)
     required = REQUIRED_COLUMNS if require_oil else ("date", *fred_intermediate)
     missing = set(required) - set(frame.columns)
     if missing:
