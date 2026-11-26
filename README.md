@@ -116,3 +116,8 @@ The stochastic-volatility engine estimates Delta by both the pathwise method and
 ## Dynamic Heston delta hedging and tail risk
 
 The derivatives stack now supports a discrete self-financing hedge experiment. It compares a state-dependent Heston Delta (vector Lewis Fourier derivative across simulated spot/variance states) with a frozen-volatility Black–Scholes Delta, on identical QE-M scenario paths. It separates risk-neutral pricing from physical/scenario path dynamics, includes proportional rehedging costs and reports gross/net hedge P&L, turnover, empirical VaR and fractional-tail ES. Run `python scripts/run_heston_delta_hedging.py --paths 2000 --steps 12 --cost-bps 2`. The physical parameters are hypothetical scenarios, not forecasts; the output is not a market backtest or regulatory capital result.
+
+
+## Randomized quasi-Monte Carlo
+
+Heston pricing also has an RQMC route using scrambled Sobol nets, inverse-normal mapping, Brownian bridge on both Gaussian drivers, QE-M transitions, and an independent-pilot discounted-stock control variate. The benchmark compares Brownian-bridge RQMC, standard-order RQMC and antithetic pseudo-MC at equal valuation and pilot path budgets, with independent scramble-based standard errors and Fourier reference. Run python scripts/run_heston_qmc_benchmark.py --sobol-power 10 --scrambles 8 --steps 64. RQMC is not assumed to win; results are conditional on the QE-M time grid and exclude time-discretization and model uncertainty.
