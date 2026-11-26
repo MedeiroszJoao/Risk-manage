@@ -26,8 +26,8 @@ Build a high-signal portfolio case resembling real quantitative market-risk work
 
 ## Architecture and decisions
 - Python 3.11+, NumPy, pandas, SciPy, requests, matplotlib; pytest / Ruff.
-- Public FRED CSV series are ingested by a reproducible script; deterministic synthetic fixtures support offline tests.
-- Risk factors: S&P 500, VIX, EUR/USD, USD/JPY, WTI, US 2Y and 10Y yields.
+- Public FRED CSV series supply equity, FX and rates; the official EIA Petroleum bulk archive supplies WTI Cushing and Europe Brent spot benchmarks. A reproducible script joins them into one market panel and retains source provenance; deterministic synthetic fixtures support offline tests.
+- Risk factors: S&P 500, VIX, EUR/USD, USD/JPY, WTI Cushing spot, Europe Brent spot, US 2Y and 10Y yields.
 - Desks: Equity Options, FX Options, Rates, Commodities.
 - HPL: static positions from prior close, full revaluation on current-close market data. RTPL: independent risk-theoretical approximation from declared factor subset and sensitivities.
 - VaR backtests use HPL only; lack of APL is disclosed.
@@ -49,3 +49,11 @@ Build a high-signal portfolio case resembling real quantitative market-risk work
 - Same seed and inputs reproduce numeric outputs within documented tolerances.
 - Intentional model misspecification produces different HPL and RTPL and a validation explanation identifying omitted drivers.
 - Reports distinguish observed public market data, proxies, synthetic fixtures, empirical estimates and regulatory assumptions.
+
+
+## Data-source and commodity-book addendum — 2026-11-26
+
+- The EIA PET bulk download is public and requires no API key. The collector retains and hashes the exact ZIP snapshot and parses only PET.RWTC.D and PET.RBRTE.D.
+- WTI Cushing spot may be zero or negative; the data contract preserves finite negative observations rather than imposing an invalid positivity constraint. The WTI volatility proxy uses scaled additive price changes, not logarithmic returns.
+- The hypothetical commodities desk is long WTI Cushing and short Europe Brent using linear spot-linked proxies. These are not NYMEX/ICE futures positions, and the system does not claim to model futures basis, contract month, expiry, roll or forward curves.
+- The integrated market panel uses EIA as the canonical source for both crude-oil benchmarks, avoiding mismatched WTI and Brent feed definitions.
