@@ -17,6 +17,27 @@ The selected identifiers are the full legacy series IDs used in the Petroleum bu
 
 ## Local execution
 
+For the complete empirical market panel, use the integrated downloader:
+
+```powershell
+python scripts/download_market_data.py --start 2007-01-01
+```
+
+That command downloads FRED equity, FX and rates, retrieves this EIA bulk archive for both WTI and Brent, writes the standalone EIA CSV/manifest, and merges the observations into:
+
+- `data/market_data.csv` — final aligned market panel consumed by `scripts/run_case.py`
+- `data/source_manifest.json` — combined FRED/EIA source manifest
+
+The main panel uses EIA as the canonical source for both oil benchmarks. The FRED intermediate deliberately excludes the WTI series so that WTI and Brent are not silently sourced from different feeds.
+
+The standalone EIA collector is also available:
+
+```powershell
+python scripts/download_eia_petroleum_spot.py --start 2007-01-01
+```
+
+Python 3.11+ and the project dependencies are required. No EIA credential or API environment variable is needed.
+
 Python 3.11+ and the project dependencies are required. No EIA credential or API environment variable is needed.
 
 Command: python scripts/download_eia_petroleum_spot.py --start 2007-01-01
