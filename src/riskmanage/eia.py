@@ -138,7 +138,13 @@ def _read_petroleum_series_from_zip(
     found: dict[str, dict[str, Any]] = {}
     records: list[dict[str, Any]] = []
     line_count = 0
-    stats = {"source_observations": 0, "selected_observations": 0, "null_observations": 0}
+    stats = {
+        "source_observations": 0,
+        "selected_observations": 0,
+        "null_observations": 0,
+        "withheld_observations": 0,
+        "insignificant_observations": 0,
+    }
 
     try:
         with zipfile.ZipFile(archive_path, "r") as archive:
@@ -194,6 +200,8 @@ def _read_petroleum_series_from_zip(
                         "source_line_number": line_number,
                         "source_observations": len(data),
                         "null_observations_in_range": 0,
+                        "withheld_observations_in_range": 0,
+                        "insignificant_observations_in_range": 0,
                         "filtered_out_of_range": 0,
                     }
                     found[series_id] = metadata
@@ -214,9 +222,18 @@ def _read_petroleum_series_from_zip(
                             continue
 
                         raw_value = observation[1]
-                        if raw_value is None or raw_value == "":
+                        missing_code = str(raw_value).strip().lower() if raw_value is not None else "null"
+                        if raw_value is None or missing_code in {"", "null"}:
                             metadata["null_observations_in_range"] += 1
                             stats["null_observations"] += 1
+                            continue
+                        if missing_code == "w":
+                            metadata["withheld_observations_in_range"] += 1
+                            stats["withheld_observations"] += 1
+                            continue
+                        if missing_code == "*":
+                            metadata["insignificant_observations_in_range"] += 1
+                            stats["insignificant_observations"] += 1
                             continue
                         try:
                             value = float(raw_value)
