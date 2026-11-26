@@ -80,25 +80,11 @@ def propagate_heston_uncertainty_to_hedging(
     if not np.isclose(pricing_market.risk_free_rate, physical_scenario.risk_free_rate):
         raise ValueError("Q and P/scenario funding rate must agree")
 
-    # Simulate once: every Q calibration draw sees exactly the same physical paths.
-    paths = heston_simulate_paths(
-        physical_scenario,
-        maturity,
-        n_steps,
-        n_paths,
-        seed=seed,
-        psi_c=psi_c,
-        asset_total_return=physical_total_return,
-    )
-    spots = paths["spots"]
-    variances = paths["variances"]
+    # Reuse the exact same standard-normal innovations for every bootstrap
+    # draw. The initial variance state follows the Q draw because v0 is the
+    # same instantaneous state under Q and P; all other P dynamics stay fixed.
+    # This keeps the initial premium, t=0 Delta and P path state coherent.
     dt = maturity / n_steps
-    terminal_spot = spots[:, -1]
-    if option_type == "call":
-        terminal_payoff = np.maximum(terminal_spot - strike, 0.0)
-    else:
-        terminal_payoff = np.maximum(strike - terminal_spot, 0.0)
-
     rate = pricing_market.risk_free_rate
     dividend_yield = pricing_market.dividend_yield
     cost_rate = transaction_cost_bps * 1e-4
@@ -119,6 +105,26 @@ def propagate_heston_uncertainty_to_hedging(
 
         if q_params.vol_of_variance <= 0.0:
             raise ValueError("bootstrap vol_of_variance samples must be positive")
+
+        physical_draw = replace(
+            physical_scenario, variance0=q_params.variance0
+        )
+        paths = heston_simulate_paths(
+            physical_draw,
+            maturity,
+            n_steps,
+            n_paths,
+            seed=seed,
+            psi_c=psi_c,
+            asset_total_return=physical_total_return,
+        )
+        spots = paths["spots"]
+        variances = paths["variances"]
+        terminal_spot = spots[:, -1]
+        if option_type == "call":
+            terminal_payoff = np.maximum(terminal_spot - strike, 0.0)
+        else:
+            terminal_payoff = np.maximum(strike - terminal_spot, 0.0)
 
         initial_premium = heston_price_fourier(
             strike, maturity, q_params, option_type
@@ -207,6 +213,7 @@ def propagate_heston_uncertainty_to_hedging(
         rows.append(
             {
                 "bootstrap_draw": int(draw_index),
+                "physical_scenario_initial_variance": float(physical_draw.variance0),
                 "risk_neutral_parameters": {
                     name: float(getattr(q_params, name))
                     for name in _PARAMETER_NAMES
@@ -305,7 +312,12 @@ def propagate_heston_uncertainty_to_hedging(
             "seed": int(seed),
             "n_paths": int(n_paths),
             "n_steps": int(n_steps),
-            "same_physical_paths_for_all_parameter_draws": True,
+            "same_standard_normal_innovations_for_all_parameter_draws": True,
+            "identical_path_states_for_all_parameter_draws": False,
+            "initial_variance_state": (
+                "Each Q bootstrap draw's v0 is also used as the P/scenario initial "
+                "variance state; all other P parameters and Gaussian innovations are fixed."
+            ),
         },
         "market_conventions": {
             "risk_free_rate": float(rate),
