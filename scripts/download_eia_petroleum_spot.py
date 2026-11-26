@@ -63,7 +63,7 @@ def main() -> None:
         ],
         "csv": args.output,
         "manifest": args.manifest,
-        "raw_pages_directory": args.raw_dir,
+        "raw_pages_directory": manifest["raw_snapshot_directory"],
         "normalized_sha256": manifest["normalized_sha256"],
     }
     print(json.dumps(summary, indent=2))
