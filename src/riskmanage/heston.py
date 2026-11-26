@@ -178,10 +178,10 @@ def heston_price_fourier(
         s0 * math.exp((r - q) * maturity) - strike, 0.0
     )
     upper = s0 * math.exp(-q * maturity)
-    tolerance = max(
-        20.0 * error * math.sqrt(s0 * strike) * math.exp(-r * maturity) / math.pi,
-        1e-8,
+    quadrature_price_error = (
+        error * math.sqrt(s0 * strike) * math.exp(-r * maturity) / math.pi
     )
+    tolerance = max(20.0 * quadrature_price_error, 1e-8)
     if not np.isfinite(call) or call < lower - tolerance or call > upper + tolerance:
         raise ArithmeticError(
             "Fourier inversion returned a price outside discounted no-arbitrage bounds; "
@@ -195,7 +195,8 @@ def heston_price_fourier(
     return {
         "price": float(price),
         "call_price": float(call),
-        "quadrature_error_estimate": float(error),
+        "quadrature_error_estimate": float(quadrature_price_error),
+        "quadrature_error_units": "option_price",
         "method": "Lewis square-root Fourier inversion",
         "option_type": option_type,
         "maturity": float(maturity),
