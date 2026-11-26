@@ -94,7 +94,7 @@ Each run receives a unique timestamped directory. The ZIP is streamed in fixed-s
 6. Requested date bounds are applied without generating observations.
 7. The raw archive digest and normalized CSV digest are recorded.
 
-Unit tests use small synthetic ZIP archives matching the documented EIA line-oriented JSON format. They cover filtering, metadata, missing values, duplicate dates, invalid values, missing series, incomplete downloads, invalid ZIPs, immutable snapshots, output serialization and negative WTI prices. These deterministic tests do not replace the first live download from EIA.
+Unit tests use small synthetic ZIP archives matching the documented EIA line-oriented JSON format. They cover filtering, metadata, missing values, duplicate dates, invalid values, missing series, incomplete downloads, invalid ZIPs, immutable snapshots, output serialization and negative WTI prices. A live ingestion was also completed in GitHub Actions on 2026-11-26 (run 45897080993): HTTP 200, 55,121,219-byte PET.zip, SHA-256 `8f3a6b2e4768a274f52af5f4e52b5e50a0c44c6be7bfc956eccd85ca3396dfc2`, 10,034 normalized rows (5,002 WTI and 5,032 Brent) covering 2007-01-02 through 2026-11-24. The 2020-04-20 WTI value of -$36.98/bbl was retained. The run artifact contains the raw ZIP, normalized CSV, manifest, commodity P&L and risk JSON; it is not committed to Git. This validates the standalone EIA collector and commodity diagnostic, not the integrated FRED/EIA panel or FRED licensing. Local runs should still retain and inspect their own source manifest.
 
 ## Interpretation and limits
 
