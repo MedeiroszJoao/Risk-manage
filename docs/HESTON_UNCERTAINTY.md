@@ -157,10 +157,10 @@ The deterministic synthetic experiment creates 15 noisy European quotes across t
 Run:
 
 \`\`\`bash
-python scripts/run_heston_uncertainty.py --replicates 40 --profile-points 7
+python scripts/run_heston_uncertainty.py --replicates 250 --profile-points 9
 \`\`\`
 
-The JSON report contains the exact synthetic quote panel, generating and fitted parameters, base calibration diagnostics, bootstrap samples and summaries, profile curves, propagated price/Delta distributions, and all uncertainty assumptions. The quote panel is synthetic by construction; it is an implementation and methodology demonstration, not live market calibration.
+The default analysis uses 250 bootstrap refits and nine profile-grid points; this is more informative than the CI smoke configuration. For tail-stable percentile intervals, increase the bootstrap count further (for example 500–1,000) and rerun with multiple quote-noise seeds. The JSON report contains the exact synthetic quote panel, generating and fitted parameters, base calibration diagnostics, bootstrap samples and summaries, profile curves, propagated price/Delta distributions, and all uncertainty assumptions. The quote panel is synthetic by construction; it is an implementation and methodology demonstration, not live market calibration.
 
 ## Primary references
 
