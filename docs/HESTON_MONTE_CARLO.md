@@ -550,3 +550,127 @@ python scripts/run_heston_delta_hedging.py --paths 2000 --steps 12 --cost-bps 2
 \`\`\`
 
 The runner evaluates multiple hedge grids and writes strategy P&L, turnover, transaction costs, VaR/ES and paired comparisons to reports/generated/heston_delta_hedging.json.
+
+
+## Randomized quasi-Monte Carlo: scrambled Sobol, Brownian bridge and control variates
+
+The Heston pricing stack now has a third numerical route: randomized quasi-Monte Carlo (RQMC). It uses a scrambled Sobol net, inverse-normal transformation, a Brownian-bridge construction for both independent Gaussian drivers, the same QE-M variance / stock transition, and a control variate whose coefficient is estimated on a separate randomized pilot net.
+
+This is designed to reduce integration error for smooth-enough low-effective-dimensional integrands. It is not guaranteed to outperform pseudo-random Monte Carlo for every payoff, parameter set or time grid. The benchmark compares three methods against the same Fourier reference:
+
+1. **RQMC + Brownian bridge + control variate**
+2. **RQMC in standard time ordering + control variate**
+3. **Antithetic pseudo-Monte Carlo + independent-pilot control variate**
+
+### Sobol construction
+
+For \(N=2^m\) points in dimension \(d=2M\), SciPy's scrambled Sobol generator produces points
+
+\[
+U_i\in[0,1)^{2M},\qquad i=1,\dots,2^m.
+\]
+
+Each coordinate is transformed to a standard normal using
+
+\[
+Z_{i,j}=\Phi^{-1}(\min(1-\varepsilon,\max(\varepsilon,U_{i,j}))).
+\]
+
+The two blocks of M coordinates represent independent Gaussian drivers for the variance and the orthogonal stock shock in the QE-M construction. The Heston stock/variance correlation is introduced by the QE-M coefficients; the drivers supplied to the transition remain independent standard normals.
+
+The implementation uses SciPy's scrambled Sobol generator and random_base2(m). It does not claim Owen nested scrambling: the SciPy implementation uses a linear matrix scramble with digital shift. Using powers of two preserves the net's balance properties; arbitrary sample sizes can degrade that structure. Endpoint clipping is required because the inverse normal is infinite at zero and one.
+
+### Brownian bridge
+
+A conventional chronological Brownian path assigns early low-discrepancy coordinates to the earliest time increments. For path-dependent payoffs, the terminal level and large-scale path movements often have higher influence than the first small increment. Brownian bridge reorders the construction so early coordinates describe coarse path features.
+
+For a uniform grid \(t_j=j\Delta t\), set
+
+\[
+W(0)=0,\qquad W(T)=\sqrt{T}Z_1.
+\]
+
+For an unfilled midpoint \(t_m\) between filled endpoints \(t_l,t_r\), conditional Gaussian interpolation gives
+
+\[
+E[W(t_m)\mid W(t_l),W(t_r)]
+=\frac{t_r-t_m}{t_r-t_l}W(t_l)
++\frac{t_m-t_l}{t_r-t_l}W(t_r),
+\]
+
+\[
+\operatorname{Var}[W(t_m)\mid W(t_l),W(t_r)]
+=\frac{(t_m-t_l)(t_r-t_m)}{t_r-t_l}.
+\]
+
+The implementation recursively fills midpoints and then transforms Brownian levels to standardized increments
+
+\[
+Z_j=\frac{W(t_j)-W(t_{j-1})}{\sqrt{\Delta t}}.
+\]
+
+The resulting increments have the same joint distribution as independent standard normals; the mapping changes coordinate ordering, not the Brownian law. The test suite checks sample means, variances and off-diagonal covariances, including non-power-of-two time grids. Brownian bridge is applied independently to both QE-M Gaussian drivers.
+
+### Randomized replication error estimate
+
+One scrambled Sobol net is deterministic after fixing its randomization. To estimate integration uncertainty, generate R independent scrambles and compute an adjusted price \(\hat V_r\) from each net. Estimate
+
+\[
+\bar V_R=\frac1R\sum_{r=1}^R\hat V_r,
+\qquad
+\widehat{SE}_{RQMC}
+=\frac{s_{\hat V}}{\sqrt R}.
+\]
+
+A Student-t interval across the independent scramble means is reported:
+
+\[
+\bar V_R\pm t_{R-1,1-\alpha/2}\widehat{SE}_{RQMC}.
+\]
+
+Do **not** calculate the RQMC standard error as the payoff standard deviation divided by the square root of all Sobol points. Low-discrepancy points are not iid observations. The independent randomized scramble means are the replication units.
+
+### Independent-pilot control variate
+
+For discounted payoff Y and discounted terminal stock
+
+\[
+X=e^{-rT}S_T,\qquad E^Q[X]=S_0e^{-qT},
+\]
+
+the adjusted payoff is
+
+\[
+Y^{CV}=Y-\hat\beta(X-S_0e^{-qT}).
+\]
+
+The coefficient is estimated from a separate scrambled Sobol pilot net, independent from the R valuation scrambles, and is held fixed across valuation scrambles. This avoids reusing the pricing net to estimate beta and then treating beta as known. The current interval conditions on the pilot beta; it does not propagate beta-estimation uncertainty.
+
+### Fair comparison protocol
+
+The benchmark holds fixed:
+
+- Heston parameters, payoff, maturity, strike and QE-M time grid.
+- Total number of valuation paths / points.
+- Number of independent pilot paths used to estimate the control coefficient.
+- Control-variate target and known expectation.
+
+It reports path-count budget both excluding and including pilot simulations. This is **not** equal wall-clock cost: Sobol generation, Brownian-bridge transforms, vectorized QE-M and pseudo-random path generation have different computational overhead. For performance claims, also benchmark wall-clock time with repeated runs on the same machine and environment.
+
+The Fourier price is the reference for the chosen parameter set and tolerance. Fourier quadrature error, pseudo-MC sampling error, RQMC scramble error and QE-M time-discretization bias are distinct. All RQMC intervals remain conditional on the QE-M time grid; they do not include model error, parameter uncertainty or weak time-discretization bias.
+
+### Reproducible experiment
+
+Run:
+
+\`\`\`bash
+python scripts/run_heston_qmc_benchmark.py --sobol-power 10 --scrambles 8 --steps 64
+\`\`\`
+
+The JSON report compares Brownian-bridge RQMC, standard-order RQMC and antithetic pseudo-MC against Fourier. It includes scramble means, standard errors, confidence intervals, control-variate coefficients, discounted-stock martingale diagnostics and equal valuation/pilot path-budget checks.
+
+### Numerical references
+
+- Caflisch, R. E., Morokoff, W. J. and Owen, A. B. (1997), “Valuation of Mortgage Backed Securities Using Brownian Bridges to Reduce Effective Dimension,” *Journal of Computational Finance*, 1(1), 27–46. https://doi.org/10.21314/JCF.1997.005
+- L'Ecuyer, P. (2009), “Quasi-Monte Carlo Methods with Applications in Finance,” *Finance and Stochastics*, 13, 307–349. https://doi.org/10.1007/s00780-008-0087-3
+- SciPy API reference: scipy.stats.qmc.Sobol, including scrambling and random_base2. https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.qmc.Sobol.html
