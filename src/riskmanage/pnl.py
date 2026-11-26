@@ -13,7 +13,13 @@ def enrich_market_data(frame: pd.DataFrame) -> pd.DataFrame:
     for source,target,fallback in [
         ("eurusd","eurusd_vol",.12),("usdjpy","usdjpy_vol",.10),("wti","wti_vol",.30)
     ]:
-        returns=np.log(data[source]).diff()
+        if source == "wti":
+            # WTI Cushing spot can be zero or negative. Use additive price changes
+            # scaled by a trailing median absolute price, not logarithmic returns.
+            scale = data[source].abs().rolling(window=60, min_periods=15).median().shift(1)
+            returns = data[source].diff().div(scale.where(scale > 1e-12))
+        else:
+            returns = np.log(data[source]).diff()
         data[target]=returns.ewm(span=40,min_periods=15).std().shift(1)*np.sqrt(TRADING_DAYS)
         data[target]=data[target].fillna(fallback).clip(.02,2.0)
     data["equity_vol"]=(data["vix"]/100.0).clip(.05,1.5)
@@ -48,7 +54,7 @@ def value_position(position: Position, state: dict[str,float], day_offset: int =
         return zero_coupon_bond(q,2.0,state["ust2y"])
     if position.instrument=="ZERO_BOND_10Y":
         return zero_coupon_bond(q,10.0,state["ust10y"])
-    if position.instrument=="WTI_FUTURE": return q*state["wti"]
+    if position.instrument=="WTI_SPOT_PROXY": return q*state["wti"]
     raise ValueError(f"unsupported instrument: {position.instrument}")
 
 def value_desk(positions: list[Position], desk: str, state: dict[str,float],
@@ -79,7 +85,7 @@ def _taylor_rtpl(positions,desk,previous_state,current_state,day_offset,model):
     # Theta is isolated as time passage at the old market state.
     if desk=="Commodities":
         # Exact analytical delta for a linear WTI future; avoids finite-difference cancellation.
-        quantity=sum(p.quantity for p in positions if p.desk==desk and p.instrument=="WTI_FUTURE")
+        quantity=sum(p.quantity for p in positions if p.desk==desk and p.instrument=="WTI_SPOT_PROXY")
         return float(quantity*(current_state["wti"]-previous_state["wti"]))
     old_value=value_desk(positions,desk,previous_state,day_offset)
     theta_value=value_desk(positions,desk,previous_state,day_offset+1)
