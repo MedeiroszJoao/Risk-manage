@@ -314,3 +314,81 @@ An interval objective deliberately assigns zero residual while every model quote
 Therefore the reproducible recovery runner defaults to weighted mid-price fitting so that its local Jacobian contains information about all five parameters. Bid–ask fitting remains available as a complementary quote-consistency objective. Its hit ratio must be read alongside Jacobian rank and singular values; a 100% hit ratio alone is not evidence of parameter identification.
 
 This distinction is consistent with the Heston calibration literature: the inverse problem can have flat valleys and parameter compensation, so objective choice, spread width, weighting and conditioning matter. See Cui, del Baño Rollin and Germano (2017), DOI https://doi.org/10.1016/j.ejor.2017.05.018.
+
+
+## Monte Carlo Greeks under Heston
+
+The Heston simulation now reports three sensitivities using distinct estimators. They must not be conflated:
+
+- **Delta, pathwise:** a direct payoff derivative.
+- **Delta and Gamma, CRN finite differences:** central bump-and-revalue using common random numbers.
+- **Vega, CRN finite difference:** sensitivity to the initial Heston volatility \(\sigma_0=\sqrt{v_0}\), not to a Black–Scholes implied-volatility surface quote.
+
+### Pathwise Delta
+
+For a European call,
+
+\[
+V(S_0)=e^{-rT}E^Q[(S_T-K)^+].
+\]
+
+In the Heston model the variance process does not depend on the initial spot. Conditional on the same variance/ Brownian path, the stock terminal value scales linearly with initial spot, so
+
+\[
+\frac{\partial S_T}{\partial S_0}=\frac{S_T}{S_0}.
+\]
+
+For a call, the pathwise estimator is therefore
+
+\[
+\widehat\Delta_{PW}
+=\frac{e^{-rT}}{N}\sum_{i=1}^N
+\mathbf 1_{\{S_T^{(i)}>K\}}\frac{S_T^{(i)}}{S_0}.
+\]
+
+For a put, replace the indicator with \(-\mathbf 1_{\{S_T<K\}}\). This derivative is valid for the European vanilla payoff because its kink is a probability-zero event under a continuous terminal distribution; the same argument does not automatically extend to every discontinuous/path-dependent payoff.
+
+### Common-random-number Delta and Gamma
+
+For bumped initial spots, the same generated path multipliers are reused:
+
+\[
+\widehat\Delta_{CRN}
+=\frac{\hat V(S_0+h;Z)-\hat V(S_0-h;Z)}{2h},
+\]
+\[
+\widehat\Gamma_{CRN}
+=\frac{\hat V(S_0+h;Z)-2\hat V(S_0;Z)+\hat V(S_0-h;Z)}{h^2}.
+\]
+
+The common path set induces positive covariance between nearby valuations in many settings and can reduce the variance of the difference. The benefit is measured by the resulting standard error; it is not assumed to occur automatically. Gamma uses finite differences because the payoff's second pathwise derivative is distributional at the strike and is not an ordinary pathwise estimator.
+
+### Initial-volatility Vega
+
+Let \(\sigma_0=\sqrt{v_0}\). The code perturbs the initial volatility while holding \(\kappa,\theta,\xi,\rho\) and market inputs fixed, and reuses identical Gaussian draws:
+
+\[
+\widehat{\mathcal V}_{\sigma_0,CRN}
+=\frac{\hat V((\sigma_0+\varepsilon)^2;Z)
+-\hat V((\sigma_0-\varepsilon)^2;Z)}{2\varepsilon}.
+\]
+
+This is \(\partial V/\partial\sigma_0\), a model-parameter sensitivity. It is **not** the usual implied-volatility Vega \(\partial V/\partial\sigma_{BS}\), nor a parallel shift of an SSVI surface. The parameter convention is explicitly included in every report.
+
+### Sampling uncertainty and limits
+
+Antithetic paths are pair-averaged before the standard error is computed. Each reported Greek includes its estimate, standard error and Student-t confidence interval over the independent pair averages. The interval is conditional on the QE-M discretization and the chosen finite-difference bump. It does not include time-discretization bias, finite-difference truncation bias, parameter uncertainty or model risk.
+
+The executable comparison uses Fourier prices as a deterministic finite-difference reference for the same model parameters. These are numerical reference Greeks, not closed-form derivative formulae. The benchmark reports discrepancies in units of the Monte Carlo standard error, but it does not convert a noisy agreement into a proof of unbiasedness or convergence.
+
+Run:
+
+\`\`\`bash
+python scripts/run_heston_greeks.py --paths 50000 --steps 96
+\`\`\`
+
+The JSON report includes pathwise Delta, CRN Delta, CRN Gamma, initial-volatility Vega, sampling errors, bumps and Fourier finite-difference reference values.
+
+### Primary reference
+
+Broadie, M. and Glasserman, P. (1996), “Estimating Security Price Derivatives Using Simulation,” *Management Science*, 42(2), 269–285. https://doi.org/10.1287/mnsc.42.2.269. Their pathwise and likelihood-ratio estimators provide the classical foundation for simulation Greeks, including stochastic-volatility settings. The current module implements the pathwise Delta and CRN finite-difference Gamma/Vega slice; likelihood-ratio and adjoint estimators remain future work.
