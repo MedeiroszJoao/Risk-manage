@@ -11,7 +11,8 @@ TRADING_DAYS=252
 def enrich_market_data(frame: pd.DataFrame) -> pd.DataFrame:
     data=frame.copy().sort_values("date").reset_index(drop=True)
     for source,target,fallback in [
-        ("eurusd","eurusd_vol",.12),("usdjpy","usdjpy_vol",.10),("wti","wti_vol",.30)
+        ("eurusd","eurusd_vol",.12),("usdjpy","usdjpy_vol",.10),
+        ("wti","wti_vol",.30),("brent","brent_vol",.30)
     ]:
         if source == "wti":
             # WTI Cushing spot can be zero or negative. Use additive price changes
@@ -27,8 +28,8 @@ def enrich_market_data(frame: pd.DataFrame) -> pd.DataFrame:
 
 def market_state(row: pd.Series) -> dict[str,float]:
     return {k:float(row[k]) for k in (
-        "sp500","vix","eurusd","usdjpy","wti","ust2y","ust10y",
-        "equity_vol","eurusd_vol","usdjpy_vol","wti_vol"
+        "sp500","vix","eurusd","usdjpy","wti","brent","ust2y","ust10y",
+        "equity_vol","eurusd_vol","usdjpy_vol","wti_vol","brent_vol"
     )}
 
 def _bond_yield(state: dict[str,float], maturity: float) -> float:
@@ -55,6 +56,7 @@ def value_position(position: Position, state: dict[str,float], day_offset: int =
     if position.instrument=="ZERO_BOND_10Y":
         return zero_coupon_bond(q,10.0,state["ust10y"])
     if position.instrument=="WTI_SPOT_PROXY": return q*state["wti"]
+    if position.instrument=="BRENT_SPOT_PROXY": return q*state["brent"]
     raise ValueError(f"unsupported instrument: {position.instrument}")
 
 def value_desk(positions: list[Position], desk: str, state: dict[str,float],
@@ -65,14 +67,14 @@ DESK_FACTORS={
     "Equity Options":("sp500","equity_vol"),
     "FX Options":("eurusd","eurusd_vol"),
     "Rates":("ust2y","ust10y"),
-    "Commodities":("wti",),
+    "Commodities":("wti","brent"),
 }
 MODEL_FACTORS={
     "delta_only":{
         "Equity Options":("sp500",),
         "FX Options":("eurusd",),
         "Rates":("ust2y","ust10y"),
-        "Commodities":("wti",),
+        "Commodities":("wti","brent"),
     },
     "full_greeks":DESK_FACTORS,
 }
@@ -84,9 +86,13 @@ def _bump_size(name: str, value: float) -> float:
 def _taylor_rtpl(positions,desk,previous_state,current_state,day_offset,model):
     # Theta is isolated as time passage at the old market state.
     if desk=="Commodities":
-        # Exact analytical delta for a linear WTI future; avoids finite-difference cancellation.
-        quantity=sum(p.quantity for p in positions if p.desk==desk and p.instrument=="WTI_SPOT_PROXY")
-        return float(quantity*(current_state["wti"]-previous_state["wti"]))
+        # Exact analytical deltas for both linear spot proxies; no finite-difference noise.
+        instruments = {"wti": "WTI_SPOT_PROXY", "brent": "BRENT_SPOT_PROXY"}
+        return float(sum(
+            sum(p.quantity for p in positions if p.desk == desk and p.instrument == instrument)
+            * (current_state[factor] - previous_state[factor])
+            for factor, instrument in instruments.items()
+        ))
     old_value=value_desk(positions,desk,previous_state,day_offset)
     theta_value=value_desk(positions,desk,previous_state,day_offset+1)
     result=theta_value-old_value
