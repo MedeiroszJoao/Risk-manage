@@ -150,3 +150,10 @@ A second simulation estimator uses scrambled Sobol nets of (2^m) points, inverse
 The benchmark compares Brownian-bridge RQMC, standard-order RQMC and antithetic pseudo-MC against the same Fourier price, with equal valuation and pilot path budgets. This is a path-count comparison, not a wall-clock benchmark. All standard errors are conditional on the QE time grid and exclude discretization bias, pilot-beta uncertainty, parameter uncertainty and model risk. The use of scrambled Sobol nets is an estimator option, not an assumption of superiority over pseudo-MC.
 
 See HESTON_MONTE_CARLO.md for the bridge construction, randomized error estimator, fair comparison protocol and references.
+
+
+## Heston calibration uncertainty
+
+Heston calibration results are now accompanied by three uncertainty analyses: a parametric quote bootstrap using Gaussian quote noise with standard deviation derived from bid–ask width; one-dimensional profile likelihood that re-optimizes all nuisance parameters at each fixed parameter value; and propagation of bootstrap parameter vectors into European price and spot-Delta distributions. Covariance/correlation matrices are reported in natural and transformed coordinates. Profile intervals use an asymptotic chi-square(1) likelihood-ratio cutoff and are grid approximations.
+
+This is conditional parameter uncertainty under an assumed quote-noise model and fixed Heston specification. It does not measure model risk, quote dependence, live market quality, curve uncertainty or physical-measure uncertainty. See [HESTON_UNCERTAINTY.md](HESTON_UNCERTAINTY.md) for the assumptions, equations and limitations.
