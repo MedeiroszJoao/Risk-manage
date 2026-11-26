@@ -165,8 +165,10 @@ def build_commodity_spot_pnl(
             "wti_observations_available": available_wti,
             "brent_observations_available": available_brent,
             "common_observation_dates": int(len(aligned)),
-            "observations_without_common_pair": int(
-                max(available_wti, available_brent) - len(aligned)
+            "wti_observations_without_brent": int(available_wti - len(aligned)),
+            "brent_observations_without_wti": int(available_brent - len(aligned)),
+            "unmatched_source_observations": int(
+                available_wti + available_brent - 2 * len(aligned)
             ),
             "first_common_date": aligned.index.min().date().isoformat(),
             "last_common_date": aligned.index.max().date().isoformat(),
