@@ -34,7 +34,7 @@ These are spot-price benchmarks, not exchange-traded futures settlements, execut
 
 The archive hash identifies the retrieved snapshot. It does not recreate historical EIA publication vintages or the information set available at every historical date. Strict point-in-time backtests need publication/vintage information separately.
 
-See EIA_DATA_INGESTION.md for the source format and collector details. Run python scripts/download_market_data.py --start 2007-01-01 to build the unified market panel and combined source manifest. Mocked unit tests do not replace the first live local download and manifest review.
+See EIA_DATA_INGESTION.md for the source format and collector details. Run python scripts/download_market_data.py --start 2007-01-01 to build the unified market panel and combined source manifest. Mocked unit tests do not replace the first live local download and manifest review. The separate python scripts/run_commodity_spot_case.py runner consumes the standalone EIA normalized CSV using common actual WTI/Brent dates only, so the commodity desk can retain its longer source history without pretending the full multi-desk panel has the same coverage.
 
 ## Reference run
 
