@@ -205,7 +205,6 @@ def heston_randomized_qmc_price(
 
     n_points = 2**sobol_power
     control_mean = params.spot * math.exp(-params.dividend_yield * maturity)
-    discount = math.exp(-params.risk_free_rate * maturity)
     beta = 0.0
     pilot_size = 0
     if control_variate:
