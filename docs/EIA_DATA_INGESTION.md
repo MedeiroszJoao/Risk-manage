@@ -70,7 +70,7 @@ The normalized output has one row per actual observation:
 
 The manifest records the source URL, final URL, HTTP status and selected response headers, UTC retrieval timestamp, snapshot ID, archive byte count and SHA-256, ZIP member name and uncompressed size, parsed line count, selected series metadata, source coverage, requested date bounds, null counts, normalized row count and normalized CSV SHA-256.
 
-No weekend/holiday observations are synthesized. Null source values are omitted and counted. There is no forward fill or interpolation. Prices are required to be finite, but **zero and negative prices are not rejected**: negative crude-oil spot prices are economically possible, and the WTI Cushing series recorded a negative observation on April 20, 2020. This is a deliberate data-integrity rule, not an exception or data-cleaning workaround.
+No weekend/holiday observations are synthesized. EIA's documented special values are handled explicitly: `null` (missing), `w` (withheld) and `*` (statistically insignificant) are omitted from the numeric panel and counted separately in the manifest. Unknown nonnumeric codes fail closed rather than being silently coerced. There is no forward fill or interpolation. Prices are required to be finite, but **zero and negative prices are not rejected**: negative crude-oil spot prices are economically possible, and the WTI Cushing series recorded a negative observation on April 20, 2020. This is a deliberate data-integrity rule, not an exception or data-cleaning workaround.
 
 ## Reproducibility and validation
 
