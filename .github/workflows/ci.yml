@@ -57,3 +57,12 @@ jobs:
         with:
           name: heston-greeks-python-${{ matrix.python-version }}
           path: /tmp/heston_greeks.json
+      - name: Run Heston delta-hedging and tail-risk experiment
+        run: |
+          python scripts/run_heston_delta_hedging.py --paths 500 --steps 6 --cost-bps 2 --output /tmp/heston_delta_hedging.json
+          python -m json.tool /tmp/heston_delta_hedging.json > /dev/null
+      - name: Upload Heston delta-hedging report
+        uses: actions/upload-artifact@v4
+        with:
+          name: heston-delta-hedging-python-${{ matrix.python-version }}
+          path: /tmp/heston_delta_hedging.json
