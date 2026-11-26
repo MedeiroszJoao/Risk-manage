@@ -178,6 +178,8 @@ def fit_pot_gpd_tail_risk(
     thresholds = tuple(float(value) for value in threshold_quantiles)
     if not alphas or any(not 0.5 < value < 1.0 for value in alphas):
         raise ValueError("confidence_levels must lie in (0.5, 1)")
+    if len(set(alphas)) != len(alphas):
+        raise ValueError("confidence_levels must be unique")
     if not thresholds or any(not 0.5 < value < 1.0 for value in thresholds):
         raise ValueError("threshold_quantiles must lie in (0.5, 1)")
     if any(alpha <= max(thresholds) for alpha in alphas):
