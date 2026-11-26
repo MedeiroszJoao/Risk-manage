@@ -5,6 +5,7 @@ on:
     paths:
       - "src/riskmanage/eia.py"
       - "src/riskmanage/commodity.py"
+      - "src/riskmanage/risk.py"
       - "scripts/download_eia_petroleum_spot.py"
       - "scripts/run_commodity_spot_case.py"
       - ".github/workflows/eia-live-ingestion.yml"
