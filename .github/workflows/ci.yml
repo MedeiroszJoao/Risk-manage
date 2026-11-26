@@ -84,3 +84,12 @@ jobs:
         with:
           name: heston-parameter-uncertainty-python-${{ matrix.python-version }}
           path: /tmp/heston_parameter_uncertainty.json
+      - name: Run Heston hedge parameter-uncertainty experiment
+        run: |
+          python scripts/run_heston_hedge_uncertainty.py --bootstrap-replicates 3 --paths 150 --steps 3 --confidence 0.90 --output /tmp/heston_hedge_parameter_uncertainty.json
+          python -m json.tool /tmp/heston_hedge_parameter_uncertainty.json > /dev/null
+      - name: Upload Heston hedge parameter-uncertainty report
+        uses: actions/upload-artifact@v4
+        with:
+          name: heston-hedge-uncertainty-python-${{ matrix.python-version }}
+          path: /tmp/heston_hedge_parameter_uncertainty.json
