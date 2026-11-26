@@ -362,4 +362,5 @@ def propagate_heston_uncertainty_to_hedging(
             "uncertainty and model risk. Within-draw VaR/ES use a finite synthetic path sample; "
             "tail precision depends on n_paths*(1-confidence_level). This is not a regulatory "
             "capital measure or predictive confidence interval."
+        ),
     }
