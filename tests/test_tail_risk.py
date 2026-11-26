@@ -34,7 +34,9 @@ def test_pot_gpd_recovers_finite_mean_tail_and_reports_bootstrap_intervals():
             estimate = fit["confidence_levels"][alpha]
             assert estimate["status"] == "estimated"
             assert estimate["expected_shortfall"] > estimate["var"]
-            interval = fit["bootstrap"]["conditional_percentile_intervals"][alpha]["var"]
+            interval = fit["conditional_exceedance_bootstrap"][
+                "conditional_percentile_intervals"
+            ][alpha]["var"]
             assert interval["percentile_95_interval"][0] <= interval["percentile_95_interval"][1]
 
 
@@ -49,6 +51,7 @@ def test_pot_gpd_flags_infinite_expected_shortfall_for_shape_above_one():
         threshold_quantiles=(0.90,),
         min_exceedances=50,
         n_bootstrap=0,
+        n_full_sample_bootstrap=0,
     )
     fit = result["threshold_fits"][0]
     assert fit["status"] == "fitted"
@@ -66,6 +69,7 @@ def test_pot_gpd_does_not_fit_below_minimum_exceedance_count():
         threshold_quantiles=(0.98,),
         min_exceedances=50,
         n_bootstrap=0,
+        n_full_sample_bootstrap=0,
     )
     fit = result["threshold_fits"][0]
     assert fit["status"] == "not_fitted"
@@ -98,7 +102,12 @@ def test_pot_gpd_bootstrap_is_reproducible_for_fixed_seed():
     first_fit = first["threshold_fits"][0]
     second_fit = second["threshold_fits"][0]
     assert first_fit["fit"] == second_fit["fit"]
-    assert first_fit["bootstrap"] == second_fit["bootstrap"]
+    assert first_fit["conditional_exceedance_bootstrap"] == second_fit[
+        "conditional_exceedance_bootstrap"
+    ]
+    assert first_fit["full_sample_iid_bootstrap"] == second_fit[
+        "full_sample_iid_bootstrap"
+    ]
 
 
 def test_pot_gpd_reports_empirical_tail_and_no_extrapolation_p_value():
