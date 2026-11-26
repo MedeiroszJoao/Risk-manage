@@ -89,7 +89,7 @@ C_0=S_0e^{-qT}
 
 The distinction between log-price and log-return characteristic functions matters: using $\varphi_T$ without removing $\log S_0$ shifts the Fourier integrand and gives an incorrect price. The code performs this conversion explicitly.
 
-The integral is evaluated by adaptive improper quadrature. The returned quadrature error estimate is a numerical integration diagnostic; it is not a confidence interval for fair value, a calibration error, or model risk. Put prices are obtained by put-call parity. Results are checked against discounted no-arbitrage bounds.
+The integral is evaluated by adaptive improper quadrature. The returned absolute quadrature error estimate is scaled by the Lewis price prefactor and reported in option-price units. It is a numerical integration diagnostic; it is not a confidence interval for fair value, a calibration error, or model risk. Put prices are obtained by put-call parity. Results are checked against discounted no-arbitrage bounds.
 
 ## QE variance transition
 
