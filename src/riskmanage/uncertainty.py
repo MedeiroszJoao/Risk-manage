@@ -5,7 +5,7 @@ import math
 from typing import Sequence
 
 import numpy as np
-from scipy.optimize import least_squares
+from scipy.optimize import brentq, least_squares
 from scipy.stats import chi2
 
 from .calibration import (
@@ -446,6 +446,96 @@ def profile_heston_parameter(
             or max(accepted) == float(np.max(grid))
         )
     )
+
+    # Refine each accepted profile segment by solving delta-chi-square = cutoff.
+    # Nuisance parameters are re-optimized at every root evaluation.
+    profile_cache: dict[float, float] = {}
+
+    def profile_chi_square(value: float, start_free: np.ndarray) -> float:
+        key = float(value)
+        if key in profile_cache:
+            return profile_cache[key]
+        fixed_value = transform_physical(key)
+        result = least_squares(
+            lambda free_values: residuals(free_values, fixed_value),
+            start_free.copy(),
+            bounds=(_LOWER[free_indices], _UPPER[free_indices]),
+            method="trf",
+            jac="3-point",
+            x_scale="jac",
+            loss="linear",
+            max_nfev=max_nfev,
+        )
+        if not result.success:
+            raise RuntimeError(
+                f"profile nuisance optimization failed at {parameter_name}={key}: "
+                f"{result.message}"
+            )
+        statistic = float(np.dot(result.fun, result.fun))
+        profile_cache[key] = statistic
+        return statistic
+
+    refined_segments = []
+    for segment_start, segment_end in accepted_segments:
+        start_index = int(np.flatnonzero(grid == segment_start)[0])
+        end_index = int(np.flatnonzero(grid == segment_end)[0])
+        start_parameters = replace(
+            market, **points[start_index]["profiled_parameters"]
+        )
+        end_parameters = replace(
+            market, **points[end_index]["profiled_parameters"]
+        )
+        start_free = _encode_parameters(start_parameters)[free_indices]
+        end_free = _encode_parameters(end_parameters)[free_indices]
+
+        if start_index > 0:
+            lower_root = brentq(
+                lambda value: profile_chi_square(value, start_free)
+                - minimum
+                - cutoff,
+                float(grid[start_index - 1]),
+                float(grid[start_index]),
+                xtol=1e-7,
+                rtol=1e-8,
+                maxiter=60,
+            )
+            lower_value = float(lower_root)
+            lower_is_truncated = False
+        else:
+            lower_value = float(grid[0])
+            lower_is_truncated = True
+
+        if end_index < grid.size - 1:
+            upper_root = brentq(
+                lambda value: profile_chi_square(value, end_free)
+                - minimum
+                - cutoff,
+                float(grid[end_index]),
+                float(grid[end_index + 1]),
+                xtol=1e-7,
+                rtol=1e-8,
+                maxiter=60,
+            )
+            upper_value = float(upper_root)
+            upper_is_truncated = False
+        else:
+            upper_value = float(grid[-1])
+            upper_is_truncated = True
+
+        refined_segments.append(
+            {
+                "lower": lower_value,
+                "upper": upper_value,
+                "lower_truncated": lower_is_truncated,
+                "upper_truncated": upper_is_truncated,
+            }
+        )
+
+    refined_interval = (
+        [refined_segments[0]["lower"], refined_segments[0]["upper"]]
+        if len(refined_segments) == 1
+        else None
+    )
     return {
         "parameter": parameter_name,
         "parameter_grid": [float(value) for value in grid],
@@ -454,8 +544,11 @@ def profile_heston_parameter(
         "likelihood_ratio_cutoff_delta_chi_square": cutoff,
         "minimum_profile_chi_square": float(minimum),
         "profile_interval_on_grid": interval,
+        "profile_interval_refined": refined_interval,
+        "refined_profile_segments": refined_segments,
         "accepted_grid_values": [float(value) for value in accepted],
         "accepted_grid_segments": accepted_segments,
+        "profile_root_evaluations": int(len(profile_cache)),
         "grid_truncated_at_boundary": grid_truncated,
         "points": points,
         "noise_model": (
