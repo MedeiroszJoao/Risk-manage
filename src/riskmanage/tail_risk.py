@@ -209,6 +209,106 @@ def _threshold_stability(fits: Sequence[dict], confidence_levels: Sequence[float
     return result
 
 
+def _bootstrap_full_loss_sample(
+    losses: np.ndarray,
+    threshold_quantile: float,
+    confidence_levels: Sequence[float],
+    min_exceedances: int,
+    n_bootstrap: int,
+    rng: np.random.Generator,
+) -> dict:
+    """IID bootstrap that reselects the numerical threshold in every replicate."""
+    threshold_draws = []
+    exceedance_counts = []
+    shape_draws = []
+    scale_draws = []
+    var_draws = {str(alpha): [] for alpha in confidence_levels}
+    es_draws = {str(alpha): [] for alpha in confidence_levels}
+    failures = 0
+    sample_size = losses.size
+
+    for _ in range(n_bootstrap):
+        sample = rng.choice(losses, size=sample_size, replace=True)
+        threshold = float(
+            np.quantile(sample, threshold_quantile, method="inverted_cdf")
+        )
+        excesses = sample[sample > threshold] - threshold
+        count = int(excesses.size)
+        if count < min_exceedances:
+            failures += 1
+            continue
+        try:
+            shape, _, scale = genpareto.fit(excesses, floc=0.0)
+        except (ValueError, FloatingPointError, RuntimeError):
+            failures += 1
+            continue
+        if not np.isfinite(shape) or not np.isfinite(scale) or scale <= 0.0:
+            failures += 1
+            continue
+
+        tail_probability = count / sample_size
+        estimates = _gpd_tail_quantiles(
+            threshold,
+            tail_probability,
+            float(shape),
+            float(scale),
+            confidence_levels,
+        )
+        threshold_draws.append(threshold)
+        exceedance_counts.append(count)
+        shape_draws.append(float(shape))
+        scale_draws.append(float(scale))
+        for alpha in confidence_levels:
+            estimate = estimates[str(alpha)]
+            if estimate["var"] is not None and np.isfinite(estimate["var"]):
+                var_draws[str(alpha)].append(float(estimate["var"]))
+            if (
+                estimate["expected_shortfall"] is not None
+                and np.isfinite(estimate["expected_shortfall"])
+            ):
+                es_draws[str(alpha)].append(
+                    float(estimate["expected_shortfall"])
+                )
+
+    def interval(values: Sequence[float]) -> dict | None:
+        array = np.asarray(values, dtype=float)
+        if array.size < 2:
+            return None
+        return {
+            "successful_replicates": int(array.size),
+            "percentile_95_interval": [
+                float(np.quantile(array, 0.025)),
+                float(np.quantile(array, 0.975)),
+            ],
+            "median": float(np.median(array)),
+        }
+
+    return {
+        "requested_replicates": int(n_bootstrap),
+        "successful_replicates": int(len(threshold_draws)),
+        "failed_replicates": int(failures),
+        "threshold_reselected_each_replicate": True,
+        "threshold_value_interval": interval(threshold_draws),
+        "exceedance_count_interval": interval(exceedance_counts),
+        "shape_interval": interval(shape_draws),
+        "scale_interval": interval(scale_draws),
+        "confidence_level_intervals": {
+            str(alpha): {
+                "var": interval(var_draws[str(alpha)]),
+                "expected_shortfall": interval(es_draws[str(alpha)]),
+            }
+            for alpha in confidence_levels
+        },
+        "uncertainty_boundary": (
+            "IID non-parametric bootstrap of the full loss sample; the empirical threshold "
+            "quantile and exceedance count are recomputed in each replicate. This captures "
+            "sampling variability of the threshold value for the selected quantile, but not "
+            "uncertainty over which threshold quantile should be chosen. It assumes independent "
+            "loss observations and does not adjust for serial dependence or clustering."
+        ),
+    }
+
+
 def fit_pot_gpd_tail_risk(
     losses,
     confidence_levels: Sequence[float] = (0.975, 0.99),
@@ -216,6 +316,7 @@ def fit_pot_gpd_tail_risk(
     *,
     min_exceedances: int = 20,
     n_bootstrap: int = 100,
+    n_full_sample_bootstrap: int = 100,
     seed: int = 20261126,
 ) -> dict:
     """Fit Peaks-over-Threshold GPD tails and report VaR/ES threshold sensitivity.
@@ -249,8 +350,8 @@ def fit_pot_gpd_tail_risk(
         raise ValueError("threshold_quantiles must be unique")
     if min_exceedances < 5:
         raise ValueError("min_exceedances must be at least 5")
-    if n_bootstrap < 0:
-        raise ValueError("n_bootstrap must be non-negative")
+    if n_bootstrap < 0 or n_full_sample_bootstrap < 0:
+        raise ValueError("bootstrap replicate counts must be non-negative")
     if seed < 0:
         raise ValueError("seed must be non-negative")
 
@@ -333,12 +434,21 @@ def fit_pot_gpd_tail_risk(
             threshold, tail_probability, shape, scale, alphas
         )
         if n_bootstrap:
-            row["bootstrap"] = _bootstrap_gpd_tail(
+            row["conditional_exceedance_bootstrap"] = _bootstrap_gpd_tail(
                 exceedances,
                 threshold,
                 tail_probability,
                 alphas,
                 n_bootstrap,
+                rng,
+            )
+        if n_full_sample_bootstrap:
+            row["full_sample_iid_bootstrap"] = _bootstrap_full_loss_sample(
+                values,
+                quantile,
+                alphas,
+                min_exceedances,
+                n_full_sample_bootstrap,
                 rng,
             )
         row["status"] = "fitted"
