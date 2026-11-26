@@ -80,16 +80,16 @@ def main() -> None:
     )
     path_samples = hedge.pop("path_samples")
     evt_results = {}
-    for strategy, samples in path_samples.items():
+    for strategy_index, (strategy, samples) in enumerate(path_samples.items()):
         evt_results[strategy] = {}
-        for measure in ("net_losses", "gross_losses"):
+        for measure_index, measure in enumerate(("net_losses", "gross_losses")):
             evt_results[strategy][measure] = fit_pot_gpd_tail_risk(
                 samples[measure],
                 confidence_levels=args.confidence_levels,
                 threshold_quantiles=args.thresholds,
                 min_exceedances=args.min_exceedances,
                 n_bootstrap=args.bootstrap,
-                seed=args.seed + len(evt_results[strategy]) + len(measure),
+                seed=args.seed + 10_000 * strategy_index + 100 * measure_index,
             )
 
     report = {
