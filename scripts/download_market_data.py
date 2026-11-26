@@ -36,11 +36,10 @@ def main() -> None:
 
     # FRED supplies equity, volatility, FX and rates. Both crude-oil spot
     # benchmarks are deliberately taken from the same EIA bulk snapshot.
-    fred_ids = {name: series_id for name, series_id in FRED_SERIES.items() if name != "wti"}
     fred_frame, fred_manifest = download_fred_series(
         start=args.start,
         end=args.end,
-        series_ids=fred_ids,
+        series_ids=FRED_SERIES,
         timeout=args.fred_timeout,
     )
 
