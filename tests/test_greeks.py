@@ -54,6 +54,14 @@ def test_gamma_vega_and_price_are_reported_with_sampling_errors():
         result["vega_initial_volatility_common_random_numbers"]["standard_error"]
         > 0.0
     )
+    assert (
+        result["vanna_spot_initial_volatility_common_random_numbers"]["standard_error"]
+        >= 0.0
+    )
+    assert (
+        result["volga_initial_volatility_common_random_numbers"]["standard_error"]
+        >= 0.0
+    )
     assert result["simulation"]["common_random_numbers"] is True
     assert "not implied-volatility vega" in result["greek_conventions"]["vega"]
     assert "truncation bias" in result["uncertainty_boundary"]
