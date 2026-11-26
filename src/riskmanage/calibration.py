@@ -90,7 +90,7 @@ def calibrate_heston(
     market: HestonParameters,
     initial: HestonParameters,
     *,
-    objective: str = "bid_ask",
+    objective: str = "mid",
     loss: str = "soft_l1",
     n_starts: int = 5,
     max_nfev: int = 120,
