@@ -183,6 +183,8 @@ def test_fred_ingestion_keeps_immutable_raw_snapshots_and_true_valid_coverage(tm
     sp500 = next(item for item in first_manifest["series"] if item["series_id"] == "SP500")
     assert sp500["first_date"] == "2024-01-02"
     assert sp500["last_date"] == "2024-01-03"
+    assert "10 years of daily history" in sp500["data_rights_note"]
+    assert any("SP500 first valid observation" in warning for warning in first_manifest["coverage_warnings"])
     raw_path = Path(sp500["raw_path"])
     assert raw_path.exists()
     assert sha256(raw_path.read_bytes()).hexdigest() == sp500["raw_sha256"]
