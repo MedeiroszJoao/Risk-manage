@@ -130,7 +130,7 @@ The synthetic hedging scenario uses hypothetical physical drift/variance paramet
 ## Reproducibility
 
 \`\`\`bash
-python scripts/run_heston_hedge_evt.py --paths 10000 --steps 12 --cost-bps 2 --confidence-levels 0.975 0.99 --thresholds 0.90 0.925 0.95 --min-exceedances 50 --bootstrap 200
+python scripts/run_heston_hedge_evt.py --paths 10000 --steps 12 --cost-bps 2 --confidence-levels 0.975 0.99 --thresholds 0.90 0.925 0.95 --min-exceedances 50 --bootstrap 200 --full-sample-bootstrap 200
 \`\`\`
 
 The output JSON includes the hedge experiment, raw pathwise loss samples summarized by empirical VaR/ES, and POT-GPD fits/bootstraps across thresholds for gross/net Heston and frozen-BS losses.
