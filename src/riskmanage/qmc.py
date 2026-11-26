@@ -283,10 +283,10 @@ def heston_randomized_qmc_price(
         "brownian_bridge": bool(brownian_bridge),
         "control_variate": bool(control_variate),
         "control_beta_from_independent_pilot": float(beta),
-        "variance_reduction_factor_across_scrambles": float(
-            (raw_standard_error / standard_error) ** 2
+        "variance_reduction_factor_across_scrambles": (
+            float((raw_standard_error / standard_error) ** 2)
             if standard_error > 0.0
-            else math.inf
+            else None
         ),
         "discounted_terminal_stock_mean": discounted_stock_mean,
         "discounted_terminal_stock_target": float(control_mean),
