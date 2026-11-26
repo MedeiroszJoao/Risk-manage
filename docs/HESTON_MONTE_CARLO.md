@@ -304,3 +304,13 @@ The runner generates a deterministic synthetic panel with 15 calls/puts spanning
 - The residual Jacobian uses finite differences; analytic gradients and independent optimizer/library benchmarks remain open.
 - Parameter uncertainty is not estimated. Local SVD is only a warning signal about identifiability.
 - No dynamic parameter evolution, variance risk premium estimation or physical-measure transition is calibrated.
+
+
+
+## A caution from calibration geometry: bid–ask fit is not parameter identification
+
+An interval objective deliberately assigns zero residual while every model quote lies within its market spread. This is useful when the market does not support a meaningful ranking of prices inside a spread, but it creates a flat region in parameter space. If the entire synthetic panel is inside its spreads, the local interval-loss Jacobian can have rank zero even though the price fit is perfect.
+
+Therefore the reproducible recovery runner defaults to weighted mid-price fitting so that its local Jacobian contains information about all five parameters. Bid–ask fitting remains available as a complementary quote-consistency objective. Its hit ratio must be read alongside Jacobian rank and singular values; a 100% hit ratio alone is not evidence of parameter identification.
+
+This distinction is consistent with the Heston calibration literature: the inverse problem can have flat valleys and parameter compensation, so objective choice, spread width, weighting and conditioning matter. See Cui, del Baño Rollin and Germano (2017), DOI https://doi.org/10.1016/j.ejor.2017.05.018.
