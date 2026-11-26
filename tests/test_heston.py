@@ -1,7 +1,6 @@
 
 import math
 
-import numpy as np
 import pytest
 from scipy.special import ndtr
 
@@ -11,7 +10,6 @@ from riskmanage.heston import (
     heston_monte_carlo_price,
     heston_price_fourier,
 )
-
 
 def baseline(**overrides):
     values = dict(
