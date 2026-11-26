@@ -30,3 +30,12 @@ jobs:
         run: ruff check src tests scripts
       - name: Run deterministic case
         run: python scripts/run_case.py --synthetic
+      - name: Run Heston Fourier / QE-M benchmark
+        run: |
+          python scripts/run_heston_benchmark.py --paths 4000 --steps 32 --pilot-paths 512 --output /tmp/heston_benchmark.json
+          python -m json.tool /tmp/heston_benchmark.json > /dev/null
+      - name: Upload Heston benchmark report
+        uses: actions/upload-artifact@v4
+        with:
+          name: heston-benchmark-python-${{ matrix.python-version }}
+          path: /tmp/heston_benchmark.json
