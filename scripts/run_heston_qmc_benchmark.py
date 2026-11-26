@@ -52,7 +52,11 @@ def main() -> None:
         control_variate=True,
         brownian_bridge=True,
     )
-    total_paths = 2**args.sobol_power * args.scrambles
+    points_per_scramble = 2**args.sobol_power
+    total_paths = points_per_scramble * args.scrambles
+    # Match both the valuation paths and the independent control-variate pilot
+    # path budget; this is a path-count comparison, not equal wall-clock cost.
+    pilot_paths = points_per_scramble
     pseudo_mc = heston_monte_carlo_price(
         strike,
         maturity,
@@ -60,7 +64,7 @@ def main() -> None:
         n_paths=total_paths,
         n_steps=args.steps,
         seed=args.seed,
-        pilot_paths=max(512, min(4096, total_paths // 2)),
+        pilot_paths=pilot_paths,
     )
     fourier = heston_price_fourier(strike, maturity, params, "call")
     reference = fourier["price"]
@@ -113,8 +117,18 @@ def main() -> None:
                 if pseudo_mc["standard_error"] > 0.0
                 else None
             ),
-            "equal_path_budget": (
+            "equal_valuation_path_budget": (
                 qmc_result["total_valuation_points"] == pseudo_mc["n_paths"]
+            ),
+            "qmc_total_path_equivalents_including_pilot": (
+                qmc_result["total_valuation_points"] + qmc_result["pilot_points"]
+            ),
+            "pseudo_mc_total_path_equivalents_including_pilot": (
+                pseudo_mc["n_paths"] + pilot_paths
+            ),
+            "equal_total_path_equivalent_budget": (
+                qmc_result["total_valuation_points"] + qmc_result["pilot_points"]
+                == pseudo_mc["n_paths"] + pilot_paths
             ),
         },
         "interpretation_boundary": (
