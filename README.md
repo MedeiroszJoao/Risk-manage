@@ -126,3 +126,8 @@ Heston pricing also has an RQMC route using scrambled Sobol nets, inverse-normal
 ## Heston calibration uncertainty and risk propagation
 
 A calibrated point estimate is not a known truth. The uncertainty module adds a parametric quote bootstrap, one-dimensional profile likelihood with four nuisance parameters re-optimized at each grid point, and propagation of parameter draws into option prices and Deltas. It reports parameter covariance/correlation, percentile distributions, profile-likelihood curves, and price/Greek uncertainty bands. The quote-noise model is explicit: independent Gaussian quote errors with variance derived from bid–ask width. Run `python scripts/run_heston_uncertainty.py --replicates 40 --profile-points 7`. The synthetic quote panel is not live-market evidence, and these intervals do not measure model risk.
+
+
+## Calibration uncertainty propagated into hedging tail risk
+
+The uncertainty engine now carries each risk-neutral Heston bootstrap draw into a discrete hedge experiment. It simulates one physical/scenario path set and reuses those exact paths for every parameter draw, recalculating option premium, state-dependent Heston Delta and a frozen-volatility Black–Scholes hedge. The output is a distribution of gross/net hedge VaR and ES, turnover and costs across calibration samples. Run `python scripts/run_heston_hedge_uncertainty.py --bootstrap-replicates 30 --paths 1000 --steps 8 --confidence 0.95`. This is conditional on the one physical scenario sample, the synthetic quote-noise model and the Heston model; it is not regulatory capital or model-risk coverage.
