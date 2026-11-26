@@ -213,11 +213,11 @@ def main() -> None:
     )
     print(
         "Correlation profile interval:",
-        profiles["correlation"]["profile_interval_on_grid"],
+        profiles["correlation"]["profile_interval_refined"],
     )
     print(
         "Vol-of-vol profile interval:",
-        profiles["vol_of_variance"]["profile_interval_on_grid"],
+        profiles["vol_of_variance"]["profile_interval_refined"],
     )
     print(f"Wrote parameter uncertainty report to {args.output}")
 
