@@ -11,12 +11,15 @@ FRED_SERIES = {
     "sp500": "SP500", "vix": "VIXCLS", "eurusd": "DEXUSEU",
     "usdjpy": "DEXJPUS", "wti": "DCOILWTICO", "ust2y": "DGS2", "ust10y": "DGS10",
 }
-REQUIRED_COLUMNS = ("date", *FRED_SERIES.keys())
-STRICTLY_POSITIVE_COLUMNS = ("sp500", "eurusd", "usdjpy")
+REQUIRED_COLUMNS = ("date", *FRED_SERIES.keys(), "brent")
+STRICTLY_POSITIVE_COLUMNS = ("sp500", "eurusd", "usdjpy", "brent")
 
 
-def validate_market_data(frame: pd.DataFrame) -> None:
-    missing = set(REQUIRED_COLUMNS) - set(frame.columns)
+def validate_market_data(frame: pd.DataFrame, *, require_oil: bool = True) -> None:
+    """Validate the full panel, or the FRED-only intermediate before EIA oil is merged."""
+    fred_intermediate = tuple(name for name in FRED_SERIES if name != "wti")
+    required = REQUIRED_COLUMNS if require_oil else ("date", *fred_intermediate)
+    missing = set(required) - set(frame.columns)
     if missing:
         raise ValueError(f"missing required market columns: {sorted(missing)}")
     if frame.empty:
@@ -28,13 +31,17 @@ def validate_market_data(frame: pd.DataFrame) -> None:
         raise ValueError("duplicate market dates are not allowed")
     if not dates.is_monotonic_increasing:
         raise ValueError("market dates must be strictly increasing")
-    numeric = frame[list(FRED_SERIES)].apply(pd.to_numeric, errors="coerce")
+    numeric_columns = [name for name in required if name != "date"]
+    numeric = frame[numeric_columns].apply(pd.to_numeric, errors="coerce")
     if numeric.isna().any().any():
         raise ValueError("market data contains missing or non-numeric values")
     if not np.isfinite(numeric.to_numpy(dtype=float)).all():
         raise ValueError("market data contains non-finite values")
-    if (numeric[list(STRICTLY_POSITIVE_COLUMNS)] <= 0).any().any():
-        raise ValueError("equity index levels and FX rates must be positive; WTI spot may be zero or negative")
+    strictly_positive = [name for name in STRICTLY_POSITIVE_COLUMNS if name in numeric.columns]
+    if (numeric[strictly_positive] <= 0).any().any():
+        raise ValueError(
+            "equity index levels, FX rates and Brent spot must be positive; WTI spot may be zero or negative"
+        )
     if (numeric["vix"] <= 0).any():
         raise ValueError("VIX observations must be positive")
     if ((numeric["ust2y"] < -5) | (numeric["ust2y"] > 30)).any() or (
@@ -104,7 +111,7 @@ def download_fred_series(start: str = "2007-01-01", end: str | None = None,
     merged = merged.sort_values("date").set_index("date")
     business = pd.bdate_range(merged.index.min(), merged.index.max())
     merged = merged.reindex(business).ffill(limit=4).dropna().reset_index(names="date")
-    validate_market_data(merged)
+    validate_market_data(merged, require_oil=False)
     provenance = {
         "source": "Federal Reserve Bank of St. Louis FRED public graph CSV",
         "retrieved_utc": datetime.now(timezone.utc).isoformat(),
@@ -117,6 +124,66 @@ def download_fred_series(start: str = "2007-01-01", end: str | None = None,
         "aligned_sha256": sha256(merged.to_csv(index=False).encode()).hexdigest(),
     }
     return merged, provenance
+
+
+
+def merge_eia_petroleum_into_market_data(
+    fred_frame: pd.DataFrame,
+    eia_frame: pd.DataFrame,
+) -> pd.DataFrame:
+    """Build the final risk panel using EIA WTI/Brent spot observations.
+
+    FRED contributes equity, FX and rates. EIA bulk is the canonical source
+    for both oil spot benchmarks, avoiding a mixed WTI/Brent source definition.
+    Short business-day publication gaps are forward-filled by at most four days.
+    """
+    required_eia = {"date", "series", "series_id", "value"}
+    missing = required_eia - set(eia_frame.columns)
+    if missing:
+        raise ValueError(f"EIA frame is missing columns: {sorted(missing)}")
+    expected = {
+        "wti_cushing_spot": "PET.RWTC.D",
+        "brent_europe_spot": "PET.RBRTE.D",
+    }
+    observed = eia_frame[["series", "series_id"]].drop_duplicates()
+    for field, series_id in expected.items():
+        matches = observed.loc[observed["series"] == field, "series_id"].tolist()
+        if matches != [series_id]:
+            raise ValueError(
+                f"EIA frame must contain exactly {field} mapped to {series_id}; got {matches}"
+            )
+
+    oil = eia_frame.loc[eia_frame["series"].isin(expected)].copy()
+    oil["date"] = pd.to_datetime(oil["date"], errors="coerce")
+    oil["value"] = pd.to_numeric(oil["value"], errors="coerce")
+    if oil["date"].isna().any() or oil["value"].isna().any():
+        raise ValueError("EIA oil frame contains invalid dates or values")
+    if not np.isfinite(oil["value"].to_numpy(dtype=float)).all():
+        raise ValueError("EIA oil frame contains non-finite values")
+    if oil.duplicated(["date", "series"]).any():
+        raise ValueError("duplicate EIA oil observations are not allowed")
+
+    pivot = oil.pivot(index="date", columns="series", values="value").rename(
+        columns={
+            "wti_cushing_spot": "wti",
+            "brent_europe_spot": "brent",
+        }
+    )
+    if set(pivot.columns) != {"wti", "brent"}:
+        raise ValueError("EIA oil frame must contain both WTI and Brent")
+
+    fred = fred_frame.copy()
+    fred["date"] = pd.to_datetime(fred["date"], errors="coerce")
+    if fred["date"].isna().any() or fred["date"].duplicated().any():
+        raise ValueError("FRED intermediate frame has invalid or duplicate dates")
+    # EIA is the canonical source for both oil factors. Do not silently retain a
+    # second WTI column from a caller-supplied FRED frame.
+    fred = fred.drop(columns=["wti", "brent"], errors="ignore").set_index("date")
+    merged = fred.join(pivot, how="outer", validate="one_to_one").sort_index()
+    business = pd.bdate_range(merged.index.min(), merged.index.max())
+    merged = merged.reindex(business).ffill(limit=4).dropna().reset_index(names="date")
+    validate_market_data(merged)
+    return merged
 
 
 def save_market_data(frame: pd.DataFrame, provenance: dict, csv_path: str | Path,
