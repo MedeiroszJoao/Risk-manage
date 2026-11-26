@@ -102,3 +102,14 @@ Each partial risk class is calculated separately using its full-current, reduced
 The RFET diagnostic recognizes only explicitly flagged transaction, committed-quote or qualifying third-party quote records. Public closing-price rows are not treated as proof of those records. No modellability pass is issued when the evidence ledger is missing or contains only public closes.
 
 The NMRF aggregation primitive is unit-tested separately. No NMRF charge is claimed from the reference case because no independently verified non-modellable risk-factor evidence / stress scenario file is available.
+
+
+## Heston stochastic volatility and Monte Carlo valuation
+
+The financial-engineering extension adds a risk-neutral Heston specification, its affine characteristic function, Lewis Fourier inversion for European options, and a separate QE-M Monte Carlo estimator. The model distinguishes the pricing measure from the physical-measure distribution used in VaR/ES forecasting. The Heston parameters supplied to this engine are risk-neutral pricing parameters; they must not be reused as real-world return-forecast parameters without an explicit risk-premium and measure-change model.
+
+The Monte Carlo implementation matches the first two conditional moments of the CIR variance transition using the quadratic-exponential scheme. Its stock step applies the QE-M conditional exponential-moment correction to preserve the one-step risk-neutral stock martingale when the relevant moment exists. Antithetic variates are paired by path, and the discounted-stock control-variate coefficient is estimated on an independent pilot sample. Confidence intervals describe simulation sampling error conditional on the chosen time grid; they do not absorb QE discretization bias, parameter uncertainty, or model risk. Fourier quadrature error is reported separately.
+
+Feller-condition status is diagnostic rather than a blanket parameter-rejection criterion. Numerical certification still requires positivity/no-arbitrage checks, characteristic-function identities, martingale tests, deterministic-variance recovery against Black–Scholes, Fourier/Monte Carlo comparison, and time-step convergence.
+
+See [HESTON_MONTE_CARLO.md](HESTON_MONTE_CARLO.md) for the full equations, conventions, implementation details, tests, and limitations. The reproducible benchmark uses hypothetical parameters and is not empirical quote calibration.
