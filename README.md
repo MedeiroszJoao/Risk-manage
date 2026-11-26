@@ -25,7 +25,7 @@ Run it yourself with the deterministic seed to reproduce the figures.
 
 - **Market data:** reproducible public FRED CSV downloader for S&P 500, VIX, EUR/USD, USD/JPY, WTI and US Treasury yields; source URLs, retrieval timestamps, missingness and SHA-256 hashes are recorded.
 - **Four hypothetical desks:** Equity Options, FX Options, Rates and Commodities.
-- **Pricing:** Black–Scholes calls and puts, Garman–Kohlhagen FX calls, zero-coupon bond proxies, a clearly labelled simplified variance-swap mark, and a calibrated power-law SSVI implied-volatility surface with a sufficient static-arbitrage certificate.
+- **Pricing:** Black–Scholes calls and puts, Garman–Kohlhagen FX calls, Black-76 forward options, a calibrated power-law SSVI implied-volatility surface, and a Heston stochastic-volatility engine with Lewis Fourier inversion and QE-M Monte Carlo.
 - **HPL / RTPL:** close-to-close full revaluation of positions held static during each daily interval; constant-maturity test books are rolled only after daily valuation. RTPL is independently built from sensitivities and explicitly selected risk factors.
 - **VaR backtesting:** rolling 97.5% / 99% historical VaR, exceptions, Kupiec unconditional-coverage and Christoffersen independence diagnostics.
 - **PLA:** the latest 250 matched observations, Spearman rank correlation, empirical CDF / KS distance and Basel-style green / amber / red zones.
@@ -54,6 +54,10 @@ ruff check src tests scripts
 ```
 
 Generated files are written to `reports/generated/`: daily HPL/RTPL, factor attribution, backtesting / PLA, capital diagnostics, RFET evidence status, stress scenarios, figures and an executive report.
+
+## Financial engineering expansion — Heston stochastic volatility and advanced Monte Carlo
+
+The branch now includes Heston risk-neutral dynamics, an affine characteristic function, Lewis square-root Fourier inversion, and an Andersen-style QE-M Monte Carlo engine. Simulation includes antithetic path pairing, an independently estimated discounted-stock control variate, standard errors, confidence intervals, a stock-martingale diagnostic and explicit separation of sampling error from time-discretization bias. The reproducible synthetic-parameter benchmark is run with `python scripts/run_heston_benchmark.py`; derivation and numerical conventions are in [Heston Fourier and QE-M documentation](docs/HESTON_MONTE_CARLO.md).
 
 ## Financial engineering expansion — SSVI volatility surface
 
@@ -91,3 +95,6 @@ This is not a bank's regulatory FRTB implementation, supervisory-approved IMA mo
 
 ---
 Independent research case study. No affiliation with the BIS, ECB, Federal Reserve, FRED or any financial institution.
+
+
+For a standalone Heston benchmark, run `python scripts/run_heston_benchmark.py --paths 20000 --steps 96`. Results are written to `reports/generated/heston_benchmark.json`. The parameter set is hypothetical; it is a numerical cross-check, not a market calibration.
