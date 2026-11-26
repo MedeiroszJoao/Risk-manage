@@ -81,3 +81,17 @@ def test_qmc_rejects_insufficient_scrambles():
         heston_randomized_qmc_price(
             100.0, 1.0, baseline(), sobol_power=8, n_scrambles=2, n_steps=16
         )
+
+
+
+@pytest.mark.parametrize("n_steps", [3, 5, 7, 8, 13])
+def test_brownian_bridge_handles_non_power_of_two_time_grids(n_steps):
+    rng = np.random.default_rng(300 + n_steps)
+    increments = _brownian_bridge_increments(
+        rng.standard_normal((25_000, n_steps)), maturity=2.0
+    )
+    assert increments.shape == (25_000, n_steps)
+    assert np.max(np.abs(np.mean(increments, axis=0))) < 0.025
+    assert np.var(increments, axis=0, ddof=1) == pytest.approx(
+        np.ones(n_steps), abs=0.04
+    )
