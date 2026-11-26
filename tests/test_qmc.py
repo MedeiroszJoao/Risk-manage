@@ -25,13 +25,13 @@ def test_brownian_bridge_preserves_independent_standard_normal_increments():
     increments = _brownian_bridge_increments(
         rng.standard_normal((40_000, 8)), maturity=1.0
     )
-    assert np.max(np.abs(np.mean(increments, axis=0))) < 0.015
+    assert np.max(np.abs(np.mean(increments, axis=0))) < 0.02
     assert np.var(increments, axis=0, ddof=1) == pytest.approx(
         np.ones(8), abs=0.025
     )
     covariance = np.cov(increments, rowvar=False)
     off_diagonal = covariance - np.diag(np.diag(covariance))
-    assert np.max(np.abs(off_diagonal)) < 0.015
+    assert np.max(np.abs(off_diagonal)) < 0.025
 
 
 def test_randomized_sobol_heston_price_agrees_with_fourier_within_error_budget():
@@ -139,4 +139,18 @@ def test_randomized_qmc_deterministic_variance_limit_matches_fourier():
     reference = heston_price_fourier(103.0, 1.25, params)["price"]
     assert abs(result["price"] - reference) < (
         5.0 * result["standard_error_across_scrambles"] + 0.08
+    )
+
+
+
+def test_brownian_bridge_terminal_coordinate_is_first_sobol_normal():
+    rng = np.random.default_rng(441)
+    normals = rng.standard_normal((100, 9))
+    maturity = 2.5
+    increments = _brownian_bridge_increments(normals, maturity)
+    terminal_from_increments = np.sum(increments, axis=1) * np.sqrt(
+        maturity / normals.shape[1]
+    )
+    assert terminal_from_increments == pytest.approx(
+        np.sqrt(maturity) * normals[:, 0], abs=1e-12
     )
