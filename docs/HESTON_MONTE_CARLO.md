@@ -224,3 +224,83 @@ Variance-reduction factor is reported as $(SE_{plain}/SE_{CV})^2$. It is an obse
 - Heston, S. L. (1993), “A Closed-Form Solution for Options with Stochastic Volatility with Applications to Bond and Currency Options,” *Review of Financial Studies*, 6(2), 327–343. https://doi.org/10.1093/rfs/6.2.327
 - Andersen, L. (2008), “Simple and Efficient Simulation of the Heston Stochastic Volatility Model,” *Journal of Computational Finance*, 11(3). https://doi.org/10.21314/jcf.2008.189
 - Broadie, M. and Kaya, Ö. (2006), “Exact Simulation of Stochastic Volatility and Other Affine Jump Diffusion Processes,” *Operations Research*, 54(2), 217–231. https://doi.org/10.1287/opre.1050.0247
+
+
+## Cross-sectional Heston calibration to option quotes
+
+### What is estimated
+
+The Heston pricing parameters are risk-neutral quantities. For a cross-sectional option panel, hold the market conventions fixed and estimate
+
+\[
+\vartheta=(v_0,\kappa,\theta,\xi,\rho),
+\]
+
+where $v_0$ is initial variance, $\kappa$ mean reversion, $\theta$ long-run variance, $\xi$ volatility of variance, and $\rho$ spot/variance Brownian correlation. This is a pricing-measure calibration. It is not a physical-measure GARCH/volatility forecast and does not, by itself, estimate the variance risk premium.
+
+The current implementation treats spot, flat continuously compounded risk-free rate and flat dividend yield as supplied market inputs. A production-quality calibration must replace those flat inputs with timestamp-aligned forwards and discount/dividend curves, and must apply instrument calendars, exercise conventions and corporate-action rules consistently.
+
+### Parameter transformations and constraints
+
+Optimize in unconstrained coordinates
+
+\[
+z=(\log v_0,\log\kappa,\log\theta,\log\xi,\operatorname{atanh}\rho),
+\]
+
+then map back by exponentials and $\rho=\tanh(z_5)$. Box bounds in transformed coordinates imply explicit physical bounds on each parameter. This avoids negative variance, negative mean reversion, negative vol-of-variance and invalid correlation during optimization. The Feller condition is reported as a model diagnostic; it is not imposed as an arbitrary calibration constraint.
+
+### Quote objectives
+
+For mid-price fitting, quote $i$ contributes
+
+\[
+e_i(\vartheta)=C_i^{model}(\vartheta)-C_i^{mid}.
+\]
+
+For bid–ask fitting, the residual is the signed distance to the quoted interval:
+
+\[
+e_i^{BA}(\vartheta)=
+\begin{cases}
+C_i^{model}-Bid_i,&C_i^{model}<Bid_i,\\
+0,&Bid_i\le C_i^{model}\le Ask_i,\\
+C_i^{model}-Ask_i,&C_i^{model}>Ask_i.
+\end{cases}
+\]
+
+Weighted residuals divide by $\max((Ask_i-Bid_i)/2,\varepsilon)$ and multiply by the quote's explicit user weight. The floor $\varepsilon$ prevents zero-width or very tight spreads from producing unbounded weights. SciPy trust-region reflective least squares is used with a selectable robust loss (default soft-$L_1$) and a deterministic multi-start design.
+
+Quotes are grouped by maturity. A vector-valued Lewis integration prices all strikes for one maturity with a single characteristic-function evaluation per quadrature node. This cuts repeated work during finite-difference optimization while preserving one numerical pricing route.
+
+### Identifiability and numerical diagnostics
+
+The calibrated weighted residual Jacobian $J=\partial e/\partial z$ is decomposed as
+
+\[
+J=U\Sigma V^\top,\qquad
+\Sigma=\operatorname{diag}(s_1,\ldots,s_5).
+\]
+
+The singular values, numerical rank and condition number are reported in transformed coordinates. A small singular value indicates a locally weakly identified parameter combination. A good price fit does not imply unique or stable parameters: the Heston objective can contain long, flat valleys where parameters compensate for one another. Do not convert this Jacobian SVD into a parameter confidence interval without a justified statistical model. Profile likelihood, quote/bootstrap resampling, and parameter stability across quote subsets are separate tasks.
+
+The implementation currently uses central finite-difference Jacobians. This is transparent but expensive and sensitive to calibration tolerances. Analytic or semi-analytic gradients, parameter scaling studies, profile likelihood and independent calibration-library comparisons remain future upgrades. Cui, del Baño Rollin and Germano (2017) analyze the Heston calibration objective's flat valleys, bid–ask weighting and the value of analytic gradients.
+
+### Reproducible synthetic calibration
+
+Run:
+
+```bash
+python scripts/run_heston_calibration.py --starts 3 --max-nfev 60
+```
+
+The runner generates a deterministic synthetic panel with 15 calls/puts spanning three expiries and five strikes, then attempts to recover the Heston parameters from a perturbed starting point. The JSON report records true generating parameters, estimates, price errors, bid–ask hit ratio, optimizer starts and Jacobian diagnostics. Synthetic recovery is a code test, not evidence of real-market fit or stable identification.
+
+## Additional calibration limitations
+
+- No live or licensed exchange/OTC option quote set has been calibrated.
+- Quotes are assumed European and clean; quote timestamps, sizes, stale/crossed-market filters and contract calendars are not yet governed.
+- Discounting and carry are flat constants, not bootstrapped curves.
+- The residual Jacobian uses finite differences; analytic gradients and independent optimizer/library benchmarks remain open.
+- Parameter uncertainty is not estimated. Local SVD is only a warning signal about identifiability.
+- No dynamic parameter evolution, variance risk premium estimation or physical-measure transition is calibrated.
