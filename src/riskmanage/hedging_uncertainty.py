@@ -43,17 +43,18 @@ def propagate_heston_uncertainty_to_hedging(
 ) -> dict:
     """Propagate Q-parameter bootstrap draws into discrete hedge PnL and VaR/ES.
 
-    One physical/scenario Heston path set is generated once and reused for every
-    risk-neutral parameter draw. This common-scenario design isolates variation
-    caused by Q calibration parameters from variation due to regenerating P paths.
-    The option premium and Heston state-dependent Delta are recalculated under
-    each Q draw; the physical scenario process is held fixed. The frozen-BS
-    comparator uses sqrt(theta_Q) separately for each Q draw.
+    The same standard-normal innovations are reused for every risk-neutral
+    parameter draw. The initial variance v0 is aligned across Q and P for each
+    draw because it is the common initial state; all other physical scenario
+    dynamics remain fixed. The resulting path states differ through that initial
+    variance, but not through independently regenerated random shocks. The
+    frozen-BS comparator uses sqrt(theta_Q) separately for each Q draw.
 
     The empirical VaR/ES distribution across bootstrap draws is conditional on
-    common Gaussian innovations, fixed physical dynamics, and draw-specific
-    initial variance states. It captures parameter-induced hedge-risk dispersion,
-    not independent scenario-resampling uncertainty or model risk.
+    common Gaussian innovations, fixed non-initial physical dynamics, and
+    draw-specific initial variance states. It captures parameter-induced
+    hedge-risk dispersion, not independent scenario-resampling uncertainty
+    or model risk.
     """
     parameter_samples = tuple(parameter_samples)
     if len(parameter_samples) < 2:
@@ -352,11 +353,13 @@ def propagate_heston_uncertainty_to_hedging(
         "draw_level_results": rows,
         "uncertainty_boundary": (
             "Across-draw distributions capture risk-neutral calibration parameter uncertainty "
-            "conditional on a single fixed physical/scenario path set. They exclude physical "
-            "scenario sampling uncertainty, physical parameter uncertainty, quote-model misspecification, "
-            "market microstructure, curve uncertainty and model risk. Within-draw VaR/ES use a finite "
-            "synthetic path sample; tail precision depends on n_paths*(1-confidence_level). "
-            "A common physical path set removes path regeneration noise from between-draw differences "
-            "but does not create independent parameter draws or a regulatory capital measure."
-        ),
+            "under common standard-normal innovations and fixed non-initial physical scenario "
+            "dynamics. The initial P/scenario variance state follows each bootstrap draw's v0 so "
+            "the initial state is consistent under Q and P. Path states therefore differ through "
+            "v0, but shocks are not independently regenerated. The results exclude physical "
+            "parameter uncertainty beyond this initial-state propagation, independent scenario "
+            "resampling uncertainty, quote-model misspecification, market microstructure, curve "
+            "uncertainty and model risk. Within-draw VaR/ES use a finite synthetic path sample; "
+            "tail precision depends on n_paths*(1-confidence_level). This is not a regulatory "
+            "capital measure or predictive confidence interval."
     }
