@@ -10,6 +10,7 @@ from riskmanage.heston import (
     heston_characteristic_function,
     heston_monte_carlo_price,
     heston_price_fourier,
+    heston_prices_fourier_batch,
 )
 
 def baseline(**overrides):
@@ -212,3 +213,27 @@ def test_validation_rejects_odd_antithetic_path_count_and_invalid_strike():
         heston_monte_carlo_price(100, 1, params, n_paths=101)
     with pytest.raises(ValueError, match="strike"):
         heston_price_fourier(0, 1, params)
+
+
+
+def test_vector_fourier_prices_match_scalar_calls_and_puts():
+    params = baseline()
+    strikes = np.array([85.0, 95.0, 100.0, 105.0, 115.0])
+    option_types = ["put", "put", "call", "call", "call"]
+    batch = heston_prices_fourier_batch(
+        strikes, 0.75, params, option_types
+    )
+    scalar = np.array(
+        [
+            heston_price_fourier(strike, 0.75, params, option_type)["price"]
+            for strike, option_type in zip(strikes, option_types, strict=True)
+        ]
+    )
+    assert batch["prices"] == pytest.approx(scalar, rel=1e-8, abs=1e-8)
+    assert batch["quadrature_error_norm_units"] == "vector_integrand_l2"
+
+
+def test_vector_fourier_validation_rejects_mismatched_option_types():
+    params = baseline()
+    with pytest.raises(ValueError, match="one 'call' or 'put'"):
+        heston_prices_fourier_batch([90.0, 100.0], 1.0, params, ["call"])
