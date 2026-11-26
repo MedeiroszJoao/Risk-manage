@@ -674,3 +674,8 @@ The JSON report compares Brownian-bridge RQMC, standard-order RQMC and antitheti
 - Caflisch, R. E., Morokoff, W. J. and Owen, A. B. (1997), “Valuation of Mortgage Backed Securities Using Brownian Bridges to Reduce Effective Dimension,” *Journal of Computational Finance*, 1(1), 27–46. https://doi.org/10.21314/JCF.1997.005
 - L'Ecuyer, P. (2009), “Quasi-Monte Carlo Methods with Applications in Finance,” *Finance and Stochastics*, 13, 307–349. https://doi.org/10.1007/s00780-008-0087-3
 - SciPy API reference: scipy.stats.qmc.Sobol, including scrambling and random_base2. https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.qmc.Sobol.html
+
+
+## Parameter uncertainty extension
+
+The cross-sectional calibration point estimate is now complemented by parametric quote bootstrap, profile likelihood and propagation into prices/Deltas. See [HESTON_UNCERTAINTY.md](HESTON_UNCERTAINTY.md) for the quote-noise model, bootstrap equations, nuisance-parameter profiling, uncertainty bands and limits.
