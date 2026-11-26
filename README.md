@@ -121,3 +121,8 @@ The derivatives stack now supports a discrete self-financing hedge experiment. I
 ## Randomized quasi-Monte Carlo
 
 Heston pricing also has an RQMC route using scrambled Sobol nets, inverse-normal mapping, Brownian bridge on both Gaussian drivers, QE-M transitions, and an independent-pilot discounted-stock control variate. The benchmark compares Brownian-bridge RQMC, standard-order RQMC and antithetic pseudo-MC at equal valuation and pilot path budgets, with independent scramble-based standard errors and Fourier reference. Run python scripts/run_heston_qmc_benchmark.py --sobol-power 10 --scrambles 8 --steps 64. RQMC is not assumed to win; results are conditional on the QE-M time grid and exclude time-discretization and model uncertainty.
+
+
+## Heston calibration uncertainty and risk propagation
+
+A calibrated point estimate is not a known truth. The uncertainty module adds a parametric quote bootstrap, one-dimensional profile likelihood with four nuisance parameters re-optimized at each grid point, and propagation of parameter draws into option prices and Deltas. It reports parameter covariance/correlation, percentile distributions, profile-likelihood curves, and price/Greek uncertainty bands. The quote-noise model is explicit: independent Gaussian quote errors with variance derived from bid–ask width. Run `python scripts/run_heston_uncertainty.py --replicates 40 --profile-points 7`. The synthetic quote panel is not live-market evidence, and these intervals do not measure model risk.
