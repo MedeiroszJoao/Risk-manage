@@ -109,3 +109,16 @@ def test_eia_oil_merge_rejects_wrong_series_id_and_duplicate_observation():
     eia.loc[0, "series_id"] = "PET.WRONG.D"
     with pytest.raises(ValueError, match="mapped to PET.RWTC.D"):
         merge_eia_petroleum_into_market_data(fred, eia)
+
+
+
+def test_adding_brent_preserves_original_seeded_market_factor_paths():
+    frame = build_synthetic_market_data(n=300, seed=20261124)
+    first = frame.iloc[0]
+    assert first["sp500"] == pytest.approx(2101.329780593683, abs=1e-10)
+    assert first["vix"] == pytest.approx(22.061546606465672, abs=1e-10)
+    assert first["eurusd"] == pytest.approx(1.076672149961795, abs=1e-10)
+    assert first["usdjpy"] == pytest.approx(117.54013573262118, abs=1e-10)
+    assert first["wti"] == pytest.approx(48.633322510891944, abs=1e-10)
+    assert first["ust2y"] == pytest.approx(2.417550522693182, abs=1e-10)
+    assert first["ust10y"] == pytest.approx(3.022248441738302, abs=1e-10)
