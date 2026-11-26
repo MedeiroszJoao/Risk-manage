@@ -39,16 +39,19 @@ def build_scenario_reports(market):
       "equity_crash":{"sp500":.75,"vix_add":25},
       "fx_dislocation":{"eurusd":.90,"eurusd_vol":1.75,"usdjpy":1.08,"usdjpy_vol":1.50},
       "rates_bear_steepener":{"ust2y_add":2.0,"ust10y_add":1.5},
-      "oil_collapse":{"wti":.60,"brent":.65,"wti_vol":1.50},
+      "oil_collapse":{"wti_add":-25.0,"brent_add":-20.0},
       "combined_tail":{"sp500":.75,"vix_add":25,"eurusd":.90,"eurusd_vol":1.75,
         "usdjpy":1.08,"usdjpy_vol":1.50,"ust2y_add":2.0,"ust10y_add":1.5,
-        "wti":.60,"brent":.65,"wti_vol":1.50}
+        "wti_add":-25.0,"brent_add":-20.0}
     }
     rows=[]
     for name,shock in scenarios.items():
         state=dict(current)
-        for factor in ("sp500","eurusd","usdjpy","wti","brent"):
+        for factor in ("sp500","eurusd","usdjpy"):
             if factor in shock: state[factor]*=shock[factor]
+        # Additive oil shocks remain well-defined even when the WTI price is zero or negative.
+        state["wti"] += shock.get("wti_add", 0.0)
+        state["brent"] = max(state["brent"] + shock.get("brent_add", 0.0), 5.0)
         for factor in ("eurusd_vol","usdjpy_vol","wti_vol"):
             if factor in shock: state[factor]=min(state[factor]*shock[factor],2.0)
         if "vix_add" in shock:
