@@ -83,7 +83,7 @@ def test_eia_pagination_provenance_and_no_forward_fill(tmp_path):
     assert "2024-01-04" not in frame.loc[frame["series_id"] == "RWTC", "date"].tolist()
     assert [call[1]["offset"] for call in session.calls] == ["0", "2", "0"]
     assert all(call[1]["api_key"] == "test-secret-not-to-persist" for call in session.calls)
-    assert len(list((tmp_path / "raw").glob("*.json"))) == 3
+    assert len(list((tmp_path / "raw").rglob("*.json"))) == 3
     assert len(manifest["series"]) == 2
     manifest_text = json.dumps(manifest)
     assert "test-secret-not-to-persist" not in manifest_text
