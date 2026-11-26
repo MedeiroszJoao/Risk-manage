@@ -19,8 +19,7 @@ def _brownian_bridge_increments(
     """Map independent normals to standardized Brownian increments.
 
     The first coordinate generates the terminal Brownian value. Remaining
-    coordinates recursively fill conditional midpoints, longest intervals
-    first. Differencing the resulting Brownian path yields independent
+    coordinates recursively fill conditional midpoints from coarse to fine. Differencing the resulting Brownian path yields independent
     N(0,1) increments while assigning low-discrepancy coordinates to coarse
     path features first.
     """
