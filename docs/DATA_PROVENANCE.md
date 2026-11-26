@@ -34,7 +34,7 @@ These are spot-price benchmarks, not exchange-traded futures settlements, execut
 
 The archive hash identifies the retrieved snapshot. It does not recreate historical EIA publication vintages or the information set available at every historical date. Strict point-in-time backtests need publication/vintage information separately.
 
-See EIA_DATA_INGESTION.md for the source format and collector details. Run python scripts/download_market_data.py --start 2007-01-01 to build the unified market panel and combined source manifest. Mocked unit tests do not replace the first live local download and manifest review. The separate python scripts/run_commodity_spot_case.py runner consumes the standalone EIA normalized CSV using common actual WTI/Brent dates only, so the commodity desk can retain its longer source history without pretending the full multi-desk panel has the same coverage.
+See EIA_DATA_INGESTION.md for the source format and collector details. The standalone EIA bulk collector and commodity diagnostic were live-validated in GitHub Actions on 2026-11-26 (run 45897080993), including the raw archive hash and 10,034 normalized observations. The integrated `python scripts/download_market_data.py --start 2007-01-01` FRED/EIA panel has not yet been live-run as a combined dataset; run it locally and inspect the combined source manifest before describing a multi-desk result as empirical. The separate `python scripts/run_commodity_spot_case.py` runner consumes the standalone EIA normalized CSV using common actual WTI/Brent dates only, so the commodity desk can retain its longer source history without pretending the full multi-desk panel has the same coverage.
 
 ## Reference run
 
