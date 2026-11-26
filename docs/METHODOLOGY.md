@@ -129,3 +129,6 @@ See [Heston Fourier, QE-M and calibration](HESTON_MONTE_CARLO.md) for the full d
 For European vanilla options, the QE-M engine now estimates pathwise Delta using the homogeneity relation \(\partial S_T/\partial S_0=S_T/S_0\). An independent Delta estimate and Gamma use central common-random-number bumps; initial-volatility Vega is \(\partial V/\partial\sqrt{v_0}\), not implied-volatility Vega. Antithetic path pairs are averaged before standard errors and Student-t intervals are calculated. Finite-difference truncation and QE-M time-grid bias are not included in those intervals.
 
 The comparison runner reports the Monte Carlo estimators against Fourier finite-difference reference values. See [Heston Fourier, QE-M, calibration and Greeks](HESTON_MONTE_CARLO.md) for estimator derivations and interpretation limits.
+
+
+The same coupled finite-difference stencil also reports Vanna \(\partial^2V/(\partial S_0\partial\sigma_0)\) and Volga \(\partial^2V/\partial\sigma_0^2\). These are Heston initial-volatility cross sensitivities, not implied-surface Vanna/Volga; bump truncation and time-grid bias remain outside their sampling intervals.
