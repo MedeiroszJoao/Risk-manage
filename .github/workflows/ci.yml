@@ -75,3 +75,12 @@ jobs:
         with:
           name: heston-rqmc-python-${{ matrix.python-version }}
           path: /tmp/heston_qmc_benchmark.json
+      - name: Run Heston calibration uncertainty experiment
+        run: |
+          python scripts/run_heston_uncertainty.py --replicates 3 --profile-points 3 --starts 1 --max-nfev 80 --bootstrap-max-nfev 80 --output /tmp/heston_parameter_uncertainty.json
+          python -m json.tool /tmp/heston_parameter_uncertainty.json > /dev/null
+      - name: Upload Heston uncertainty report
+        uses: actions/upload-artifact@v4
+        with:
+          name: heston-parameter-uncertainty-python-${{ matrix.python-version }}
+          path: /tmp/heston_parameter_uncertainty.json
