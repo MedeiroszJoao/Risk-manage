@@ -364,29 +364,17 @@ def profile_heston_parameter(
             max_nfev=max_nfev,
         )
         chi_square = float(np.dot(result.fun, result.fun))
+        profiled_coordinates = x_full.copy()
+        profiled_coordinates[fixed_index] = fixed_value
+        profiled_coordinates[free_indices] = result.x
+        profiled_parameters = _decode_parameters(profiled_coordinates, market)
         points.append(
             {
                 "parameter_value": float(physical_value),
                 "chi_square": chi_square,
                 "optimizer_success": bool(result.success),
                 "nfev": int(result.nfev),
-                "profiled_parameters": _parameter_dict(
-                    _decode_parameters(
-                        np.concatenate(
-                            [
-                                np.array(
-                                    [
-                                        fixed_value if index == fixed_index else 0.0
-                                        for index in range(5)
-                                    ]
-                                ),
-                            ]
-                        ),
-                        market,
-                    )
-                )
-                if False
-                else None,
+                "profiled_parameters": _parameter_dict(profiled_parameters),
             }
         )
         if result.success:
