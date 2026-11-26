@@ -102,3 +102,12 @@ jobs:
         with:
           name: heston-nested-hedge-risk-python-${{ matrix.python-version }}
           path: /tmp/heston_nested_hedge_risk.json
+      - name: Run Heston hedge POT-GPD tail-risk experiment
+        run: |
+          python scripts/run_heston_hedge_evt.py --paths 500 --steps 6 --cost-bps 2 --confidence-levels 0.975 --thresholds 0.90 0.95 --min-exceedances 20 --bootstrap 5 --output /tmp/heston_hedge_evt.json
+          python -m json.tool /tmp/heston_hedge_evt.json > /dev/null
+      - name: Upload Heston hedge EVT report
+        uses: actions/upload-artifact@v4
+        with:
+          name: heston-hedge-evt-python-${{ matrix.python-version }}
+          path: /tmp/heston_hedge_evt.json
