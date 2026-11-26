@@ -80,7 +80,7 @@ def main():
     else:
         if not Path(args.data).exists():
             raise SystemExit(f"Market data not found at {args.data}. Run scripts/download_market_data.py or use --synthetic.")
-        market=load_market_data(args.data); data_kind="public_fred_series"
+        market=load_market_data(args.data); data_kind="public_fred_eia_spot_panel"
         manifest_path=Path("data/source_manifest.json")
         provenance=json.loads(manifest_path.read_text()) if manifest_path.exists() else {
           "data_classification":"public_data_manifest_missing","data_path":args.data}
@@ -173,6 +173,7 @@ def main():
         "Public closing prices are not treated as RFET-qualifying transactions or committed quotes.",
         "All positions and notionals are hypothetical; capital and stress figures are illustrative.",
         "The variance-swap mark is a simplified implied-variance proxy, not a full variance-swap valuation.",
+        "WTI and Brent are spot benchmarks; the commodity book uses spot-linked proxies, not futures settlements, and has no futures curve, basis, expiry or roll model.",
         "This is independent research software, not a supervisory-approved IMA implementation."
       ]
     }
