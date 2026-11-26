@@ -161,3 +161,55 @@ def liquidity_adjusted_es(
         "empirical_quantile_method": EMPIRICAL_QUANTILE_METHOD,
         "expected_shortfall_convention": "integrated_empirical_quantile_fractional_var_mass",
     }
+
+
+def select_stress_window(
+    factor_losses: dict[str, np.ndarray],
+    window_days: int = 250,
+    confidence: float = 0.975,
+):
+    """Select the contiguous window with the largest cumulative portfolio loss.
+
+    Inputs are aligned daily loss series (positive values are losses). The
+    selected window maximizes the sum of all factor losses over exactly
+    window_days observations. Ties resolve to the earliest window.
+    This is a descriptive historical stress-window selector, not the
+    supervisory FRTB stress-period selection procedure.
+    """
+    if not factor_losses:
+        raise ValueError("factor loss mapping cannot be empty")
+    if not isinstance(window_days, (int, np.integer)) or window_days < 1:
+        raise ValueError("window_days must be a positive integer")
+    if not 0.5 < confidence < 1:
+        raise ValueError("confidence must be between 0.5 and 1")
+
+    arrays = {
+        str(name): _finite_vector(values, f"{name} losses")
+        for name, values in factor_losses.items()
+    }
+    lengths = {len(values) for values in arrays.values()}
+    if len(lengths) != 1:
+        raise ValueError("factor loss vectors must be aligned")
+    observations = lengths.pop()
+    if window_days > observations:
+        raise ValueError("window_days cannot exceed the number of observations")
+
+    portfolio_losses = np.sum(np.vstack(list(arrays.values())), axis=0)
+    cumulative = np.concatenate(([0.0], np.cumsum(portfolio_losses, dtype=float)))
+    window_totals = cumulative[window_days:] - cumulative[:-window_days]
+    start_index = int(np.argmax(window_totals))
+    end_index = start_index + int(window_days) - 1
+    factor_contributions = {
+        name: float(values[start_index : end_index + 1].sum())
+        for name, values in arrays.items()
+    }
+    return {
+        "start_index": start_index,
+        "end_index": end_index,
+        "window_days": int(window_days),
+        "confidence": float(confidence),
+        "portfolio_cumulative_loss": float(window_totals[start_index]),
+        "factor_cumulative_losses": factor_contributions,
+        "selection_method": "maximum_cumulative_sum_of_aligned_factor_losses",
+        "tie_break": "earliest_window",
+    }
