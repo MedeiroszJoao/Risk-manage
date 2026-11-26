@@ -10,7 +10,7 @@ The EIA adapter retrieves daily observations from the official API v2 route:
 - Frequency: daily
 - Data column: `value`
 
-The normalized output has one row per observation and these fields:
+Every execution writes into a new timestamped raw-snapshot subdirectory, so a later download does not overwrite an earlier API response. The normalized output has one row per observation and these fields:
 
 | Field | Meaning |
 |---|---|
@@ -64,7 +64,7 @@ For each series, the downloader:
 2. Retrieves pages using `offset` and `length`; the page size is capped at 5,000 JSON rows.
 3. Saves each exact raw JSON response page separately.
 4. Stores the SHA-256 digest, offset, row count and raw path for every page.
-5. Produces a normalized CSV and manifest with retrieval time (UTC), requested period, actual coverage, series metadata, units and normalized CSV SHA-256.
+5. Produces a normalized CSV and manifest with retrieval time (UTC), unique snapshot ID/path, requested period, actual coverage, series metadata, units and normalized CSV SHA-256.
 
 No missing daily observations are forward-filled, interpolated or synthesized. Weekends and market holidays therefore remain absent. A changed result on a later retrieval is a new snapshot, not a silent rewrite of an earlier one. Preserve the raw pages and manifest for each research run.
 
