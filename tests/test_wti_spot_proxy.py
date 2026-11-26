@@ -88,6 +88,6 @@ def test_oil_collapse_scenario_uses_additive_spot_shocks_when_wti_is_negative():
     scenarios = build_scenario_reports(market).set_index("scenario")
     oil_collapse = scenarios.loc["oil_collapse"]
 
-    # Long 150k WTI loses 25 USD/bbl; short 100k Brent gains 5 USD/bbl
-    # after the Brent stress floor is applied.
+    # Long 150k WTI loses 25 USD/bbl; short 100k Brent gains 3.5 USD/bbl
+    # from the 35% proportional Brent stress.
     assert oil_collapse["Commodities_pnl"] == pytest.approx(-3_400_000.0)
