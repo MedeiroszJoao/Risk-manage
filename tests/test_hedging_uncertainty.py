@@ -129,3 +129,35 @@ def test_hedge_uncertainty_rejects_too_few_bootstrap_parameter_draws():
             n_steps=2,
             confidence_level=0.90,
         )
+
+
+
+def test_identical_parameter_draws_reuse_identical_gaussian_scenario_innovations():
+    pricing = parameters()
+    physical = parameters(
+        mean_reversion=1.25,
+        long_run_variance=0.05,
+        vol_of_variance=0.55,
+        correlation=-0.65,
+    )
+    one_draw = bootstrap_samples()[0]
+    result = propagate_heston_uncertainty_to_hedging(
+        [one_draw, one_draw],
+        pricing,
+        physical,
+        strike=100.0,
+        maturity=0.5,
+        physical_total_return=0.04,
+        n_paths=120,
+        n_steps=2,
+        transaction_cost_bps=2.0,
+        confidence_level=0.90,
+        seed=909,
+    )
+    first, second = result["draw_level_results"]
+    assert first["physical_scenario_initial_variance"] == pytest.approx(
+        second["physical_scenario_initial_variance"]
+    )
+    assert first["heston_state_delta_strategy"] == second["heston_state_delta_strategy"]
+    assert first["frozen_bs_delta_strategy"] == second["frozen_bs_delta_strategy"]
+    assert first["paired_comparison"] == second["paired_comparison"]
