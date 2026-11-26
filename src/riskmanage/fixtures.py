@@ -22,7 +22,11 @@ def build_synthetic_market_data(n: int = 1800, seed: int = 20261124) -> pd.DataF
         [-0.06, 0.16, 0.02, 0.02, -0.05, 1.00, 0.72],
         [-0.08, 0.18, 0.01, 0.03, -0.06, 0.72, 1.00],
     ])
-    z = rng.multivariate_normal(np.zeros(7), corr, size=n)
+    # The eighth innovation is an independent Brent-specific component; the
+    # common WTI factor creates a high but imperfect WTI/Brent correlation.
+    corr8 = np.eye(8)
+    corr8[:7, :7] = corr
+    z = rng.multivariate_normal(np.zeros(8), corr8, size=n)
     stress = np.zeros(n, dtype=bool)
     for start in (int(n * .22), int(n * .58), int(n * .82)):
         end = min(n, start + int(rng.integers(12, 28)))
@@ -33,6 +37,7 @@ def build_synthetic_market_data(n: int = 1800, seed: int = 20261124) -> pd.DataF
     fx_ret = .00002 + .0048 * z[:, 2]
     jpy_ret = -.00001 + .0052 * z[:, 3]
     wti_ret = .00008 + .018 * z[:, 4]
+    brent_ret = .00008 + .015 * (0.90 * z[:, 4] + np.sqrt(1.0 - 0.90**2) * z[:, 7])
     vix = np.clip(17.5 - 6.0 * z[:, 0] + 3.5 * np.abs(z[:, 1]), 9, 75)
     y2 = np.clip(2.4 + np.cumsum(.012 * z[:, 5]), .1, 7.5)
     y10 = np.clip(3.0 + np.cumsum(.010 * z[:, 6]), .2, 8.0)
@@ -43,6 +48,7 @@ def build_synthetic_market_data(n: int = 1800, seed: int = 20261124) -> pd.DataF
         "eurusd": 1.08 * np.exp(np.cumsum(fx_ret)),
         "usdjpy": 118 * np.exp(np.cumsum(jpy_ret)),
         "wti": 48 * np.exp(np.cumsum(wti_ret)),
+        "brent": 52 * np.exp(np.cumsum(brent_ret)),
         "ust2y": y2,
         "ust10y": y10,
         "is_synthetic": True,
