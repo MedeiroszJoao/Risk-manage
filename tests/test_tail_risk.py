@@ -19,6 +19,13 @@ def test_pot_gpd_recovers_finite_mean_tail_and_reports_bootstrap_intervals():
         seed=99,
     )
     assert len(result["threshold_fits"]) == 3
+    stability = result["threshold_stability"]
+    assert stability["automatic_threshold_selection"] is False
+    assert stability["shape"]["successful_threshold_fits"] == 3
+    assert stability["shape"]["range"] < 0.10
+    assert stability["confidence_level_metrics"]["0.975"]["expected_shortfall"][
+        "successful_threshold_fits"
+    ] == 3
     for fit in result["threshold_fits"]:
         assert fit["status"] == "fitted"
         assert abs(fit["fit"]["shape"] - 0.20) < 0.10
