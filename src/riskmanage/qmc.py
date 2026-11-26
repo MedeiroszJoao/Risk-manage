@@ -82,7 +82,7 @@ def _sobol_heston_payoffs(
     brownian_bridge: bool,
 ):
     dimension = 2 * n_steps
-    sampler = qmc.Sobol(d=dimension, scramble=True, seed=seed)
+    sampler = qmc.Sobol(d=dimension, scramble=True, rng=np.random.default_rng(seed))
     uniforms = sampler.random_base2(power)
     normals = ndtri(np.clip(uniforms, 1e-14, 1.0 - 1e-14))
     n_paths = normals.shape[0]
