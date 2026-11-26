@@ -16,6 +16,7 @@ def test_wti_spot_proxy_pnl_handles_negative_price_crossing_exactly():
             "eurusd": [1.0874, 1.0866, 1.0850],
             "usdjpy": [107.52, 107.67, 107.78],
             "wti": [18.31, -36.98, 8.91],
+            "brent": [28.50, 25.10, 27.30],
             "ust2y": [0.20, 0.20, 0.20],
             "ust10y": [0.65, 0.65, 0.63],
         }
@@ -38,6 +39,7 @@ def test_default_commodity_book_is_explicitly_a_spot_proxy_not_futures():
     positions = build_default_portfolio({"sp500": 5_000.0, "eurusd": 1.10})
     commodity_positions = [p for p in positions if p.desk == "Commodities"]
 
-    assert len(commodity_positions) == 1
-    assert commodity_positions[0].instrument == "WTI_SPOT_PROXY"
-    assert "not a listed futures contract" in commodity_positions[0].label
+    assert [p.instrument for p in commodity_positions] == [
+        "WTI_SPOT_PROXY", "BRENT_SPOT_PROXY"
+    ]
+    assert all("not a listed futures contract" in p.label for p in commodity_positions)
