@@ -139,6 +139,11 @@ def download_fred_series(
                 "missing_values": int(frame[name].isna().sum()),
                 "first_date": valid_dates.min().date().isoformat(),
                 "last_date": valid_dates.max().date().isoformat(),
+                "data_rights_note": (
+                    "S&P Dow Jones Indices copyright applies; FRED notes state 10 years of daily history "
+                    "and require checking permission before sharing SP500 data."
+                    if series_id == "SP500" else None
+                ),
             })
     finally:
         if owns_session:
@@ -151,9 +156,15 @@ def download_fred_series(
     business = pd.bdate_range(merged.index.min(), merged.index.max())
     merged = merged.reindex(business).ffill(limit=4).dropna().reset_index(names="date")
     validate_market_data(merged, require_oil=False)
+    coverage_warnings = [
+        f"{item['series_id']} first valid observation is {item['first_date']}, later than requested start {start}"
+        for item in manifest
+        if item["first_date"] > start
+    ]
     provenance = {
         "source": "Federal Reserve Bank of St. Louis FRED public graph CSV",
         "snapshot_id": snapshot_id,
+        "coverage_warnings": coverage_warnings,
         "raw_snapshot_directory": str(raw_dir),
         "retrieved_utc": datetime.now(timezone.utc).isoformat(),
         "start_requested": start,
