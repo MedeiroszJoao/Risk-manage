@@ -132,3 +132,12 @@ The comparison runner reports the Monte Carlo estimators against Fourier finite-
 
 
 The same coupled finite-difference stencil also reports Vanna \(\partial^2V/(\partial S_0\partial\sigma_0)\) and Volga \(\partial^2V/\partial\sigma_0^2\). These are Heston initial-volatility cross sensitivities, not implied-surface Vanna/Volga; bump truncation and time-grid bias remain outside their sampling intervals.
+
+
+## Discrete Heston delta hedging under separate pricing and scenario measures
+
+The new experiment values the short European option under risk-neutral Q parameters and simulates underlying paths under explicit physical/scenario total-return drift and variance parameters. On each hedge date, a vector-valued Lewis Fourier integral provides the Heston price and analytically differentiated spot Delta for every simulated spot/current-variance state. The benchmark strategy uses a Black–Scholes Delta with volatility frozen at the square root of Q long-run variance.
+
+The self-financing hedge cash account accrues at the flat risk-free rate, receives trapezoidal dividend cashflows, pays for stock rebalancing and proportional transaction costs, and settles the option payoff at maturity. Gross/net P&L, turnover, transaction costs, empirical inverse-CDF VaR and integrated fractional-boundary ES are reported. The physical inputs are hypothetical scenario parameters. VaR/ES describe the finite simulated P&L sample and are not regulatory capital or a market forecast.
+
+See [HESTON_MONTE_CARLO.md](HESTON_MONTE_CARLO.md) for the Fourier Delta derivation, cash-account equations, tail estimator and limitations.
