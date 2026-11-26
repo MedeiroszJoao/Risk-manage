@@ -73,6 +73,13 @@ def main() -> None:
         seed=args.seed,
         pilot_paths=pilot_paths,
     )
+    if qmc_bridge["total_valuation_points"] != pseudo_mc["n_paths"]:
+        raise RuntimeError("QMC and pseudo-MC valuation path budgets are not equal")
+    if qmc_bridge["pilot_points"] != pilot_paths:
+        raise RuntimeError("QMC and pseudo-MC independent pilot budgets are not equal")
+    if qmc_standard_order["total_valuation_points"] != pseudo_mc["n_paths"]:
+        raise RuntimeError("Standard-order QMC and pseudo-MC path budgets are not equal")
+
     fourier = heston_price_fourier(strike, maturity, params, "call")
     reference = fourier["price"]
     report = {
