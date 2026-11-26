@@ -259,8 +259,10 @@ def heston_delta_hedge_experiment(
             "net_loss_var_es": net_risk,
             "gross_loss_var_es": gross_risk,
             "average_transaction_cost": float(np.mean(result["transaction_costs"])),
+            "average_transaction_cost_future_value": float(
+                np.mean(result["transaction_costs_future_value"])
+            ),
             "average_turnover": float(np.mean(result["turnover"])),
-            "transaction_cost_total_mean": float(np.mean(result["transaction_costs"])),
             "net_pnl": net_pnl,
             "gross_pnl": gross_pnl,
         }
