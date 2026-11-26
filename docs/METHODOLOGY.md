@@ -157,3 +157,12 @@ See HESTON_MONTE_CARLO.md for the bridge construction, randomized error estimato
 Heston calibration results are now accompanied by three uncertainty analyses: a parametric quote bootstrap using Gaussian quote noise with standard deviation derived from bid–ask width; one-dimensional profile likelihood that re-optimizes all nuisance parameters at each fixed parameter value; and propagation of bootstrap parameter vectors into European price and spot-Delta distributions. Covariance/correlation matrices are reported in natural and transformed coordinates. Profile intervals use an asymptotic chi-square(1) likelihood-ratio cutoff and are grid approximations.
 
 This is conditional parameter uncertainty under an assumed quote-noise model and fixed Heston specification. It does not measure model risk, quote dependence, live market quality, curve uncertainty or physical-measure uncertainty. See [HESTON_UNCERTAINTY.md](HESTON_UNCERTAINTY.md) for the assumptions, equations and limitations.
+
+
+## Calibration uncertainty propagated into hedge loss
+
+The bootstrap parameter samples now flow through the Heston dynamic hedge. A single QE-M physical/scenario path set is generated and reused for all risk-neutral bootstrap draws. For each Q draw, the experiment recalculates the initial Fourier premium, state-dependent Fourier Delta and frozen-volatility BS comparator, then executes both self-financing hedge ledgers with the same funding/dividend/transaction-cost assumptions. Each draw produces gross/net P&L, turnover, transaction costs, empirical VaR and fractional-boundary ES.
+
+The distribution across bootstrap draws captures only risk-neutral calibration uncertainty conditional on the fixed physical scenario sample. It does not include physical parameter uncertainty, scenario resampling uncertainty or model risk. Within-draw VaR/ES precision remains governed by the finite path count and tail depth. The comparison is not a claim of universal Heston hedge superiority.
+
+See [HESTON_UNCERTAINTY.md](HESTON_UNCERTAINTY.md) for the nested design and interpretation limits.
