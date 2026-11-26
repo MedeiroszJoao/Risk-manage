@@ -113,3 +113,12 @@ The Monte Carlo implementation matches the first two conditional moments of the 
 Feller-condition status is diagnostic rather than a blanket parameter-rejection criterion. Numerical certification still requires positivity/no-arbitrage checks, characteristic-function identities, martingale tests, deterministic-variance recovery against Black–Scholes, Fourier/Monte Carlo comparison, and time-step convergence.
 
 See [HESTON_MONTE_CARLO.md](HESTON_MONTE_CARLO.md) for the full equations, conventions, implementation details, tests, and limitations. The reproducible benchmark uses hypothetical parameters and is not empirical quote calibration.
+
+
+## Risk-neutral Heston calibration
+
+The Heston model's five pricing parameters are estimated from an option-price cross-section, while spot, discounting and carry conventions are treated as supplied market inputs. The optimizer uses logarithmic coordinates for positive parameters and Fisher-z coordinates for correlation, with explicit transformed bounds. It supports mid-price loss and signed distance outside bid–ask intervals, weights residuals by a half-spread floor, uses robust trust-region least squares and deterministic multi-start.
+
+Quotes of a common maturity are priced together using vector-valued Lewis Fourier quadrature. The local weighted-residual Jacobian is decomposed by SVD; singular values, numerical rank and condition number flag weakly identified parameter combinations. This is not a confidence interval or proof of unique parameters. The calibration panel and its executable are synthetic, not actual option-market data.
+
+See [Heston Fourier, QE-M and calibration](HESTON_MONTE_CARLO.md) for the full derivation, conventions and limitations.
