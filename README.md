@@ -136,3 +136,8 @@ The uncertainty engine now carries each risk-neutral Heston bootstrap draw into 
 ## Crossed calibration/scenario uncertainty decomposition
 
 FE-010 evaluates every Heston calibration bootstrap draw over multiple independent physical/scenario seeds. Within each seed, the same Gaussian innovations are reused across Q draws; between seeds, independent scenarios are generated. A balanced two-way random-effects method-of-moments decomposition estimates calibration-parameter, scenario-sampling and interaction/within-cell Monte Carlo variance components for Heston ES, frozen-BS ES and paired ES/VaR differences. Run `python scripts/run_heston_nested_hedge_risk.py --bootstrap-replicates 20 --scenario-replicates 6 --paths 1000 --steps 8`. Small crossed designs are diagnostics; variance components are noisy and are not confidence intervals.
+
+
+## Crossed uncertainty decomposition for hedge tail risk
+
+The nested risk runner evaluates every Q calibration bootstrap draw under multiple independent physical/scenario seeds. Within each seed, Gaussian QE-M innovations are common across Q draws; across seeds, scenario innovations are independent. A balanced two-way random-effects method-of-moments decomposition separates calibration-parameter variance, scenario-sampling variance and residual interaction/within-cell Monte Carlo error for Heston ES/VaR, frozen-BS ES/VaR and paired differences. Run `python scripts/run_heston_nested_hedge_risk.py --bootstrap-replicates 20 --scenario-replicates 6 --paths 1000 --steps 8`. This is a method-of-moments diagnostic, not a confidence interval; small crossed designs and shallow ES tails produce noisy components.
