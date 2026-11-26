@@ -80,7 +80,10 @@ def test_bootstrap_parameter_draws_propagate_to_hedge_var_es():
     assert result["scenario"][
         "same_standard_normal_innovations_for_all_parameter_draws"
     ] is True
-    assert result["scenario"]["identical_path_states_for_all_parameter_draws"] is False
+    assert result["scenario"]["path_states_depend_on_draw_specific_initial_variance"] is True
+    assert result["scenario"][
+        "identical_parameter_draws_produce_identical_path_states"
+    ] is True
     for draw in result["draw_level_results"]:
         assert draw["physical_scenario_initial_variance"] == pytest.approx(
             draw["risk_neutral_parameters"]["variance0"]
