@@ -121,12 +121,26 @@ def download_eia_petroleum_spot_prices(
             if end_date:
                 params.append(("end", end_date))
 
-            response = http.get(EIA_PETROLEUM_SPOT_ENDPOINT, params=params, timeout=timeout)
-            response.raise_for_status()
+            try:
+                response = http.get(EIA_PETROLEUM_SPOT_ENDPOINT, params=params, timeout=timeout)
+            except requests.RequestException:
+                raise RuntimeError(
+                    f"EIA request failed for {series_id}; request details omitted to protect credentials"
+                ) from None
+            try:
+                response.raise_for_status()
+            except requests.HTTPError:
+                status = getattr(response, "status_code", "unknown")
+                raise RuntimeError(
+                    f"EIA returned HTTP {status} for {series_id}; response details omitted"
+                ) from None
+
             raw_bytes = response.content
+            page_path = raw_root / f"{series_id}_offset_{offset:08d}.json"
+            page_path.write_bytes(raw_bytes)
             try:
                 payload = response.json()
-            except (ValueError, json.JSONDecodeError) as exc:
+            except ValueError as exc:
                 raise ValueError(f"EIA returned invalid JSON for {series_id}, offset {offset}") from exc
 
             page_rows, page_total = _parse_page(payload, series_id)
@@ -142,8 +156,6 @@ def download_eia_petroleum_spot_prices(
                     f"at offset {offset}"
                 )
 
-            page_path = raw_root / f"{series_id}_offset_{offset:08d}.json"
-            page_path.write_bytes(raw_bytes)
             page_manifest.append({
                 "offset": offset,
                 "rows": len(page_rows),
