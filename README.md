@@ -23,7 +23,7 @@ Run it yourself with the deterministic seed to reproduce the figures.
 
 ## What is implemented
 
-- **Market data:** reproducible public FRED CSV downloader for S&P 500, VIX, EUR/USD, USD/JPY, WTI and US Treasury yields; source URLs, retrieval timestamps, missingness and SHA-256 hashes are recorded.
+- **Market data:** reproducible FRED CSV ingestion for S&P 500, VIX, FX and Treasury yields, plus EIA API v2 daily WTI Cushing (RWTC) and Europe Brent (RBRTE) spot prices. Raw EIA JSON pages, retrieval timestamps, pagination metadata, missingness and SHA-256 hashes are recorded.
 - **Four hypothetical desks:** Equity Options, FX Options, Rates and Commodities.
 - **Pricing:** Black–Scholes calls and puts, Garman–Kohlhagen FX calls, Black-76 forward options, a calibrated power-law SSVI implied-volatility surface, and a Heston stochastic-volatility engine with Lewis Fourier inversion, QE-M Monte Carlo bid–ask-aware cross-sectional calibration, and Heston Monte Carlo Greeks (pathwise Delta plus CRN Delta/Gamma/Vega).
 - **HPL / RTPL:** close-to-close full revaluation of positions held static during each daily interval; constant-maturity test books are rolled only after daily valuation. RTPL is independently built from sensitivities and explicitly selected risk factors.
@@ -46,9 +46,12 @@ python -m pip install -e ".[dev]"
 # Deterministic offline reference case
 python scripts/run_case.py --synthetic
 
-# Or retrieve public FRED series, then run the public-data case
+# Retrieve public FRED series, then run the public-data case
 python scripts/download_market_data.py --start 2007-01-01
 python scripts/run_case.py
+
+# Retrieve EIA WTI/Brent daily spot benchmarks (requires EIA_API_KEY)
+python scripts/download_eia_petroleum_spot.py --start 2007-01-01
 pytest -q
 ruff check src tests scripts
 ```
@@ -75,7 +78,8 @@ The branch now includes a power-law SSVI surface, total-variance calibration, Bl
 
 This is not a bank's regulatory FRTB implementation, supervisory-approved IMA model, production pricing library or capital calculator.
 
-- The public-data pipeline is implemented; the checked-in reference results are synthetic. Do not describe them as market observations or empirical backtesting.
+- The checked-in reference results are synthetic. The FRED and EIA collectors are separate ingestion pipelines; a successful live download and reviewed manifest are required before describing a result as empirical market evidence.
+- EIA RWTC / RBRTE are daily spot-price benchmarks, not listed futures settlements, executable quotes or forward curves. They cannot directly mark futures positions without an explicit basis/curve and contract-roll model.
 - HPL is available; bank Actual P&L (APL) is not. Backtesting is therefore HPL-only and not a complete regulatory backtest.
 - The synthetic history begins in 2016, and the public daily S&P 500 FRED series does not provide the full stress history back to 2007. The stress-capital outputs cannot satisfy that historical-data requirement.
 - Public closes are not RFET-qualifying evidence by themselves. No factor is certified modellable without independently reviewed transaction / committed-quote evidence.
@@ -88,6 +92,7 @@ This is not a bank's regulatory FRTB implementation, supervisory-approved IMA mo
 - [Methodology and formula map](docs/METHODOLOGY.md)
 - [Model card and limitations](docs/MODEL_CARD.md)
 - [Data provenance](docs/DATA_PROVENANCE.md)
+- [EIA petroleum spot ingestion](docs/EIA_DATA_INGESTION.md)
 - [Validation protocol](docs/VALIDATION_PROTOCOL.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Design specification](docs/superpowers/specs/2026-11-24-frtb-ima-risk-engine-design.md)
@@ -100,6 +105,7 @@ This is not a bank's regulatory FRTB implementation, supervisory-approved IMA mo
 - Basel Committee, [MAR33 — IMA capital requirements](https://www.bis.org/committees/bcbs/basel-framework/standard/mar/33/inforce/2023-01-01/published/2020-06-05)
 - ECB, [Guide to internal models, July 2025](https://www.bankingsupervision.europa.eu/ecb/pub/pdf/ssm.supervisory_guide202507.en.pdf)
 - Federal Reserve Bank of St. Louis, [FRED API documentation](https://fred.stlouisfed.org/docs/api/fred/)
+- U.S. Energy Information Administration, [API v2 documentation](https://www.eia.gov/opendata/documentation.php)
 
 ---
 Independent research case study. No affiliation with the BIS, ECB, Federal Reserve, FRED or any financial institution.
