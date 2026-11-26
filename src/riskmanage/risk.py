@@ -194,10 +194,23 @@ def select_stress_window(
     if window_days > observations:
         raise ValueError("window_days cannot exceed the number of observations")
 
+    if window_days < 10:
+        raise ValueError("window_days must be at least 10 for a 10-observation ES stress selector")
+
     portfolio_losses = np.sum(np.vstack(list(arrays.values())), axis=0)
-    cumulative = np.concatenate(([0.0], np.cumsum(portfolio_losses, dtype=float)))
-    window_totals = cumulative[window_days:] - cumulative[:-window_days]
-    start_index = int(np.argmax(window_totals))
+    candidate_count = observations - window_days + 1
+    candidate_es = np.empty(candidate_count, dtype=float)
+    candidate_cumulative = np.empty(candidate_count, dtype=float)
+    for candidate_start in range(candidate_count):
+        candidate = portfolio_losses[candidate_start : candidate_start + window_days]
+        ten_observation_losses = _ten_day_losses(candidate, horizon=10)
+        candidate_es[candidate_start] = historical_var_es(
+            ten_observation_losses, confidence
+        )["expected_shortfall"]
+        candidate_cumulative[candidate_start] = float(np.sum(candidate))
+
+    # np.argmax deterministically resolves equal-ES windows to the earliest start.
+    start_index = int(np.argmax(candidate_es))
     end_index = start_index + int(window_days) - 1
     factor_contributions = {
         name: float(values[start_index : end_index + 1].sum())
@@ -208,8 +221,9 @@ def select_stress_window(
         "end_index": end_index,
         "window_days": int(window_days),
         "confidence": float(confidence),
-        "portfolio_cumulative_loss": float(window_totals[start_index]),
+        "stress_es_10d": float(candidate_es[start_index]),
+        "portfolio_cumulative_loss": float(candidate_cumulative[start_index]),
         "factor_cumulative_losses": factor_contributions,
-        "selection_method": "maximum_cumulative_sum_of_aligned_factor_losses",
+        "selection_method": "maximum_historical_10_observation_expected_shortfall",
         "tie_break": "earliest_window",
     }
