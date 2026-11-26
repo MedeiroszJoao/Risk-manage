@@ -204,3 +204,58 @@ def test_invalid_date_range_and_page_size_are_rejected(tmp_path):
             page_size=5001,
             raw_dir=tmp_path / "size",
         )
+
+
+def test_eia_rejects_rows_outside_requested_date_bounds(tmp_path):
+    session = FakeSession({
+        ("RWTC", 0): {
+            "response": {"total": "1", "data": [_row("2023-12-31", 70.0, "RWTC")]}
+        }
+    })
+    with pytest.raises(ValueError, match="before requested start date"):
+        download_eia_petroleum_spot_prices(
+            start="2024-01-01",
+            end="2024-01-31",
+            series={"wti": "RWTC"},
+            api_key="test-key",
+            session=session,
+            raw_dir=tmp_path,
+        )
+
+
+def test_eia_rejects_empty_series(tmp_path):
+    session = FakeSession({
+        ("RWTC", 0): {"response": {"total": "0", "data": []}}
+    })
+    with pytest.raises(ValueError, match="no observations"):
+        download_eia_petroleum_spot_prices(
+            series={"wti": "RWTC"},
+            api_key="test-key",
+            session=session,
+            raw_dir=tmp_path,
+        )
+
+
+def test_each_eia_download_gets_a_distinct_raw_snapshot(tmp_path):
+    pages = {
+        ("RWTC", 0): {
+            "response": {"total": "1", "data": [_row("2024-01-02", 70.0, "RWTC")]}
+        }
+    }
+    first_frame, first_manifest = download_eia_petroleum_spot_prices(
+        series={"wti": "RWTC"},
+        api_key="test-key",
+        session=FakeSession(pages),
+        raw_dir=tmp_path / "raw",
+    )
+    second_frame, second_manifest = download_eia_petroleum_spot_prices(
+        series={"wti": "RWTC"},
+        api_key="test-key",
+        session=FakeSession(pages),
+        raw_dir=tmp_path / "raw",
+    )
+
+    assert first_manifest["snapshot_id"] != second_manifest["snapshot_id"]
+    assert Path(first_manifest["raw_snapshot_directory"]).is_dir()
+    assert Path(second_manifest["raw_snapshot_directory"]).is_dir()
+    assert len(list((tmp_path / "raw").rglob("*.json"))) == 2
