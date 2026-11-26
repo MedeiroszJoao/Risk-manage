@@ -3,6 +3,7 @@ import pytest
 
 from riskmanage.data import REQUIRED_COLUMNS, load_market_data, validate_market_data
 from riskmanage.fixtures import build_synthetic_market_data
+from riskmanage.pnl import enrich_market_data
 
 
 def test_fixture_is_deterministic():
@@ -37,3 +38,21 @@ def test_load_market_data_checks_required_columns(tmp_path):
     pd.DataFrame({"date": ["2020-01-01"], "sp500": [100.0]}).to_csv(path, index=False)
     with pytest.raises(ValueError, match="missing"):
         load_market_data(path)
+
+
+def test_negative_wti_spot_is_valid_and_volatility_estimator_remains_finite():
+    frame = build_synthetic_market_data(n=300)
+    frame.loc[150, "wti"] = -36.98
+    validate_market_data(frame)
+
+    enriched = enrich_market_data(frame)
+    assert enriched.loc[150, "wti"] == -36.98
+    assert enriched["wti_vol"].notna().all()
+    assert enriched["wti_vol"].map(lambda value: pd.notna(value) and value >= 0).all()
+
+
+def test_nonpositive_fx_and_equity_levels_are_still_rejected():
+    frame = build_synthetic_market_data(n=300)
+    frame.loc[10, "eurusd"] = 0
+    with pytest.raises(ValueError, match="FX rates must be positive"):
+        validate_market_data(frame)
