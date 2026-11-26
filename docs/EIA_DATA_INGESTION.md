@@ -44,7 +44,7 @@ The EIA-only history can be used independently of the full four-desk panel. FRED
 python scripts/run_commodity_spot_case.py
 ```
 
-This reads the normalized EIA CSV and uses only dates with actual WTI **and** Brent observations (inner join; no forward fill). The default hypothetical book is long 150,000 barrels of WTI spot and short 100,000 barrels of Europe Brent spot. It writes daily HPL/RTPL and residuals to `reports/generated/commodity_spot_pnl.csv`, and daily / 10-observation historical VaR and ES plus a rolling-window stress-period selection to `reports/generated/commodity_spot_risk.json`.
+This reads the normalized EIA CSV and uses only dates with actual WTI **and** Brent observations (inner join; no forward fill). The default hypothetical book is long 150,000 barrels of WTI spot and short 100,000 barrels of Europe Brent spot. It writes daily HPL/RTPL and residuals to `reports/generated/commodity_spot_pnl.csv`, and daily / 10-observation historical VaR and ES plus a 250-observation stress window selected by maximum 97.5% 10-observation ES to `reports/generated/commodity_spot_risk.json`.
 
 This standalone output is a descriptive spot-risk diagnostic, not an aggregated four-desk portfolio or regulatory IMA result. Quantities are hypothetical; no futures basis, forward curve, expiry, roll, financing or transaction costs are modeled.
 
