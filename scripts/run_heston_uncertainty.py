@@ -20,11 +20,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Quantify Heston calibration uncertainty with bootstrap and profile likelihood."
     )
-    parser.add_argument("--replicates", type=int, default=40)
-    parser.add_argument("--profile-points", type=int, default=7)
-    parser.add_argument("--starts", type=int, default=2)
-    parser.add_argument("--max-nfev", type=int, default=100)
-    parser.add_argument("--bootstrap-max-nfev", type=int, default=80)
+    parser.add_argument("--replicates", type=int, default=250)
+    parser.add_argument("--profile-points", type=int, default=9)
+    parser.add_argument("--starts", type=int, default=3)
+    parser.add_argument("--max-nfev", type=int, default=120)
+    parser.add_argument("--bootstrap-max-nfev", type=int, default=100)
     parser.add_argument("--seed", type=int, default=20261126)
     parser.add_argument(
         "--output",
