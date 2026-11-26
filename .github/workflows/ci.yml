@@ -66,3 +66,12 @@ jobs:
         with:
           name: heston-delta-hedging-python-${{ matrix.python-version }}
           path: /tmp/heston_delta_hedging.json
+      - name: Run Heston randomized QMC benchmark
+        run: |
+          python scripts/run_heston_qmc_benchmark.py --sobol-power 7 --scrambles 4 --steps 16 --output /tmp/heston_qmc_benchmark.json
+          python -m json.tool /tmp/heston_qmc_benchmark.json > /dev/null
+      - name: Upload Heston randomized QMC report
+        uses: actions/upload-artifact@v4
+        with:
+          name: heston-rqmc-python-${{ matrix.python-version }}
+          path: /tmp/heston_qmc_benchmark.json
