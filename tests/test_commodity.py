@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -129,8 +130,8 @@ def test_commodity_spot_risk_outputs_are_saved_with_reproducible_pnl_hash(tmp_pa
 def test_commodity_spot_case_calculates_ten_observation_risk_and_stress_window():
     dates = pd.bdate_range("2007-01-02", periods=310)
     phase = pd.Series(range(len(dates)), dtype=float).to_numpy()
-    wti = 65.0 + 3.5 * pd.Series(phase).apply(lambda x: __import__("math").sin(x / 8.0)).to_numpy()
-    brent = 69.0 + 2.7 * pd.Series(phase).apply(lambda x: __import__("math").sin(x / 8.0 + 0.15)).to_numpy()
+    wti = 65.0 + 3.5 * np.sin(phase / 8.0)
+    brent = 69.0 + 2.7 * np.sin(phase / 8.0 + 0.15)
     # Include the historically possible negative WTI spot observation.
     wti[200] = -36.98
     rows = []
