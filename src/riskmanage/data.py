@@ -40,7 +40,7 @@ def validate_market_data(frame: pd.DataFrame, *, require_oil: bool = True) -> No
     strictly_positive = [name for name in STRICTLY_POSITIVE_COLUMNS if name in numeric.columns]
     if (numeric[strictly_positive] <= 0).any().any():
         raise ValueError(
-            "equity index levels, FX rates and Brent spot must be positive; WTI spot may be zero or negative"
+            "equity index levels and FX rates must be positive; Brent spot must be positive; WTI spot may be zero or negative"
         )
     if (numeric["vix"] <= 0).any():
         raise ValueError("VIX observations must be positive")
