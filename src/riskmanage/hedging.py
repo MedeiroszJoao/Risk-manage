@@ -142,6 +142,7 @@ def heston_delta_hedge_experiment(
     confidence_level: float = 0.975,
     seed: int = 20261125,
     psi_c: float = 1.5,
+    include_path_samples: bool = False,
 ) -> dict:
     """Compare Heston-model delta hedging with a frozen-vol Black-Scholes hedge.
 
@@ -171,6 +172,8 @@ def heston_delta_hedge_experiment(
         raise ValueError("transaction_cost_bps must be finite and non-negative")
     if not 0.5 < confidence_level < 1.0:
         raise ValueError("confidence_level must lie in (0.5, 1)")
+    if not isinstance(include_path_samples, bool):
+        raise ValueError("include_path_samples must be boolean")
     if not np.isclose(pricing_params.spot, physical_params.spot):
         raise ValueError("pricing and physical spot must agree")
     if not np.isclose(pricing_params.variance0, physical_params.variance0):
@@ -274,7 +277,7 @@ def heston_delta_hedge_experiment(
         summary.pop("net_pnl")
         summary.pop("gross_pnl")
 
-    return {
+    output = {
         "classification": "synthetic_physical_scenario_not_market_backtest",
         "option": {
             "type": option_type,
@@ -324,3 +327,15 @@ def heston_delta_hedge_experiment(
             "scenario sample only; they are not regulatory capital or market-calibrated risk measures."
         ),
     }
+    if include_path_samples:
+        output["path_samples"] = {
+            "heston_fourier_delta": {
+                "net_losses": (-heston_result["net_pnl"]).tolist(),
+                "gross_losses": (-heston_result["gross_pnl"]).tolist(),
+            },
+            "frozen_black_scholes_delta": {
+                "net_losses": (-bs_result["net_pnl"]).tolist(),
+                "gross_losses": (-bs_result["gross_pnl"]).tolist(),
+            },
+        }
+    return output
