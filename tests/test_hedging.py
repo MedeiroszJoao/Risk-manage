@@ -102,3 +102,32 @@ def test_hedging_rejects_inconsistent_initial_state_and_insufficient_tail_sample
             n_paths=20,
             n_steps=4,
         )
+
+
+def test_constant_volatility_heston_delta_matches_frozen_black_scholes_hedge():
+    deterministic = parameter_set(
+        variance0=0.04,
+        long_run_variance=0.04,
+        vol_of_variance=0.0,
+        correlation=0.0,
+    )
+    result = heston_delta_hedge_experiment(
+        deterministic,
+        deterministic,
+        strike=100.0,
+        maturity=0.5,
+        physical_total_return=deterministic.risk_free_rate,
+        n_paths=250,
+        n_steps=5,
+        transaction_cost_bps=2.0,
+        confidence_level=0.95,
+        seed=121,
+    )
+    heston = result["strategies"]["heston_fourier_delta"]
+    black_scholes = result["strategies"]["frozen_black_scholes_delta"]
+    assert heston["net_pnl_mean"] == pytest.approx(
+        black_scholes["net_pnl_mean"], abs=2e-7
+    )
+    assert heston["net_loss_var_es"]["expected_shortfall"] == pytest.approx(
+        black_scholes["net_loss_var_es"]["expected_shortfall"], abs=2e-7
+    )
