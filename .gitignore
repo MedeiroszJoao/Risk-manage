@@ -1,6 +1,8 @@
 # Local market-data snapshots and source payloads
 data/raw/
 data/processed/
+data/market_data.csv
+data/source_manifest.json
 
 # Generated research reports
 reports/generated/
