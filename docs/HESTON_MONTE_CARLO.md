@@ -375,6 +375,36 @@ Let \(\sigma_0=\sqrt{v_0}\). The code perturbs the initial volatility while hold
 
 This is \(\partial V/\partial\sigma_0\), a model-parameter sensitivity. It is **not** the usual implied-volatility Vega \(\partial V/\partial\sigma_{BS}\), nor a parallel shift of an SSVI surface. The parameter convention is explicitly included in every report.
 
+### Cross-Greeks: Vanna and Volga
+
+The same coupled spot/initial-volatility simulations also estimate
+
+\[
+\operatorname{Vanna}=\frac{\partial^2 V}{\partial S_0\,\partial\sigma_0},
+\qquad
+\operatorname{Volga}=\frac{\partial^2 V}{\partial\sigma_0^2}.
+\]
+
+With spot bump h and initial-volatility bump epsilon, the mixed estimator is
+
+\[
+\widehat{\operatorname{Vanna}}=
+\frac{
+V(S_0+h,\sigma_0+\epsilon)-V(S_0+h,\sigma_0-\epsilon)
+-V(S_0-h,\sigma_0+\epsilon)+V(S_0-h,\sigma_0-\epsilon)
+}{4h\epsilon},
+\]
+
+and Volga is
+
+\[
+\widehat{\operatorname{Volga}}=
+\frac{V(S_0,\sigma_0+\epsilon)-2V(S_0,\sigma_0)
++V(S_0,\sigma_0-\epsilon)}{\epsilon^2}.
+\]
+
+Both use common random numbers across the full bump stencil. They are numerical sensitivities to the initial Heston volatility parameter; they are not the cross-Greeks of a calibrated implied-volatility surface. The estimates have finite-difference truncation bias and may be noisy when the chosen bumps are too small. Report bump stability, sampling errors and time-grid sensitivity before using them in a P&L approximation.
+
 ### Sampling uncertainty and limits
 
 Antithetic paths are pair-averaged before the standard error is computed. Each reported Greek includes its estimate, standard error and Student-t confidence interval over the independent pair averages. The interval is conditional on the QE-M discretization and the chosen finite-difference bump. It does not include time-discretization bias, finite-difference truncation bias, parameter uncertainty or model risk.
