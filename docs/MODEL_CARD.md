@@ -7,7 +7,8 @@ Educational quantitative market-risk modeling and validation research for a quan
 Production trading, valuation, hedging, risk limits, regulatory capital reporting, supervisory submission, investment advice or lending decisions.
 
 ## Inputs
-- Public FRED daily series: SP500, VIXCLS, DEXUSEU, DEXJPUS, DCOILWTICO, DGS2 and DGS10.
+- Public FRED daily series: SP500, VIXCLS, DEXUSEU, DEXJPUS, DGS2 and DGS10.
+- Public EIA daily crude-oil spot benchmarks: WTI Cushing and Europe Brent (via PET.zip bulk archive).
 - Seeded synthetic factor history for offline tests.
 - Hypothetical constant-maturity positions across Equity Options, FX Options, Rates and Commodities.
 
@@ -18,7 +19,7 @@ HPL / RTPL, VaR, ES, backtesting diagnostics, PLA zones, liquidity-adjusted ES, 
 - Static positions during each daily HPL interval, followed by a constant-maturity roll at the next valuation point.
 - Full HPL repricing.
 - Delta-only RTPL versus a more complete per-factor delta / gamma / vega approximation.
-- Black–Scholes, Garman–Kohlhagen, zero-coupon Treasury proxies and a WTI Cushing linear spot-proxy exposure (not listed futures).
+- Black–Scholes, Garman–Kohlhagen, zero-coupon Treasury proxies and long WTI / short Europe Brent linear spot-proxy exposures (not listed futures).
 - 250-day rolling historical VaR and 250-observation PLA.
 
 ## Known limitations
