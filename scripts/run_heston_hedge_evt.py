@@ -23,6 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--thresholds", type=float, nargs="+", default=[0.90, 0.925, 0.95])
     parser.add_argument("--min-exceedances", type=int, default=50)
     parser.add_argument("--bootstrap", type=int, default=200)
+    parser.add_argument("--full-sample-bootstrap", type=int, default=100)
     parser.add_argument("--seed", type=int, default=20261126)
     parser.add_argument(
         "--output",
@@ -89,6 +90,7 @@ def main() -> None:
                 threshold_quantiles=args.thresholds,
                 min_exceedances=args.min_exceedances,
                 n_bootstrap=args.bootstrap,
+                n_full_sample_bootstrap=args.full_sample_bootstrap,
                 seed=args.seed + 10_000 * strategy_index + 100 * measure_index,
             )
 
@@ -119,7 +121,8 @@ def main() -> None:
             "confidence_levels": args.confidence_levels,
             "threshold_quantiles": args.thresholds,
             "minimum_exceedances": args.min_exceedances,
-            "bootstrap_replicates": args.bootstrap,
+            "conditional_exceedance_bootstrap_replicates": args.bootstrap,
+            "full_sample_iid_bootstrap_replicates": args.full_sample_bootstrap,
             "bootstrap_method": (
                 "non-parametric resampling of fitted GPD exceedances, conditional on "
                 "empirical threshold and exceedance count"
