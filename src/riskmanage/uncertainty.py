@@ -68,6 +68,10 @@ def _quote_panel_prices(
 def _quote_noise_scales(
     quotes: Sequence[HestonOptionQuote], min_price_scale: float
 ) -> np.ndarray:
+    if not quotes:
+        raise ValueError("at least one quote is required")
+    if not np.isfinite(min_price_scale) or min_price_scale <= 0.0:
+        raise ValueError("min_price_scale must be finite and positive")
     if any(quote.bid is None or quote.ask is None for quote in quotes):
         raise ValueError(
             "parameter uncertainty requires bid and ask on every quote"
@@ -78,6 +82,21 @@ def _quote_noise_scales(
     # A uniform latent price within the quoted spread has variance spread^2/12.
     # min_price_scale is the same price-scale floor used by the calibrator.
     return np.maximum(half_spreads, min_price_scale) / math.sqrt(3.0)
+
+
+def _validate_market_conventions(
+    market: HestonParameters, fitted: HestonParameters
+) -> None:
+    if not np.isclose(market.spot, fitted.spot, rtol=0.0, atol=1e-12):
+        raise ValueError("market and fitted spot must agree")
+    if not np.isclose(
+        market.risk_free_rate, fitted.risk_free_rate, rtol=0.0, atol=1e-12
+    ):
+        raise ValueError("market and fitted risk-free rates must agree")
+    if not np.isclose(
+        market.dividend_yield, fitted.dividend_yield, rtol=0.0, atol=1e-12
+    ):
+        raise ValueError("market and fitted dividend yields must agree")
 
 
 def _parameter_dict(params: HestonParameters) -> dict:
@@ -154,6 +173,7 @@ def bootstrap_heston_calibration(
         raise ValueError("n_starts and max_nfev must be positive")
     if fitted_parameters.vol_of_variance <= 0.0:
         raise ValueError("fitted vol_of_variance must be positive for calibration")
+    _validate_market_conventions(market, fitted_parameters)
 
     noise_sd = _quote_noise_scales(quotes, min_price_scale) * noise_scale
     fitted_prices = _quote_panel_prices(quotes, fitted_parameters)
@@ -312,6 +332,9 @@ def profile_heston_parameter(
         raise ValueError("parameter_grid must contain at least three finite values")
     if np.unique(grid).size != grid.size:
         raise ValueError("parameter_grid values must be unique")
+    if np.any(np.diff(grid) <= 0.0):
+        raise ValueError("parameter_grid must be strictly increasing")
+    _validate_market_conventions(market, fitted_parameters)
     if not 0.5 < confidence_level < 1.0:
         raise ValueError("confidence_level must lie in (0.5, 1)")
     if max_nfev < 1:
@@ -398,6 +421,24 @@ def profile_heston_parameter(
         if accepted
         else None
     )
+    accepted_indices = [
+        index for index, point in enumerate(points)
+        if point["inside_likelihood_ratio_set"]
+    ]
+    accepted_segments = []
+    if accepted_indices:
+        segment_start = accepted_indices[0]
+        previous = accepted_indices[0]
+        for index in accepted_indices[1:]:
+            if index != previous + 1:
+                accepted_segments.append(
+                    [float(grid[segment_start]), float(grid[previous])]
+                )
+                segment_start = index
+            previous = index
+        accepted_segments.append(
+            [float(grid[segment_start]), float(grid[previous])]
+        )
     grid_truncated = bool(
         accepted
         and (
@@ -413,6 +454,8 @@ def profile_heston_parameter(
         "likelihood_ratio_cutoff_delta_chi_square": cutoff,
         "minimum_profile_chi_square": float(minimum),
         "profile_interval_on_grid": interval,
+        "accepted_grid_values": [float(value) for value in accepted],
+        "accepted_grid_segments": accepted_segments,
         "grid_truncated_at_boundary": grid_truncated,
         "points": points,
         "noise_model": (
