@@ -16,8 +16,8 @@ from riskmanage.risk import historical_var_es, rolling_historical_var, liquidity
 from riskmanage.capital import select_stress_window, build_ima_capital
 from riskmanage.validation import backtest_var, pla_test, rfet_diagnostic
 
-LIQ_HORIZONS={"sp500":10,"equity_vol":20,"eurusd":10,"eurusd_vol":40,"ust2y":10,"ust10y":10,"wti":20}
-RISK_CLASSES={"sp500":"equity","equity_vol":"equity","eurusd":"fx","eurusd_vol":"fx","ust2y":"rates","ust10y":"rates","wti":"commodities"}
+LIQ_HORIZONS={"sp500":10,"equity_vol":20,"eurusd":10,"eurusd_vol":40,"ust2y":10,"ust10y":10,"wti":20,"brent":20}
+RISK_CLASSES={"sp500":"equity","equity_vol":"equity","eurusd":"fx","eurusd_vol":"fx","ust2y":"rates","ust10y":"rates","wti":"commodities","brent":"commodities"}
 
 def json_safe(obj):
     if isinstance(obj,dict): return {str(k):json_safe(v) for k,v in obj.items()}
@@ -39,16 +39,17 @@ def build_scenario_reports(market):
       "equity_crash":{"sp500":.75,"vix_add":25},
       "fx_dislocation":{"eurusd":.90,"eurusd_vol":1.75,"usdjpy":1.08,"usdjpy_vol":1.50},
       "rates_bear_steepener":{"ust2y_add":2.0,"ust10y_add":1.5},
-      "oil_collapse":{"wti":.60,"wti_vol":1.50},
+      "oil_collapse":{"wti":.60,"brent":.65,"wti_vol":1.50,"brent_vol":1.40},
       "combined_tail":{"sp500":.75,"vix_add":25,"eurusd":.90,"eurusd_vol":1.75,
-        "usdjpy":1.08,"usdjpy_vol":1.50,"ust2y_add":2.0,"ust10y_add":1.5,"wti":.60,"wti_vol":1.50}
+        "usdjpy":1.08,"usdjpy_vol":1.50,"ust2y_add":2.0,"ust10y_add":1.5,
+        "wti":.60,"brent":.65,"wti_vol":1.50,"brent_vol":1.40}
     }
     rows=[]
     for name,shock in scenarios.items():
         state=dict(current)
-        for factor in ("sp500","eurusd","usdjpy","wti"):
+        for factor in ("sp500","eurusd","usdjpy","wti","brent"):
             if factor in shock: state[factor]*=shock[factor]
-        for factor in ("eurusd_vol","usdjpy_vol","wti_vol"):
+        for factor in ("eurusd_vol","usdjpy_vol","wti_vol","brent_vol"):
             if factor in shock: state[factor]=min(state[factor]*shock[factor],2.0)
         if "vix_add" in shock:
             state["vix"]=min(state["vix"]+shock["vix_add"],90.0)
