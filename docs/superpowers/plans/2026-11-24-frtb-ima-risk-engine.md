@@ -4,7 +4,7 @@
 
 **Goal:** Build an auditable FRTB-inspired multi-asset market-risk validation and capital research engine in Risk-manage.
 
-**Architecture:** Separate data ingestion, instrument valuation, P&L production, risk metrics, validation and capital aggregation. A deterministic fixture enables offline tests; real FRED series are retrieved separately.
+**Architecture:** Separate data ingestion, instrument valuation, P&L production, risk metrics, validation and capital aggregation. A deterministic fixture enables offline tests; public FRED equity/FX/rates and EIA PET bulk WTI/Brent spot series are retrieved separately and combined through a provenance-preserving panel builder.
 
 **Tech Stack:** Python 3.11+, NumPy, pandas, SciPy, requests, matplotlib, pytest, Ruff.
 
@@ -21,7 +21,7 @@
 ## Review Focus
 - Missing / stale market data: fail explicitly or flag; never hide material gaps.
 - Volatility look-ahead: only information available at valuation close can price that close.
-- Non-positive / implausible prices and yields: reject or report, don't silently coerce.
+- Non-positive / implausible prices and yields: reject or report, don't silently coerce. Exception: finite zero/negative WTI Cushing spot prices are valid historical observations and must be preserved; Brent, equity indices and FX levels remain positive.
 - Nonlinear options: HPL full-revalues; delta-only RTPL can fail PLA.
 - Sparse tail sample: report tail observation count; don't overstate precision.
 
@@ -29,7 +29,7 @@
 
 ### Task 1: Data contracts, FRED ingestion and fixture
 **Files:** `src/riskmanage/data.py`, `src/riskmanage/fixtures.py`, `scripts/download_market_data.py`, `tests/test_data.py`.
-**Interfaces:** `load_market_data(path)`, `build_synthetic_market_data(n=1800, seed=20261124)`, `download_fred_series(start, end, series_ids)`. Required columns: date, sp500, vix, eurusd, usdjpy, wti, ust2y, ust10y.
+**Interfaces:** `load_market_data(path)`, `build_synthetic_market_data(n=1800, seed=20261124)`, `download_fred_series(start, end, series_ids)`. Required columns: date, sp500, vix, eurusd, usdjpy, wti, brent, ust2y, ust10y.
 - [ ] Write tests for schema, reproducibility, duplicate dates, missing columns, non-positive prices and gaps.
 - [ ] Run tests and verify failure.
 - [ ] Implement strict data contract, seeded fixture, FRED CSV downloader, source manifest and hashes.
@@ -67,3 +67,17 @@
 - [ ] Write formula-based reviewer report, including desk failure diagnosis and limitations.
 - [ ] Run `pytest -q`, `ruff check .`, `python scripts/run_case.py --synthetic`.
 - [ ] Inspect final tree and open draft PR; do not merge.
+
+
+## Implementation follow-up — public oil-data integration (2026-11-26)
+
+The market-data contract was extended after the initial implementation:
+
+- FRED supplies S&P 500, VIX, EUR/USD, USD/JPY and US 2Y/10Y Treasury yields.
+- EIA PET.zip supplies both WTI Cushing and Europe Brent daily spot benchmarks from the same official bulk snapshot; no API key is required.
+- The combined market panel aligns source observations on a business-day calendar and forward-fills at most four business days; raw EIA observations are preserved separately without imputation.
+- WTI spot may be finite and non-positive; its volatility proxy uses additive price changes normalized by a lagged positive scale. Brent, FX and equity index levels remain positive.
+- The commodities test book now has long WTI and short Brent linear spot proxies, not listed futures. Futures basis, contract expiry and roll modeling remain out of scope.
+- The synthetic Brent factor is correlated with WTI using an additional innovation while preserving the original random draw for all previously existing factors, so the original deterministic equity/FX/rates/WTI reference paths remain unchanged.
+
+The acceptance boundary remains unchanged: mocked tests and passing CI do not substitute for the first live PET.zip retrieval and review of the final EIA/FRED market panel.
