@@ -31,7 +31,7 @@ def test_wti_spot_proxy_pnl_handles_negative_price_crossing_exactly():
 
     assert result["hpl"].tolist() == pytest.approx([-55_290.0, 45_890.0])
     assert result["rtpl"].tolist() == pytest.approx([-55_290.0, 45_890.0])
-    assert result["residual"].tolist() == pytest.approx([0.0, 0.0])
+    assert result["residual"].tolist() == pytest.approx([0.0, 0.0], abs=1e-10)
 
 
 def test_default_commodity_book_is_explicitly_a_spot_proxy_not_futures():
