@@ -25,7 +25,7 @@ Run it yourself with the deterministic seed to reproduce the figures.
 
 - **Market data:** reproducible public FRED CSV downloader for S&P 500, VIX, EUR/USD, USD/JPY, WTI and US Treasury yields; source URLs, retrieval timestamps, missingness and SHA-256 hashes are recorded.
 - **Four hypothetical desks:** Equity Options, FX Options, Rates and Commodities.
-- **Pricing:** Black–Scholes calls and puts, Garman–Kohlhagen FX calls, Black-76 forward options, a calibrated power-law SSVI implied-volatility surface, and a Heston stochastic-volatility engine with Lewis Fourier inversion and QE-M Monte Carlo.
+- **Pricing:** Black–Scholes calls and puts, Garman–Kohlhagen FX calls, Black-76 forward options, a calibrated power-law SSVI implied-volatility surface, and a Heston stochastic-volatility engine with Lewis Fourier inversion, QE-M Monte Carlo and bid–ask-aware cross-sectional calibration.
 - **HPL / RTPL:** close-to-close full revaluation of positions held static during each daily interval; constant-maturity test books are rolled only after daily valuation. RTPL is independently built from sensitivities and explicitly selected risk factors.
 - **VaR backtesting:** rolling 97.5% / 99% historical VaR, exceptions, Kupiec unconditional-coverage and Christoffersen independence diagnostics.
 - **PLA:** the latest 250 matched observations, Spearman rank correlation, empirical CDF / KS distance and Basel-style green / amber / red zones.
@@ -58,6 +58,14 @@ Generated files are written to `reports/generated/`: daily HPL/RTPL, factor attr
 ## Financial engineering expansion — Heston stochastic volatility and advanced Monte Carlo
 
 The branch now includes Heston risk-neutral dynamics, an affine characteristic function, Lewis square-root Fourier inversion, and an Andersen-style QE-M Monte Carlo engine. Simulation includes antithetic path pairing, an independently estimated discounted-stock control variate, standard errors, confidence intervals, a stock-martingale diagnostic and explicit separation of sampling error from time-discretization bias. The reproducible synthetic-parameter benchmark is run with `python scripts/run_heston_benchmark.py`; derivation and numerical conventions are in [Heston Fourier and QE-M documentation](docs/HESTON_MONTE_CARLO.md).
+
+
+
+## Heston calibration and identifiability
+
+The five risk-neutral Heston parameters can now be calibrated to a cross-sectional European option panel. The objective supports weighted mid-price least squares or distance outside bid–ask intervals, deterministic multi-start, robust losses, transformed parameter constraints, and local Jacobian SVD diagnostics for rank and conditioning. Same-expiry quotes use vector-valued Lewis quadrature. The deterministic synthetic quote panel is reproduced with `python scripts/run_heston_calibration.py`; see [Heston Fourier, QE-M and calibration](docs/HESTON_MONTE_CARLO.md).
+
+The calibration is explicitly marked synthetic. No live option quotes, timestamped quote governance, bootstrapped curves, profile likelihood or parameter confidence intervals are claimed. A good price fit is not proof that all five parameters are identifiable.
 
 ## Financial engineering expansion — SSVI volatility surface
 
