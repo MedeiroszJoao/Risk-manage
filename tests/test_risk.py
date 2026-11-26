@@ -106,23 +106,23 @@ def test_historical_var_es_rejects_invalid_confidence():
 
 
 def test_stress_window_selects_maximum_10_observation_es_and_earliest_tie():
-    losses = np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=float)
-    result = select_stress_window({"desk": losses}, window_days=10, confidence=0.75)
+    losses = np.array([0] * 10 + [1] * 20, dtype=float)
+    result = select_stress_window({"desk": losses}, window_days=20, confidence=0.75)
 
     candidates = [
-        historical_var_es(np.convolve(losses[i : i + 10], np.ones(10), mode="valid"), 0.75)["expected_shortfall"]
+        historical_var_es(np.convolve(losses[i : i + 20], np.ones(10), mode="valid"), 0.75)["expected_shortfall"]
         for i in range(11)
     ]
     assert result["stress_es_10d"] == pytest.approx(max(candidates))
     assert result["start_index"] == candidates.index(max(candidates))
     assert result["selection_method"] == "maximum_historical_10_observation_expected_shortfall"
 
-    tied = select_stress_window({"desk": np.ones(20)}, window_days=10)
+    tied = select_stress_window({"desk": np.ones(30)}, window_days=20)
     assert tied["start_index"] == 0
     assert tied["tie_break"] == "earliest_window"
 
 
 def test_stress_window_rejects_window_shorter_than_es_horizon():
-    with pytest.raises(ValueError, match="at least 10"):
-        select_stress_window({"desk": np.arange(20, dtype=float)}, window_days=9)
+    with pytest.raises(ValueError, match="at least 11"):
+        select_stress_window({"desk": np.arange(20, dtype=float)}, window_days=10)
 
