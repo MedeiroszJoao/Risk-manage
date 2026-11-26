@@ -318,7 +318,7 @@ This distinction is consistent with the Heston calibration literature: the inver
 
 ## Monte Carlo Greeks under Heston
 
-The Heston simulation now reports three sensitivities using distinct estimators. They must not be conflated:
+The Heston simulation now reports five sensitivities using distinct estimators. They must not be conflated:
 
 - **Delta, pathwise:** a direct payoff derivative.
 - **Delta and Gamma, CRN finite differences:** central bump-and-revalue using common random numbers.
@@ -417,7 +417,7 @@ Run:
 python scripts/run_heston_greeks.py --paths 50000 --steps 96
 \`\`\`
 
-The JSON report includes pathwise Delta, CRN Delta, CRN Gamma, initial-volatility Vega, sampling errors, bumps and Fourier finite-difference reference values.
+The JSON report includes pathwise Delta, CRN Delta, Gamma, initial-volatility Vega, Vanna and Volga, sampling errors, bumps and Fourier finite-difference reference values.
 
 ### Primary reference
 
