@@ -24,7 +24,7 @@ Run it yourself with the deterministic seed to reproduce the figures.
 ## What is implemented
 
 - **Market data:** one integrated public-data pipeline combines FRED daily S&P 500, VIX, FX and Treasury series with EIA Petroleum bulk WTI Cushing (PET.RWTC.D) and Europe Brent (PET.RBRTE.D) spot prices. No API key is required. The exact EIA ZIP snapshot, retrieval metadata, series coverage, null counts and SHA-256 hashes are retained; negative WTI spot prices are preserved.
-- **Four hypothetical desks:** Equity Options, FX Options, Rates and Commodities.
+- **Four hypothetical desks:** Equity Options, FX Options, Rates and Commodities. The commodities desk also has an independent EIA-only long-history diagnostic so its historical window is not truncated by the shorter FRED S&P 500 series.
 - **Pricing:** Black–Scholes calls and puts, Garman–Kohlhagen FX calls, Black-76 forward options, a calibrated power-law SSVI implied-volatility surface, and a Heston stochastic-volatility engine with Lewis Fourier inversion, QE-M Monte Carlo bid–ask-aware cross-sectional calibration, and Heston Monte Carlo Greeks (pathwise Delta plus CRN Delta/Gamma/Vega).
 - **HPL / RTPL:** close-to-close full revaluation of positions held static during each daily interval; constant-maturity test books are rolled only after daily valuation. RTPL is independently built from sensitivities and explicitly selected risk factors.
 - **VaR backtesting:** rolling 97.5% / 99% historical VaR, exceptions, Kupiec unconditional-coverage and Christoffersen independence diagnostics.
@@ -50,8 +50,11 @@ python scripts/run_case.py --synthetic
 python scripts/download_market_data.py --start 2007-01-01
 python scripts/run_case.py
 
-# Optional: download the EIA petroleum archive separately (no API key required)
+# Download the standalone EIA WTI/Brent history (no API key required)
 python scripts/download_eia_petroleum_spot.py --start 2007-01-01
+
+# Run the commodities spot desk over the full common EIA history
+python scripts/run_commodity_spot_case.py
 
 pytest -q
 ruff check src tests scripts
@@ -79,7 +82,7 @@ The branch now includes a power-law SSVI surface, total-variance calibration, Bl
 
 This is not a bank's regulatory FRTB implementation, supervisory-approved IMA model, production pricing library or capital calculator.
 
-- The checked-in reference results are synthetic. The integrated public-data pipeline must complete a live FRED/EIA download and its source manifest must be reviewed before describing a risk run as empirical market evidence. FRED's SP500 series currently offers only 10 years of daily history and is copyrighted by S&P Dow Jones Indices; requesting 2007 does not yield a 2007 SP500 history. The integrated panel's actual start date and coverage warnings are written to the manifest.
+- The checked-in reference results are synthetic. The integrated public-data pipeline must complete a live FRED/EIA download and its source manifest must be reviewed before describing a multi-desk risk run as empirical market evidence. FRED's SP500 series currently offers only 10 years of daily history and is copyrighted by S&P Dow Jones Indices; requesting 2007 does not yield a 2007 SP500 history. The integrated panel's actual start date and coverage warnings are written to the manifest. The separate EIA-only commodity diagnostic can use the longer actual WTI/Brent observation history, but it is not a four-desk aggregate.
 - The Commodities desk now holds hypothetical linear spot proxies in both WTI Cushing and Europe Brent. These are daily spot benchmarks, not listed futures settlements, executable quotes or forward curves. They cannot directly mark futures positions without an explicit basis/curve and contract-roll model.
 - HPL is available; bank Actual P&L (APL) is not. Backtesting is therefore HPL-only and not a complete regulatory backtest.
 - The synthetic history begins in 2016, and the public daily S&P 500 FRED series does not provide the full stress history back to 2007. The stress-capital outputs cannot satisfy that historical-data requirement.
