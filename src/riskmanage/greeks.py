@@ -152,9 +152,20 @@ def heston_monte_carlo_greeks(
         antithetic,
         psi_c,
     )
-    vega_crn = (
-        payoff(vol_up_terminal) - payoff(vol_down_terminal)
-    ) / (2.0 * initial_volatility_bump)
+    vol_up_payoff = payoff(vol_up_terminal)
+    vol_down_payoff = payoff(vol_down_terminal)
+    vega_crn = (vol_up_payoff - vol_down_payoff) / (
+        2.0 * initial_volatility_bump
+    )
+    volga_crn = (
+        vol_up_payoff - 2.0 * base_payoff + vol_down_payoff
+    ) / (initial_volatility_bump * initial_volatility_bump)
+    vanna_crn = (
+        payoff(vol_up_terminal * ((params.spot + spot_bump) / params.spot))
+        - payoff(vol_up_terminal * ((params.spot - spot_bump) / params.spot))
+        - payoff(vol_down_terminal * ((params.spot + spot_bump) / params.spot))
+        + payoff(vol_down_terminal * ((params.spot - spot_bump) / params.spot))
+    ) / (4.0 * spot_bump * initial_volatility_bump)
 
     return {
         "price": _summarize(price_observations, confidence_level),
@@ -170,6 +181,12 @@ def heston_monte_carlo_greeks(
         "vega_initial_volatility_common_random_numbers": _summarize(
             _pair_average(vega_crn, antithetic), confidence_level
         ),
+        "vanna_spot_initial_volatility_common_random_numbers": _summarize(
+            _pair_average(vanna_crn, antithetic), confidence_level
+        ),
+        "volga_initial_volatility_common_random_numbers": _summarize(
+            _pair_average(volga_crn, antithetic), confidence_level
+        ),
         "greek_conventions": {
             "delta": "dPrice/dSpot; pathwise and CRN central difference",
             "gamma": "d2Price/dSpot2; CRN central difference",
@@ -177,6 +194,10 @@ def heston_monte_carlo_greeks(
                 "dPrice/dsqrt(v0); CRN central difference, "
                 "not implied-volatility vega"
             ),
+            "vanna": (
+                "d2Price/(dSpot d sqrt(v0)); CRN mixed central difference"
+            ),
+            "volga": "d2Price/dsqrt(v0)2; CRN central difference",
         },
         "simulation": {
             "scheme": "Heston QE-M",
