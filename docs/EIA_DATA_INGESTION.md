@@ -50,20 +50,18 @@ This standalone output is a descriptive spot-risk diagnostic, not an aggregated 
 
 Python 3.11+ and the project dependencies are required. No EIA credential or API environment variable is needed.
 
-Python 3.11+ and the project dependencies are required. No EIA credential or API environment variable is needed.
-
-Command: python scripts/download_eia_petroleum_spot.py --start 2007-01-01
-
 Optional bounds and paths:
 
-- python scripts/download_eia_petroleum_spot.py --start 2012-01-01 --end 2025-12-31
-- python scripts/download_eia_petroleum_spot.py --start 2007-01-01 --timeout 240
+- `python scripts/download_eia_petroleum_spot.py --start 2012-01-01 --end 2025-12-31`
+- `python scripts/download_eia_petroleum_spot.py --start 2007-01-01 --timeout 240`
 
-Outputs:
+Default outputs:
 
-- data/raw/eia/petroleum_spot/<snapshot_id>/PET.zip — exact downloaded archive, retained and never overwritten by a later run
-- data/processed/eia_petroleum_spot.csv — normalized long-form observations
-- data/processed/eia_petroleum_spot_manifest.json — provenance and validation metadata
+- `data/raw/eia/petroleum_spot/<snapshot_id>/PET.zip` — exact downloaded archive, retained and never overwritten by a later run
+- `data/processed/eia_petroleum_spot.csv` — normalized long-form observations
+- `data/processed/eia_petroleum_spot_manifest.json` — provenance and validation metadata
+
+The integrated downloader writes the same standalone EIA outputs before building the combined market panel. The raw and processed data directories are local artifacts excluded from Git.
 
 The data/raw/ and data/processed/ outputs are local artifacts and are excluded from Git. Keep the archive, CSV and manifest together when archiving a research run.
 
