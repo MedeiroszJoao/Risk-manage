@@ -92,6 +92,10 @@ def test_profile_likelihood_reoptimizes_nuisance_parameters():
         )
         assert point["profiled_parameters"]["mean_reversion"] > 0.0
     assert result["likelihood_ratio_cutoff_delta_chi_square"] > 0.0
+    assert result["profile_interval_refined"] is not None
+    assert result["profile_interval_refined"][0] < -0.70
+    assert result["profile_interval_refined"][1] > -0.70
+    assert result["profile_root_evaluations"] >= 2
 
 
 def test_bootstrap_parameter_draws_propagate_to_price_and_delta_distributions():
