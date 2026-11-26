@@ -96,6 +96,7 @@ This is not a bank's regulatory FRTB implementation, supervisory-approved IMA mo
 - [Methodology and formula map](docs/METHODOLOGY.md)
 - [Model card and limitations](docs/MODEL_CARD.md)
 - [Data provenance](docs/DATA_PROVENANCE.md)
+- [Market-data source decisions, coverage and licensing](docs/MARKET_DATA_DECISIONS.md)
 - [EIA petroleum spot ingestion](docs/EIA_DATA_INGESTION.md)
 - [Validation protocol](docs/VALIDATION_PROTOCOL.md)
 - [Architecture](docs/ARCHITECTURE.md)
