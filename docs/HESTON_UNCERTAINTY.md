@@ -182,7 +182,7 @@ Generate one full QE-M physical/scenario path set
 \{(S_{t_j}^{(p)},v_{t_j}^{(p)})\}_{p=1,\ldots,N;\,j=0,\ldots,M}
 \]
 
-using a fixed physical/scenario drift \(\mu\) and a separately supplied physical variance parameter set. Reuse these exact paths for every bootstrap risk-neutral parameter draw \(b\). This is a common-random-numbers design across parameter samples: it removes path-regeneration noise from between-draw differences.
+using a fixed physical/scenario drift \(\mu\) and a separately supplied physical variance parameter set. Reuse these exact paths for every bootstrap risk-neutral parameter draw \(b\). This is a common-random-numbers design across parameter samples: it removes independent shock regeneration from between-draw differences.
 
 For each bootstrap draw \(\vartheta_Q^{*(b)}\):
 
@@ -199,6 +199,10 @@ VaR_\alpha^{*(b)},\qquad ES_\alpha^{*(b)}
 \]
 
 then describe how risk-neutral calibration uncertainty changes the hedge outcome **conditional on the selected physical scenario sample**.
+
+
+
+**Initial-state consistency:** The bootstrap \(v_0\) is also the initial instantaneous variance state under the physical scenario for that draw. This keeps the initial Fourier premium, time-zero Delta and scenario path state aligned. The same Gaussian shocks are reused, but the spot/variance paths are not identical across draws because their initial variance differs. All other P/scenario dynamics are fixed.
 
 ### What the distribution means
 
