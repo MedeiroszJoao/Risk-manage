@@ -94,8 +94,11 @@ def download_eia_petroleum_spot_prices(
         raise ValueError("duplicate EIA series IDs are not allowed")
 
     http = session or requests.Session()
+    retrieved_utc = datetime.now(timezone.utc).isoformat()
+    snapshot_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     raw_root = Path(raw_dir)
-    raw_root.mkdir(parents=True, exist_ok=True)
+    snapshot_raw_root = raw_root / snapshot_id
+    snapshot_raw_root.mkdir(parents=True, exist_ok=False)
     records: list[dict[str, Any]] = []
     series_manifest: list[dict[str, Any]] = []
 
@@ -136,7 +139,7 @@ def download_eia_petroleum_spot_prices(
                 ) from None
 
             raw_bytes = response.content
-            page_path = raw_root / f"{series_id}_offset_{offset:08d}.json"
+            page_path = snapshot_raw_root / f"{series_id}_offset_{offset:08d}.json"
             page_path.write_bytes(raw_bytes)
             try:
                 payload = response.json()
@@ -234,7 +237,9 @@ def download_eia_petroleum_spot_prices(
         "source": "U.S. Energy Information Administration Open Data API v2",
         "endpoint": EIA_PETROLEUM_SPOT_ENDPOINT,
         "dataset": "petroleum/pri/spt",
-        "retrieved_utc": datetime.now(timezone.utc).isoformat(),
+        "retrieved_utc": retrieved_utc,
+        "snapshot_id": snapshot_id,
+        "raw_snapshot_directory": str(snapshot_raw_root),
         "request": {
             "frequency": "daily",
             "data": ["value"],
