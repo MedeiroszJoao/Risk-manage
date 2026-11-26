@@ -29,7 +29,6 @@ def test_pot_gpd_recovers_finite_mean_tail_and_reports_bootstrap_intervals():
             assert estimate["expected_shortfall"] > estimate["var"]
             interval = fit["bootstrap"]["conditional_percentile_intervals"][alpha]["var"]
             assert interval["percentile_95_interval"][0] <= interval["percentile_95_interval"][1]
-    assert "not given a p-value" in result["threshold_fits"][0]["warnings"][0] if result["threshold_fits"][0]["warnings"] else True
 
 
 def test_pot_gpd_flags_infinite_expected_shortfall_for_shape_above_one():
@@ -72,3 +71,41 @@ def test_pot_gpd_rejects_bad_thresholds_and_confidence_levels():
         fit_pot_gpd_tail_risk(losses, confidence_levels=(0.95,), threshold_quantiles=(0.95,))
     with pytest.raises(ValueError, match="unique"):
         fit_pot_gpd_tail_risk(losses, confidence_levels=(0.99,), threshold_quantiles=(0.90, 0.90))
+
+
+
+def test_pot_gpd_bootstrap_is_reproducible_for_fixed_seed():
+    rng = np.random.default_rng(932)
+    losses = genpareto.rvs(
+        c=0.15, loc=0.0, scale=1.2, size=8_000, random_state=rng
+    )
+    kwargs = dict(
+        confidence_levels=(0.975,),
+        threshold_quantiles=(0.90,),
+        min_exceedances=50,
+        n_bootstrap=20,
+        seed=81,
+    )
+    first = fit_pot_gpd_tail_risk(losses, **kwargs)
+    second = fit_pot_gpd_tail_risk(losses, **kwargs)
+    first_fit = first["threshold_fits"][0]
+    second_fit = second["threshold_fits"][0]
+    assert first_fit["fit"] == second_fit["fit"]
+    assert first_fit["bootstrap"] == second_fit["bootstrap"]
+
+
+def test_pot_gpd_reports_empirical_tail_and_no_extrapolation_p_value():
+    losses = np.random.default_rng(71).standard_t(df=5, size=5_000)
+    result = fit_pot_gpd_tail_risk(
+        losses,
+        confidence_levels=(0.975,),
+        threshold_quantiles=(0.90, 0.95),
+        min_exceedances=20,
+        n_bootstrap=0,
+    )
+    assert result["empirical_var_es"]["0.975"]["status"] == "estimated"
+    for fit in result["threshold_fits"]:
+        if fit["status"] == "fitted":
+            assert "ks_uniform_distance_descriptive" in fit["fit"]
+            assert "p_value" not in fit["fit"]
+            assert fit["exceedance_count"] >= 20
