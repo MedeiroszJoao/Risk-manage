@@ -95,3 +95,48 @@ def test_brownian_bridge_handles_non_power_of_two_time_grids(n_steps):
     assert np.var(increments, axis=0, ddof=1) == pytest.approx(
         np.ones(n_steps), abs=0.04
     )
+
+
+
+def test_randomized_qmc_put_call_parity_on_common_scrambled_paths():
+    params = baseline()
+    common = dict(
+        maturity=0.75,
+        params=params,
+        sobol_power=8,
+        n_scrambles=6,
+        n_steps=12,
+        seed=712,
+        control_variate=False,
+        brownian_bridge=True,
+    )
+    call = heston_randomized_qmc_price(100.0, option_type="call", **common)
+    put = heston_randomized_qmc_price(100.0, option_type="put", **common)
+    parity = (
+        params.spot * np.exp(-params.dividend_yield * common["maturity"])
+        - 100.0 * np.exp(-params.risk_free_rate * common["maturity"])
+    )
+    assert call["price"] - put["price"] == pytest.approx(parity, abs=1e-10)
+
+
+def test_randomized_qmc_deterministic_variance_limit_matches_fourier():
+    params = baseline(
+        variance0=0.04,
+        long_run_variance=0.09,
+        vol_of_variance=0.0,
+    )
+    result = heston_randomized_qmc_price(
+        103.0,
+        1.25,
+        params,
+        sobol_power=9,
+        n_scrambles=8,
+        n_steps=16,
+        seed=188,
+        control_variate=True,
+        brownian_bridge=True,
+    )
+    reference = heston_price_fourier(103.0, 1.25, params)["price"]
+    assert abs(result["price"] - reference) < (
+        5.0 * result["standard_error_across_scrambles"] + 0.08
+    )
