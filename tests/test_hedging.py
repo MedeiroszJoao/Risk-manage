@@ -136,3 +136,24 @@ def test_constant_volatility_heston_delta_matches_frozen_black_scholes_hedge():
     assert heston["net_loss_var_es"]["expected_shortfall"] == pytest.approx(
         black_scholes["net_loss_var_es"]["expected_shortfall"], abs=2e-7
     )
+
+
+def test_hedge_experiment_can_return_pathwise_losses_for_tail_models():
+    result = heston_delta_hedge_experiment(
+        parameter_set(),
+        parameter_set(),
+        strike=100.0,
+        maturity=0.5,
+        physical_total_return=0.03,
+        n_paths=120,
+        n_steps=2,
+        confidence_level=0.90,
+        seed=812,
+        include_path_samples=True,
+    )
+    samples = result["path_samples"]
+    for strategy in ("heston_fourier_delta", "frozen_black_scholes_delta"):
+        assert len(samples[strategy]["net_losses"]) == 120
+        assert len(samples[strategy]["gross_losses"]) == 120
+        assert np.isfinite(samples[strategy]["net_losses"]).all()
+        assert np.isfinite(samples[strategy]["gross_losses"]).all()
