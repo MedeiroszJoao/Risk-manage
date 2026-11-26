@@ -122,9 +122,9 @@ For one profiled parameter, the asymptotic 95% cutoff is
 \Lambda(\psi_0)\leq\chi^2_{1,0.95}\approx3.841.
 \]
 
-The code returns the profile curve, fitted nuisance parameters at every grid point, the approximate accepted interval on the supplied grid, and a boundary-truncation flag. An accepted endpoint means the interval may extend beyond the evaluated grid; widen the grid before reporting a closed interval.
+The code returns the profile curve, fitted nuisance parameters at every grid point, the accepted grid points, and a boundary-truncation flag. When the accepted set is bracketed by rejected grid points, it uses Brent root-finding to solve the likelihood-ratio cutoff on each boundary, re-optimizing nuisance parameters at every root evaluation. The continuous root-refined interval is reported separately from the coarse on-grid envelope. An accepted endpoint means the interval may extend beyond the evaluated grid; widen the grid before reporting a closed interval.
 
-The chi-square cutoff is an asymptotic approximation. The Heston calibration can be nonlinear, bounded and weakly identified. Grid resolution, constraints, optimizer convergence and the assumed quote-noise model affect the result. The profile interval must therefore be checked for stability under a wider/finer grid and alternative quote weights.
+The chi-square cutoff is an asymptotic approximation. The Heston calibration can be nonlinear, bounded and weakly identified. Bracketing grid resolution, constraints, optimizer convergence and the assumed quote-noise model affect the result. The root-refined endpoint is numerically more precise than a grid-only estimate, but it does not remove asymptotic or model assumptions. The curve must still be checked under a wider/finer grid and alternative quote weights.
 
 ## Propagating parameter uncertainty into prices and Deltas
 
