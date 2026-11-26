@@ -10,13 +10,14 @@ The downloader uses Federal Reserve Bank of St. Louis FRED public CSV graph endp
 | vix | VIXCLS | CBOE Volatility Index |
 | eurusd | DEXUSEU | U.S. dollars to one euro |
 | usdjpy | DEXJPUS | Japanese yen to one U.S. dollar |
-| wti | DCOILWTICO | WTI spot price |
 | ust2y | DGS2 | 2-year Treasury constant maturity yield |
 | ust10y | DGS10 | 10-year Treasury constant maturity yield |
 
 The ingestion script stores raw CSV bytes and records series IDs, source URLs, UTC retrieval timestamps, row counts, missingness, date coverage and SHA-256 digests. Short calendar gaps are aligned onto business dates with a maximum four-business-day forward fill; remaining missing values are rejected.
 
 ## EIA daily petroleum spot prices
+
+The integrated scripts/download_market_data.py pipeline uses this EIA snapshot as the canonical source for both crude-oil risk factors. It deliberately excludes the FRED WTI column from the main request, so WTI and Brent come from the same source and definition. FRED contributes S&P 500, VIX, FX and Treasury rates; the EIA daily spot series contribute WTI and Brent.
 
 The EIA collector downloads the public Petroleum bulk archive PET.zip from https://www.eia.gov/opendata/bulk/PET.zip. This bulk download does not require an API key. It parses the archive's PET.txt member as line-delimited JSON and selects exactly:
 
@@ -31,7 +32,7 @@ These are spot-price benchmarks, not exchange-traded futures settlements, execut
 
 The archive hash identifies the retrieved snapshot. It does not recreate historical EIA publication vintages or the information set available at every historical date. Strict point-in-time backtests need publication/vintage information separately.
 
-See EIA_DATA_INGESTION.md for execution, source format, tests and limitations. Mocked unit tests do not replace the first live local download and manifest review.
+See EIA_DATA_INGESTION.md for the source format and collector details. Run python scripts/download_market_data.py --start 2007-01-01 to build the unified market panel and combined source manifest. Mocked unit tests do not replace the first live local download and manifest review.
 
 ## Reference run
 
