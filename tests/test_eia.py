@@ -243,13 +243,13 @@ def test_each_eia_download_gets_a_distinct_raw_snapshot(tmp_path):
             "response": {"total": "1", "data": [_row("2024-01-02", 70.0, "RWTC")]}
         }
     }
-    first_frame, first_manifest = download_eia_petroleum_spot_prices(
+    _, first_manifest = download_eia_petroleum_spot_prices(
         series={"wti": "RWTC"},
         api_key="test-key",
         session=FakeSession(pages),
         raw_dir=tmp_path / "raw",
     )
-    second_frame, second_manifest = download_eia_petroleum_spot_prices(
+    _, second_manifest = download_eia_petroleum_spot_prices(
         series={"wti": "RWTC"},
         api_key="test-key",
         session=FakeSession(pages),
