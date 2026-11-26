@@ -81,6 +81,8 @@ def heston_monte_carlo_greeks(
         or initial_volatility_bump <= 0.0
     ):
         raise ValueError("initial_volatility_bump must be finite and positive")
+    if not np.isfinite(psi_c) or psi_c <= 0.0:
+        raise ValueError("psi_c must be finite and positive")
     if not 0.0 < confidence_level < 1.0:
         raise ValueError("confidence_level must lie strictly between zero and one")
 
