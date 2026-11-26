@@ -70,3 +70,20 @@ def test_wti_brent_spot_spread_pnl_explains_both_benchmarks_exactly():
     assert result["hpl"].tolist() == pytest.approx([-56_290.0, 48_890.0])
     assert result["rtpl"].tolist() == pytest.approx([-56_290.0, 48_890.0])
     assert result["residual"].tolist() == pytest.approx([0.0, 0.0], abs=1e-10)
+
+
+
+def test_oil_collapse_scenario_uses_additive_spot_shocks_when_wti_is_negative():
+    from riskmanage.fixtures import build_synthetic_market_data
+    from scripts.run_case import build_scenario_reports
+
+    market = build_synthetic_market_data(n=300)
+    market.loc[market.index[-1], "wti"] = -36.98
+    market.loc[market.index[-1], "brent"] = 10.0
+
+    scenarios = build_scenario_reports(market).set_index("scenario")
+    oil_collapse = scenarios.loc["oil_collapse"]
+
+    # Long 150k WTI loses 25 USD/bbl; short 100k Brent gains 5 USD/bbl
+    # after the Brent stress floor is applied.
+    assert oil_collapse["Commodities_pnl"] == pytest.approx(-3_250_000.0)
