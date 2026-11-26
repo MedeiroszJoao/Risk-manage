@@ -80,6 +80,11 @@ def test_transaction_costs_reduce_net_hedging_pnl():
         assert charged["gross_pnl_mean"] == pytest.approx(
             free["gross_pnl_mean"], rel=1e-10, abs=1e-10
         )
+        assert (
+            charged["gross_pnl_mean"] - charged["net_pnl_mean"]
+        ) == pytest.approx(
+            charged["average_transaction_cost_future_value"], abs=1e-10
+        )
 
 
 def test_hedging_rejects_inconsistent_initial_state_and_insufficient_tail_sample():
