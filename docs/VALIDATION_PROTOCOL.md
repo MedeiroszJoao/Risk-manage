@@ -1,10 +1,11 @@
 # Validation protocol
 
 ## Data and provenance
-1. Download FRED series and preserve the exact raw CSV bytes.
-2. Record series ID, URL, UTC retrieval time, row count, missingness and SHA-256.
-3. Reject duplicate dates, non-positive spot / FX values, non-finite inputs and material unresolved gaps.
-4. Label every run as synthetic or public FRED. Do not blend synthetic and observed input without an explicit rule.
+1. Download FRED equity / FX / rates series and the EIA Petroleum bulk archive for WTI Cushing and Europe Brent.
+2. Preserve exact raw FRED CSV responses and the EIA PET.zip snapshot; record series IDs, URLs, UTC retrieval time, row counts, missingness, archive metadata and SHA-256 digests.
+3. Retain finite zero / negative WTI spot observations; require positive equity / FX levels and Brent spot, finite values, unique dates and no material unresolved gaps.
+4. Align the integrated panel on business dates with a maximum four-business-day forward fill, explicitly recorded in provenance. The standalone EIA commodity history uses actual common WTI / Brent observation dates without forward fill.
+5. Label every run as synthetic or public-source observed data. Do not blend synthetic and observed input without an explicit rule.
 
 ## Portfolio and HPL
 1. Freeze hypothetical positions before evaluating the run.
