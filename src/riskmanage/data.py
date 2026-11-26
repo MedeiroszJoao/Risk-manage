@@ -66,45 +66,84 @@ def _fred_url(series_id: str, start: str, end: str) -> str:
     return f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}&cosd={start}&coed={end}"
 
 
-def download_fred_series(start: str = "2007-01-01", end: str | None = None,
-                         series_ids: dict[str, str] | None = None,
-                         timeout: int = 30, output_dir: str | Path = "data/raw"):
-    """Download public FRED CSV series and return aligned frame plus provenance manifest.
+def download_fred_series(
+    start: str = "2007-01-01",
+    end: str | None = None,
+    series_ids: dict[str, str] | None = None,
+    timeout: int = 30,
+    output_dir: str | Path = "data/raw/fred",
+    session: requests.Session | None = None,
+):
+    """Download public FRED CSV series and return aligned frame plus immutable provenance.
 
-    FRED public graph CSV is used without an API key. Every raw response is hashed.
-    Short holiday gaps are forward-filled on business dates; long gaps are not.
+    FRED public graph CSV is used without an API key. Each run stores a unique raw
+    snapshot and SHA-256 for every response. Short holiday gaps are forward-filled
+    on business dates; long gaps are not.
     """
     end = end or datetime.now(timezone.utc).date().isoformat()
-    ids = series_ids or FRED_SERIES
-    session = requests.Session()
-    raw_dir = Path(output_dir)
-    raw_dir.mkdir(parents=True, exist_ok=True)
+    ids = dict(series_ids or FRED_SERIES)
+    if not ids:
+        raise ValueError("at least one FRED series must be requested")
+    if len(set(ids.values())) != len(ids):
+        raise ValueError("duplicate FRED series IDs are not allowed")
+    snapshot_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    raw_dir = Path(output_dir) / snapshot_id
+    raw_dir.mkdir(parents=True, exist_ok=False)
+    owns_session = session is None
+    http = session or requests.Session()
     series_frames, manifest = [], []
-    for name, series_id in ids.items():
-        url = _fred_url(series_id, start, end)
-        response = session.get(url, timeout=timeout)
-        response.raise_for_status()
-        digest = sha256(response.content).hexdigest()
-        path = raw_dir / f"{series_id}_{start}_{end}.csv"
-        path.write_bytes(response.content)
-        from io import BytesIO
-        frame = pd.read_csv(BytesIO(response.content))
-        date_col = next((c for c in frame.columns if c.lower() in ("date", "observation_date")), None)
-        if date_col is None or series_id not in frame.columns:
-            raise ValueError(f"unexpected FRED response schema for {series_id}: {list(frame.columns)}")
-        frame = frame[[date_col, series_id]].rename(columns={date_col: "date", series_id: name})
-        frame["date"] = pd.to_datetime(frame["date"], errors="coerce")
-        frame[name] = pd.to_numeric(frame[name].replace(".", np.nan), errors="coerce")
-        frame = frame.dropna(subset=["date"]).sort_values("date")
-        series_frames.append(frame)
-        manifest.append({
-            "field": name, "series_id": series_id, "url": url,
-            "retrieved_utc": datetime.now(timezone.utc).isoformat(),
-            "raw_sha256": digest, "raw_path": str(path),
-            "rows": int(len(frame)), "missing_values": int(frame[name].isna().sum()),
-            "first_date": frame["date"].min().date().isoformat(),
-            "last_date": frame["date"].max().date().isoformat(),
-        })
+
+    try:
+        for name, series_id in ids.items():
+            url = _fred_url(series_id, start, end)
+            response = http.get(url, timeout=timeout)
+            response.raise_for_status()
+            raw_bytes = response.content
+            if not raw_bytes:
+                raise ValueError(f"empty FRED response for {series_id}")
+            digest = sha256(raw_bytes).hexdigest()
+            path = raw_dir / f"{series_id}_{start}_{end}.csv"
+            path.write_bytes(raw_bytes)
+
+            from io import BytesIO
+
+            frame = pd.read_csv(BytesIO(raw_bytes))
+            date_col = next(
+                (column for column in frame.columns
+                 if column.lower() in ("date", "observation_date")),
+                None,
+            )
+            if date_col is None or series_id not in frame.columns:
+                raise ValueError(
+                    f"unexpected FRED response schema for {series_id}: {list(frame.columns)}"
+                )
+            frame = frame[[date_col, series_id]].rename(
+                columns={date_col: "date", series_id: name}
+            )
+            frame["date"] = pd.to_datetime(frame["date"], errors="coerce")
+            frame[name] = pd.to_numeric(frame[name].replace(".", np.nan), errors="coerce")
+            frame = frame.dropna(subset=["date"]).sort_values("date")
+            valid_dates = frame.loc[frame[name].notna(), "date"]
+            if valid_dates.empty:
+                raise ValueError(f"FRED series {series_id} has no numeric observations")
+
+            series_frames.append(frame)
+            manifest.append({
+                "field": name,
+                "series_id": series_id,
+                "url": url,
+                "retrieved_utc": datetime.now(timezone.utc).isoformat(),
+                "raw_sha256": digest,
+                "raw_path": str(path),
+                "rows": int(len(frame)),
+                "missing_values": int(frame[name].isna().sum()),
+                "first_date": valid_dates.min().date().isoformat(),
+                "last_date": valid_dates.max().date().isoformat(),
+            })
+    finally:
+        if owns_session:
+            http.close()
+
     merged = series_frames[0]
     for item in series_frames[1:]:
         merged = merged.merge(item, on="date", how="outer", validate="one_to_one")
@@ -114,8 +153,11 @@ def download_fred_series(start: str = "2007-01-01", end: str | None = None,
     validate_market_data(merged, require_oil=False)
     provenance = {
         "source": "Federal Reserve Bank of St. Louis FRED public graph CSV",
+        "snapshot_id": snapshot_id,
+        "raw_snapshot_directory": str(raw_dir),
         "retrieved_utc": datetime.now(timezone.utc).isoformat(),
-        "start_requested": start, "end_requested": end,
+        "start_requested": start,
+        "end_requested": end,
         "alignment": "business-day calendar; forward-fill maximum four business days",
         "series": manifest,
         "aligned_rows": int(len(merged)),
@@ -124,7 +166,6 @@ def download_fred_series(start: str = "2007-01-01", end: str | None = None,
         "aligned_sha256": sha256(merged.to_csv(index=False).encode()).hexdigest(),
     }
     return merged, provenance
-
 
 
 def merge_eia_petroleum_into_market_data(
