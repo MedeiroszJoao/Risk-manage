@@ -182,3 +182,12 @@ A balanced crossed design evaluates each risk-neutral Heston bootstrap draw unde
 For each risk metric, the two-way random-effects method of moments uses row/column means and residual sums of squares to estimate the calibration component, scenario component and interaction/within-cell Monte Carlo residual. It is applied to Heston ES/VaR, frozen-BS ES/VaR and paired differences. Raw variance components are retained; negative calibration/scenario estimates are reported and separately truncated at zero for non-negative proportions. The residual is not a pure interaction term.
 
 This is not REML, a Bayesian hierarchical model or a confidence interval. Small numbers of bootstrap draws/seeds and finite tail depth produce noisy estimates; model risk and physical parameter uncertainty remain outside the decomposition. See [HESTON_UNCERTAINTY.md](HESTON_UNCERTAINTY.md) and Formula Register §72 for formulas and limitations.
+
+
+## Extreme-value tail modelling of hedge P&L
+
+In addition to empirical inverse-CDF VaR and fractional-boundary ES, the hedge P&L engine now exposes a Peaks-over-Threshold (POT) Generalized Pareto model. For each empirical loss threshold \(u\), it fits a zero-location GPD to strict exceedances \(L-u\) by maximum likelihood. It estimates tail VaR and finite-mean ES at confidence levels above the threshold, reports shape/scale, exceedance probability/count, mean-excess diagnostics and a descriptive probability-integral-transform KS distance. A non-parametric bootstrap of threshold excesses gives conditional percentile intervals.
+
+Thresholds are presented as a stability grid; no automatic choice is made. The usual KS p-value is omitted because parameters are estimated from the same exceedances. If fitted shape \(\xi\geq1\), the fitted GPD has no finite mean and ES is reported as undefined/infinite. The bootstrap is conditional on the observed threshold and exceedance count and does not cover threshold selection, serial clustering, structural breaks or model risk.
+
+See [TAIL_RISK_EVT.md](TAIL_RISK_EVT.md) for the derivation and reproducible Heston hedge tail-risk benchmark.
