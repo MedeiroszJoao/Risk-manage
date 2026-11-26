@@ -56,6 +56,7 @@ def _download_petroleum_bulk_file(
     temporary = destination.with_suffix(destination.suffix + ".part")
     headers = {
         "Accept": "application/zip, application/octet-stream;q=0.9, */*;q=0.8",
+        "Accept-Encoding": "identity",
         "User-Agent": "risk-manage-research/1.0 (public EIA bulk-data ingestion)",
     }
     response = None
