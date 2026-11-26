@@ -335,6 +335,10 @@ def profile_heston_parameter(
     if np.any(np.diff(grid) <= 0.0):
         raise ValueError("parameter_grid must be strictly increasing")
     _validate_market_conventions(market, fitted_parameters)
+    fitted_grid_value = float(getattr(fitted_parameters, parameter_name))
+    if not grid[0] <= fitted_grid_value <= grid[-1]:
+        raise ValueError("parameter_grid must bracket the fitted parameter value")
+    grid = np.unique(np.append(grid, fitted_grid_value))
     if not 0.5 < confidence_level < 1.0:
         raise ValueError("confidence_level must lie in (0.5, 1)")
     if max_nfev < 1:
