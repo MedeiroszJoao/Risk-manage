@@ -77,7 +77,14 @@ def test_bootstrap_parameter_draws_propagate_to_hedge_var_es():
         "synthetic_common_scenario_parameter_uncertainty_experiment"
     )
     assert result["bootstrap_parameter_draw_count"] == 3
-    assert result["scenario"]["same_physical_paths_for_all_parameter_draws"] is True
+    assert result["scenario"][
+        "same_standard_normal_innovations_for_all_parameter_draws"
+    ] is True
+    assert result["scenario"]["identical_path_states_for_all_parameter_draws"] is False
+    for draw in result["draw_level_results"]:
+        assert draw["physical_scenario_initial_variance"] == pytest.approx(
+            draw["risk_neutral_parameters"]["variance0"]
+        )
     assert result["scenario"]["n_paths"] == 180
     for strategy in ("heston_state_delta", "frozen_bs_delta"):
         distributions = result["strategies"][strategy][
