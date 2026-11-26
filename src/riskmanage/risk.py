@@ -194,8 +194,8 @@ def select_stress_window(
     if window_days > observations:
         raise ValueError("window_days cannot exceed the number of observations")
 
-    if window_days < 10:
-        raise ValueError("window_days must be at least 10 for a 10-observation ES stress selector")
+    if window_days < 11:
+        raise ValueError("window_days must be at least 11 to estimate 10-observation ES")
 
     portfolio_losses = np.sum(np.vstack(list(arrays.values())), axis=0)
     candidate_count = observations - window_days + 1
