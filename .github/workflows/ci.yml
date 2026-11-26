@@ -93,3 +93,12 @@ jobs:
         with:
           name: heston-hedge-uncertainty-python-${{ matrix.python-version }}
           path: /tmp/heston_hedge_parameter_uncertainty.json
+      - name: Run crossed Heston hedge-risk variance decomposition
+        run: |
+          python scripts/run_heston_nested_hedge_risk.py --bootstrap-replicates 3 --scenario-replicates 2 --paths 120 --steps 2 --confidence 0.90 --output /tmp/heston_nested_hedge_risk.json
+          python -m json.tool /tmp/heston_nested_hedge_risk.json > /dev/null
+      - name: Upload crossed Heston hedge-risk report
+        uses: actions/upload-artifact@v4
+        with:
+          name: heston-nested-hedge-risk-python-${{ matrix.python-version }}
+          path: /tmp/heston_nested_hedge_risk.json
