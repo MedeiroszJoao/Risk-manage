@@ -87,8 +87,8 @@ def build_commodity_spot_pnl(
     available_wti = int(wide["wti"].notna().sum())
     available_brent = int(wide["brent"].notna().sum())
     aligned = wide.dropna(subset=["wti", "brent"]).copy()
-    if len(aligned) < 2:
-        raise ValueError("at least two common WTI/Brent observation dates are required")
+    if len(aligned) < 3:
+        raise ValueError("at least three common WTI/Brent observation dates are required for daily risk estimates")
 
     changes = aligned[["wti", "brent"]].diff().iloc[1:]
     dates = changes.index
@@ -187,7 +187,11 @@ def build_commodity_spot_pnl(
             "zero_or_negative_wti_observations": int((aligned["wti"] <= 0).sum()),
             "minimum_wti_spot": float(aligned["wti"].min()),
             "minimum_wti_date": aligned["wti"].idxmin().date().isoformat(),
-            "spot_price_change_correlation": float(changes["wti"].corr(changes["brent"])),
+            "spot_price_change_correlation": (
+                float(changes["wti"].corr(changes["brent"]))
+                if math.isfinite(float(changes["wti"].corr(changes["brent"])))
+                else None
+            ),
         },
         "historical_risk": risk,
         "stress_window": stress,
