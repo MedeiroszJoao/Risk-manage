@@ -93,6 +93,7 @@ def test_bid_ask_objective_and_quote_validation():
     )
     assert result["success"]
     assert result["price_rmse"] < 0.01
+    assert result["jacobian_rank"] < 5  # An exact in-spread fit has no local interval-loss gradient.
     with pytest.raises(ValueError, match="bid and ask"):
         HestonOptionQuote(100, 1, "call", 10, bid=9.9)
     with pytest.raises(ValueError, match="inside"):
