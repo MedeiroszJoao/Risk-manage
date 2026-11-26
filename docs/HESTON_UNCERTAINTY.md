@@ -222,3 +222,77 @@ python scripts/run_heston_hedge_uncertainty.py --bootstrap-replicates 30 --paths
 
 The JSON report records the synthetic quote panel, base calibration, bootstrap parameter samples, physical scenario assumptions, the common-path design, per-draw hedge metrics, and the across-draw VaR/ES distributions.
 
+
+
+## Crossed decomposition: calibration parameters versus physical-scenario sampling
+
+FE-009 held one physical/scenario innovation set fixed to isolate risk-neutral calibration uncertainty. FE-010 expands this into a balanced crossed design: every calibration bootstrap draw is evaluated under every independent scenario seed.
+
+Let \(B\) be the number of Q calibration draws and \(R\) the number of independent P/scenario innovation seeds. For each scenario seed \(r\), the same Gaussian QE-M innovations are reused across all calibration draws \(b\). The initial variance state follows each draw's \(v_0^{*(b)}\) under both Q and P; other P variance dynamics and total-return drift remain fixed. Different scenario seeds generate independent scenario innovation sets.
+
+For strategy \(s\), form the matrix
+
+\[
+Y_{br}^{s}=ES_{\alpha}^{s,b,r},
+\qquad b=1,\ldots,B,\quad r=1,\ldots,R.
+\]
+
+The same construction is applied to Heston hedge ES, frozen-BS hedge ES, both VaRs and the paired differences \(ES_H-ES_{BS}\), \(VaR_H-VaR_{BS}\).
+
+### Two-way random-effects method of moments
+
+Let \(\bar Y_{b\cdot}\) be the calibration-draw row mean, \(\bar Y_{\cdot r}\) the scenario-seed column mean, and \(\bar Y_{\cdot\cdot}\) the grand mean. The additive residual is
+
+\[
+e_{br}=Y_{br}-\bar Y_{b\cdot}-\bar Y_{\cdot r}+\bar Y_{\cdot\cdot}.
+\]
+
+For a balanced crossed design:
+
+\[
+SS_Q=R\sum_{b=1}^{B}(\bar Y_{b\cdot}-\bar Y_{\cdot\cdot})^2,
+\quad df_Q=B-1,
+\]
+\[
+SS_P=B\sum_{r=1}^{R}(\bar Y_{\cdot r}-\bar Y_{\cdot\cdot})^2,
+\quad df_P=R-1,
+\]
+\[
+SS_E=\sum_{b=1}^{B}\sum_{r=1}^{R}e_{br}^2,
+\quad df_E=(B-1)(R-1).
+\]
+
+With \(MS=SS/df\), the raw variance-component estimates are
+
+\[
+\widehat{\sigma_Q^2}=\frac{MS_Q-MS_E}{R},
+\qquad
+\widehat{\sigma_P^2}=\frac{MS_P-MS_E}{B},
+\qquad
+\widehat{\sigma_E^2}=MS_E.
+\]
+
+Finite crossed samples can produce negative method-of-moments estimates for the first two components. The report preserves those raw estimates and also supplies non-negative components truncated at zero, plus their proportions of the estimated total. The residual component combines parameter-by-scenario interaction and within-cell hedge Monte Carlo error; it is not a pure interaction estimate.
+
+### Interpretation
+
+- **Calibration component:** dispersion of hedge risk across Q parameter draws after averaging over scenario seeds.
+- **Scenario component:** dispersion across physical/scenario innovation seeds after averaging over calibration draws.
+- **Residual component:** non-additive parameter/scenario interaction plus finite-path VaR/ES Monte Carlo error.
+- **Paired ES/VaR differences:** crossed matrices of Heston minus frozen-BS risk use common paths within every calibration/seed cell, improving the interpretability of the strategy comparison.
+
+This is a method-of-moments variance decomposition, not a confidence interval. It assumes a balanced crossed design and interprets calibration draws/scenario seeds as random effects. With few outer draws or seeds, variance components are noisy; negative estimates before truncation are diagnostic. At high confidence levels, each cell must contain enough tail observations \(N(1-\alpha)\). Model risk and physical-parameter uncertainty remain outside the decomposition.
+
+### Reproducibility
+
+Run:
+
+\`\`\`bash
+python scripts/run_heston_nested_hedge_risk.py --bootstrap-replicates 20 --scenario-replicates 6 --paths 1000 --steps 8 --confidence 0.95
+\`\`\`
+
+The JSON report contains the crossed matrices, scenario seed list, cell tail depths, raw/non-negative variance components and proportions for Heston, frozen-BS and paired VaR/ES differences.
+
+### Method reference
+
+- Searle, S. R., Casella, G. and McCulloch, C. E. (1992), *Variance Components*, Wiley. Method-of-moments estimators for balanced random-effects designs. ISBN 978-0-471-52272-7.
