@@ -23,7 +23,7 @@ The same delta-only model records **3 VaR exceptions in 250 observations at 99%*
 | Equity Options | Short ATM SPX-style calls and puts; simplified variance-swap proxy | Delta-only risk omits vega and gamma |
 | FX Options | Long EUR/USD option and spot control | Delta-only approximation omits FX volatility and curvature |
 | Rates | Long 2Y and short 10Y zero-coupon proxies | First-order approximation omits bond convexity |
-| Commodities | WTI future, delta-one control | Linear price risk should be explained by exact delta |
+| Commodities | WTI Cushing spot-linked linear proxy, delta-one control (not a futures contract) | Linear spot-price risk should be explained by exact delta |
 
 All quantities and instruments are fictitious. The variance-swap mark is a deliberately simplified implied-variance proxy, not a complete market-standard variance-swap valuation.
 
