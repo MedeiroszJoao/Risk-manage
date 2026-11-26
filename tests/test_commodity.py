@@ -22,10 +22,12 @@ def _eia_frame() -> pd.DataFrame:
         ("2020-04-22", "brent_europe_spot", "PET.RBRTE.D", 20.04),
         ("2020-04-23", "brent_europe_spot", "PET.RBRTE.D", 21.33),
     ]
-    return pd.DataFrame(
+    frame = pd.DataFrame(
         rows,
-        columns=["date", "series", "series_id", "value", "units"],
-    ).assign(units="Dollars per Barrel")
+        columns=["date", "series", "series_id", "value"],
+    )
+    frame["units"] = "Dollars per Barrel"
+    return frame
 
 
 def test_historical_commodity_spot_pnl_preserves_negative_wti_and_exact_linear_rtpl():
