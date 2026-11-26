@@ -328,17 +328,22 @@ def download_eia_petroleum_spot_prices(
     if any(not sid.startswith("PET.") or not sid.endswith(".D") for sid in selected.values()):
         raise ValueError("only daily EIA Petroleum series IDs (PET.*.D) are supported")
 
-    http = session or requests.Session()
+    owns_session = session is None
+    http = session if session is not None else requests.Session()
     retrieved_utc = datetime.now(timezone.utc).isoformat()
     snapshot_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     snapshot_root = Path(raw_dir) / snapshot_id
     snapshot_root.mkdir(parents=True, exist_ok=False)
     archive_path = snapshot_root / "PET.zip"
 
-    download_metadata = _download_petroleum_bulk_file(http, archive_path, timeout)
-    records, series_manifest, parse_stats = _read_petroleum_series_from_zip(
-        archive_path, selected, start_date, end_date
-    )
+    try:
+        download_metadata = _download_petroleum_bulk_file(http, archive_path, timeout)
+        records, series_manifest, parse_stats = _read_petroleum_series_from_zip(
+            archive_path, selected, start_date, end_date
+        )
+    finally:
+        if owns_session:
+            http.close()
 
     columns = ["date", "series", "series_id", "value", "units", "series_description"]
     frame = pd.DataFrame(records, columns=columns)
