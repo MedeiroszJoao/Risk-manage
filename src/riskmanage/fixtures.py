@@ -22,22 +22,22 @@ def build_synthetic_market_data(n: int = 1800, seed: int = 20261124) -> pd.DataF
         [-0.06, 0.16, 0.02, 0.02, -0.05, 1.00, 0.72],
         [-0.08, 0.18, 0.01, 0.03, -0.06, 0.72, 1.00],
     ])
-    # The eighth innovation is an independent Brent-specific component; the
-    # common WTI factor creates a high but imperfect WTI/Brent correlation.
-    corr8 = np.eye(8)
-    corr8[:7, :7] = corr
-    z = rng.multivariate_normal(np.zeros(8), corr8, size=n)
+    # Preserve the original seven-factor random draw exactly so adding Brent
+    # does not change existing synthetic equity, FX, WTI or rates reference paths.
+    z = rng.multivariate_normal(np.zeros(7), corr, size=n)
+    brent_specific = rng.standard_normal(n)
     stress = np.zeros(n, dtype=bool)
     for start in (int(n * .22), int(n * .58), int(n * .82)):
         end = min(n, start + int(rng.integers(12, 28)))
         stress[start:end] = True
     scale = np.where(stress, 2.8, 1.0)
     z *= scale[:, None]
+    brent_specific *= scale
     equity_ret = .00028 + .0105 * z[:, 0]
     fx_ret = .00002 + .0048 * z[:, 2]
     jpy_ret = -.00001 + .0052 * z[:, 3]
     wti_ret = .00008 + .018 * z[:, 4]
-    brent_ret = .00008 + .015 * (0.90 * z[:, 4] + np.sqrt(1.0 - 0.90**2) * z[:, 7])
+    brent_ret = .00008 + .015 * (0.90 * z[:, 4] + np.sqrt(1.0 - 0.90**2) * brent_specific)
     vix = np.clip(17.5 - 6.0 * z[:, 0] + 3.5 * np.abs(z[:, 1]), 9, 75)
     y2 = np.clip(2.4 + np.cumsum(.012 * z[:, 5]), .1, 7.5)
     y10 = np.clip(3.0 + np.cumsum(.010 * z[:, 6]), .2, 8.0)
