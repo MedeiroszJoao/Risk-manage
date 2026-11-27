@@ -30,6 +30,21 @@ def _strict_integer(value, name: str, minimum: int = 0) -> int:
     return result
 
 
+def _strict_complex_vector(values, name: str) -> np.ndarray:
+    if isinstance(values, np.ndarray):
+        raw = values
+        if raw.dtype.kind not in "iufc":
+            raise ValueError(f"{name} must be a numeric real or complex array")
+    else:
+        objects = np.asarray(values, dtype=object)
+        if any(isinstance(value, (bool, np.bool_)) for value in objects.flat):
+            raise ValueError(f"{name} must not contain boolean observations")
+        raw = np.asarray(values)
+        if raw.dtype.kind not in "iufc":
+            raise ValueError(f"{name} must be a numeric real or complex array")
+    return raw.astype(np.complex128, copy=False)
+
+
 def _strict_real_vector(values, name: str) -> np.ndarray:
     if isinstance(values, np.ndarray):
         raw = values
@@ -111,10 +126,7 @@ def heston_characteristic_function(frequency, maturity: float, params: HestonPar
     maturity = _strict_real_scalar(maturity, "maturity")
     if maturity < 0.0:
         raise ValueError("maturity must be non-negative")
-    raw_frequency = np.asarray(frequency)
-    if raw_frequency.dtype.kind not in "iufc":
-        raise ValueError("frequency must be a numeric real or complex array")
-    u = raw_frequency.astype(np.complex128, copy=False)
+    u = _strict_complex_vector(frequency, "frequency")
     if not np.isfinite(u.real).all() or not np.isfinite(u.imag).all():
         raise ValueError("frequency must be finite")
     if maturity == 0.0:
