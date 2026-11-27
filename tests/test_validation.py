@@ -459,3 +459,40 @@ def test_rfet_24_plus_90_day_route_passes_with_separate_calibration_window():
     assert factor["count_screen_24_days_and_90d_distribution_met"]
     assert not factor["count_screen_100_days_met"]
     assert factor["numerical_count_screen_met"]
+
+
+def test_backtest_rejects_mismatched_pandas_series_indexes():
+    dates = pd.date_range("2025-01-01", periods=30, freq="B")
+    hpl = pd.Series(np.zeros(30), index=dates)
+    var = pd.Series(np.ones(30), index=dates + pd.offsets.BDay(1))
+
+    with pytest.raises(ValueError, match="same index"):
+        backtest_var(hpl, var)
+
+
+def test_backtest_rejects_mixing_series_with_unindexed_array():
+    dates = pd.date_range("2025-01-01", periods=30, freq="B")
+    hpl = pd.Series(np.zeros(30), index=dates)
+
+    with pytest.raises(ValueError, match="both be pandas Series"):
+        backtest_var(hpl, np.ones(30))
+
+
+def test_pla_rejects_mismatched_pandas_series_indexes():
+    dates = pd.date_range("2025-01-01", periods=250, freq="B")
+    hpl = pd.Series(np.zeros(250), index=dates)
+    rtpl = pd.Series(np.ones(250), index=dates + pd.offsets.BDay(1))
+
+    with pytest.raises(ValueError, match="same index"):
+        pla_test(hpl, rtpl)
+
+
+def test_pla_rejects_non_monotonic_pandas_series_index():
+    dates = pd.date_range("2025-01-01", periods=250, freq="B")
+    unsorted = dates.to_list()
+    unsorted[10], unsorted[11] = unsorted[11], unsorted[10]
+    hpl = pd.Series(np.zeros(250), index=unsorted)
+    rtpl = pd.Series(np.ones(250), index=unsorted)
+
+    with pytest.raises(ValueError, match="unique and increasing"):
+        pla_test(hpl, rtpl)
