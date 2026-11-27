@@ -30,12 +30,13 @@ def baseline(**overrides):
     return HestonParameters(**values)
 
 
-def test_qe_variance_transition_matches_conditional_first_two_moments():
+def test_qe_variance_transition_matches_cir_moments_with_sampling_error_budget():
     from riskmanage.heston import _qe_variance_step
 
     rng = np.random.default_rng(91)
+    sample_size = 150_000
     cases = [
-        (baseline(vol_of_variance=0.35), 0.04, 1.0 / 252.0),
+        (baseline(vol_of_variance=0.35), 0.04, 1.0 / 252.0, "low"),
         (
             baseline(
                 variance0=0.005,
@@ -46,12 +47,38 @@ def test_qe_variance_transition_matches_conditional_first_two_moments():
             ),
             0.005,
             0.25,
+            "high",
+        ),
+        (
+            baseline(
+                variance0=0.04,
+                mean_reversion=1.0,
+                long_run_variance=0.06,
+                vol_of_variance=0.84,
+            ),
+            0.04,
+            0.1,
+            "near_threshold_low",
+        ),
+        (
+            baseline(
+                variance0=0.04,
+                mean_reversion=1.0,
+                long_run_variance=0.06,
+                vol_of_variance=0.85,
+            ),
+            0.04,
+            0.1,
+            "near_threshold_high",
         ),
     ]
-    for params, variance_now, dt in cases:
-        draws = np.full(150_000, variance_now)
-        shocks = rng.standard_normal(draws.size)
-        simulated, mean, psi = _qe_variance_step(draws, shocks, params, dt, 1.5)
+
+    for params, variance_now, dt, branch_case in cases:
+        draws = np.full(sample_size, variance_now)
+        shocks = rng.standard_normal(sample_size)
+        simulated, conditional_mean, psi = _qe_variance_step(
+            draws, shocks, params, dt, 1.5
+        )
         decay = math.exp(-params.mean_reversion * dt)
         target_mean = params.long_run_variance + (
             variance_now - params.long_run_variance
@@ -67,14 +94,54 @@ def test_qe_variance_transition_matches_conditional_first_two_moments():
             * (1.0 - decay) ** 2
             / (2.0 * params.mean_reversion)
         )
-        mean_tolerance = 0.012 if np.mean(psi) <= 1.5 else 0.035
-        variance_tolerance = 0.035 if np.mean(psi) <= 1.5 else 0.07
-        assert np.mean(simulated) == pytest.approx(target_mean, rel=mean_tolerance)
-        assert np.var(simulated, ddof=1) == pytest.approx(
-            target_variance, rel=variance_tolerance
+
+        # The exact CIR transition is a scaled non-central chi-square:
+        # V(t+dt) = scale * chi2_nu(lambda). Its fourth central moment
+        # supplies a sampling-error budget for the unbiased sample variance.
+        xi = params.vol_of_variance
+        scale = xi**2 * (1.0 - decay) / (4.0 * params.mean_reversion)
+        degrees = 4.0 * params.mean_reversion * params.long_run_variance / xi**2
+        noncentrality = (
+            4.0
+            * params.mean_reversion
+            * decay
+            * variance_now
+            / (xi**2 * (1.0 - decay))
+        )
+        chi_square_variance = 2.0 * (degrees + 2.0 * noncentrality)
+        chi_square_fourth_central = (
+            48.0 * (degrees + 4.0 * noncentrality)
+            + 3.0 * chi_square_variance**2
+        )
+        target_fourth_central = scale**4 * chi_square_fourth_central
+        mean_standard_error = math.sqrt(target_variance / sample_size)
+        sample_variance_standard_error = math.sqrt(
+            (
+                target_fourth_central
+                - (sample_size - 3.0) / (sample_size - 1.0) * target_variance**2
+            )
+            / sample_size
+        )
+
+        observed_psi = float(np.mean(psi))
+        if branch_case == "low":
+            assert observed_psi < 0.1
+        elif branch_case == "high":
+            assert observed_psi > 10.0
+        elif branch_case == "near_threshold_low":
+            assert 1.4 < observed_psi < 1.5
+        else:
+            assert 1.5 < observed_psi < 1.6
+
+        # Six standard errors provide a fixed, distribution-aware Monte Carlo
+        # allowance; this replaces broad hand-selected relative tolerances.
+        assert abs(float(np.mean(simulated)) - target_mean) <= 6.0 * mean_standard_error
+        assert (
+            abs(float(np.var(simulated, ddof=1)) - target_variance)
+            <= 6.0 * sample_variance_standard_error
         )
         assert np.all(simulated >= 0.0)
-        assert np.allclose(mean, target_mean)
+        assert np.allclose(conditional_mean, target_mean)
         assert np.all(psi >= 0.0)
 
 

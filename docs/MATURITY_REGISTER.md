@@ -38,7 +38,7 @@ These states are not interchangeable. A test of a synthetic model is not an empi
 | Reduced-factor selection | Research implementation | Selection-window ES ratio and disjoint 250-observation holdout | No shared daily observations between selection and holdout; tail-estimation uncertainty still material | IMA requirements not established |
 | IMCC / NMRF primitives | Formula primitives | Unit examples only | The current book lacks credit-spread factors, and the stress-period / group-level reduced-factor procedures are not implemented | Not a regulatory calculation |
 | Data ingestion | FRED/EIA pipelines and SEC N-PORT accession parser | Live FRED/EIA checks; N-PORT parser unit-tested against three position records transcribed from one official filing | Full quarterly N-PORT archive and complete filing not yet reconciled; no instrument-level return reconstruction | N-PORT holdings are not RFET evidence or bank desk positions |
-| Portfolio / HPL / RTPL | Yes, hypothetical constant-maturity test books | P&L reconciliation and formula/property tests | No real bank desk positions or APL | Regulatory backtest/PLA incomplete; the `full_greeks` RTPL mode is currently a diagonal second-order approximation and omits mixed cross-Greeks |
+| Portfolio / HPL / RTPL | Yes, hypothetical constant-maturity test books | P&L reconciliation; analytic Black–Scholes vanna benchmark; finite-difference bump convergence; diagonal-versus-full-Hessian comparison | No real bank desk positions or APL | `full_hessian` includes mixed derivatives across the declared desk factors; one-day time-market cross derivatives and factors absent from the declared desk basis remain excluded. Regulatory backtest/PLA is incomplete |
 
 ## Publicly disclosed fund-holdings track\n\nA first SEC N-PORT parsing path is implemented. Its test data contains three selected positions from one iShares Core S&P 500 ETF filing, not the complete holding set. The parser is not yet validated against an entire quarterly bulk archive or reconciled to every position in the original filing. The output is a point-in-time fund disclosure, not bank desk history, transactions or APL.\n\n## Critical omissions for a real desk-level validation
 
@@ -61,7 +61,7 @@ These states are not interchangeable. A test of a synthetic model is not an empi
 
 ## Explicit conclusion
 
-The codebase is a useful research implementation with tested numerical components and public-data ingestion. The latest validation hardening also rejects mismatched pandas Series indexes in HPL/VaR and HPL/RTPL comparisons; its follow-up CI run is pending. It is **not** yet an empirically validated trading-risk engine and does **not** implement a complete FRTB IMA capital process. No current result supports a claim of bank-level performance, model approval or regulatory capital readiness.
+The codebase is a useful research implementation with tested numerical components and public-data ingestion. The latest validation hardening rejects mismatched pandas Series indexes in HPL/VaR and HPL/RTPL comparisons. The reduced-factor test now uses disjoint selection and holdout samples with conditional block-bootstrap uncertainty. It is **not** yet an empirically validated trading-risk engine and does **not** implement a complete FRTB IMA capital process. No current result supports a claim of bank-level performance, model approval or regulatory capital readiness.
 
 
 ## Independent maturity vector — 2026-11-27
@@ -72,7 +72,7 @@ The following is a conservative assessment after the first technical-integrity r
 |---|---|---|---|---|---|---|---|---|
 | Validation / backtesting | Implemented | Partially verified; sample semantics corrected | Tested | Tested with asymptotic/low-power limitations | HPL-only hypothetical diagnostics | No independent implementation benchmark yet | CI reproducible | Exploratory |
 | Historical VaR / ES | Implemented | Convention and fractional boundary mass specified | Property/edge tests | No OOS forecast validation | No real desk book | Independent fractional-tail calculation in tests; external benchmark pending | CI reproducible | Comparative method work pending |
-| Capital / IMCC | Implemented research primitives | Formula primitives tested; full process unverified | Unit-tested | Factor coverage remains in-sample | Synthetic books | Basel MAR33 source traceability; worked-example comparison pending | CI reproducible | Exploratory |
+| Capital / IMCC | Implemented research primitives | Formula primitives tested; full process unverified | Unit-tested | One disjoint chronological 250/250 selection/holdout; conditional block-bootstrap sensitivity | Synthetic books | Basel MAR33 source traceability; worked-example comparison pending | CI reproducible | Exploratory |
 | Heston Fourier / QE-M | Implemented | Analytic identities and limiting cases tested | Benchmarked across configured methods; full error budget pending | Synthetic recovery / MC uncertainty only | No market quote validation | Analytic special cases and Fourier-vs-QE-M cross-check; independent external pricer pending | CI reproducible | Comparative |
 | SSVI surface | Implemented | Sufficient static-arbitrage conditions implemented; broader proof scope limited | Synthetic recovery and dense checks | Calibration uncertainty not fully established | No real option chain | Published SSVI conditions documented; independent market benchmark pending | CI reproducible | Exploratory |
 | Parameter / hedge uncertainty | Implemented | Conditional on selected model/noise assumptions | Simulation and bootstrap experiments | Conditional bootstrap diagnostics | Synthetic quotes and hypothetical hedge | Independent method comparison pending | CI reproducible | Comparative |
@@ -81,11 +81,10 @@ The following is a conservative assessment after the first technical-integrity r
 
 ### Current automated verification
 
-- [Risk-engine CI](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45924282157): successful on Python 3.11 and 3.12 including the pandas-index alignment change.
-- Python 3.11: 291 tests passed; Ruff and all configured Heston experiments passed.
-- Python 3.12: 291 tests passed; Ruff and all configured Heston experiments passed.
-- The four new index-alignment tests passed on both Python versions in run 45924282157.
-- [Live EIA ingestion workflow](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45924282153): successful.
+- [Risk-engine CI](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45932173994): successful on Python 3.11 and 3.12.
+- Python 3.11: 309 tests passed; Ruff, deterministic case and all configured Heston experiments passed.
+- Python 3.12: 309 tests passed; Ruff, deterministic case and all configured Heston experiments passed.
+- [Live EIA ingestion workflow](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45932173991): successful.
 
 This evidence does not change the empirical or regulatory limitations listed above.
 
