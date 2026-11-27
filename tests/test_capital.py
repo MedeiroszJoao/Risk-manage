@@ -199,3 +199,8 @@ def test_build_ima_capital_validates_rho_even_if_required_class_is_missing():
     stress = select_stress_window(factors, window_days=250)
     with pytest.raises(ValueError, match="rho must be numeric"):
         build_ima_capital(factors, stress, {"equity": "equity"}, rho="0.5")
+
+
+def test_capital_rejects_boolean_mixed_with_float_before_numpy_promotion():
+    with pytest.raises(ValueError, match="boolean"):
+        select_reduced_factor_set({"equity": [True, 0.5, 1.0, 2.0]})
