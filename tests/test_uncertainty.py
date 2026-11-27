@@ -159,3 +159,38 @@ def test_parameter_uncertainty_requires_bid_ask_noise_information():
             market,
             n_bootstrap=2,
         )
+
+
+
+def test_positive_quote_simulation_rejects_nonpositive_draws_without_clipping():
+    from riskmanage.uncertainty import _positive_quote_mids
+
+    class FixedNoise:
+        def normal(self, location, scale):
+            return np.array([-0.5, 0.25, -2.0])
+
+    mids, invalid = _positive_quote_mids(
+        np.array([0.1, 1.0, 2.0]),
+        np.array([0.2, 0.2, 0.2]),
+        FixedNoise(),
+    )
+
+    np.testing.assert_allclose(mids, [-0.4, 1.25, 0.0])
+    np.testing.assert_array_equal(invalid, [True, False, True])
+    assert mids[0] < 0.0
+    assert mids[2] == 0.0
+
+
+@pytest.mark.parametrize("kwargs", [
+    {"n_bootstrap": 2.5},
+    {"n_bootstrap": True},
+    {"seed": False},
+    {"n_starts": 1.5},
+    {"max_nfev": True},
+])
+def test_heston_bootstrap_rejects_non_integer_controls(kwargs):
+    market = parameters()
+    options = {"n_bootstrap": 2, "n_starts": 1, "max_nfev": 20, "seed": 9}
+    options.update(kwargs)
+    with pytest.raises(ValueError, match="integer"):
+        bootstrap_heston_calibration(quote_panel(), market, market, **options)
