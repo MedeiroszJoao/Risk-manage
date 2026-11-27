@@ -432,3 +432,30 @@ def test_rfet_rejects_calibration_period_ending_more_than_one_month_before_asses
             calibration_period_start="2025-03-30",
             calibration_period_end="2026-03-29",
         )
+
+
+def test_rfet_24_plus_90_day_route_passes_with_separate_calibration_window():
+    dates = list(pd.date_range("2025-04-01", periods=24, freq="15D"))
+    dates.extend([pd.Timestamp("2026-04-06"), pd.Timestamp("2026-04-21")])
+    ledger = pd.DataFrame(
+        {
+            "date": dates,
+            "factor_id": "SPX",
+            "evidence_type": "transaction",
+            "verified": True,
+        }
+    )
+    result = rfet_diagnostic(
+        ledger,
+        as_of_date="2026-04-30",
+        calibration_period_start="2025-04-01",
+        calibration_period_end="2026-03-31",
+    )
+    factor = result["factors"]["SPX"]
+
+    assert factor["calibration_period_real_price_days"] == 24
+    assert factor["eligible_candidate_real_price_days"] == 24
+    assert factor["minimum_candidate_days_in_any_90d_window"] >= 4
+    assert factor["count_screen_24_days_and_90d_distribution_met"]
+    assert not factor["count_screen_100_days_met"]
+    assert factor["numerical_count_screen_met"]
