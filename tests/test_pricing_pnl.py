@@ -7,6 +7,8 @@ from riskmanage.pnl import (
     _effective_position_liquidity_horizon,
     build_joint_liquidity_horizon_pnl,
     build_desk_pnl,
+    enrich_market_data,
+    market_state,
     _mixed_second_derivative,
     _taylor_rtpl,
     value_position,
