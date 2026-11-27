@@ -87,3 +87,8 @@ The following is a conservative assessment after the first technical-integrity r
 - [Live EIA/FRED integrated workflow](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45921183227): successful.
 
 This evidence does not change the empirical or regulatory limitations listed above.
+
+
+## Audit baseline update — 2026-11-27
+
+Use [TECHNICAL_AUDIT_2026-11-27.md](TECHNICAL_AUDIT_2026-11-27.md) as the current source-level audit baseline. It supersedes earlier code-state observations where the branch has changed. The current CI result is 255 passing tests on Python 3.11 and 255 on Python 3.12; this is software-path evidence only. The audit identifies two confirmed P0 findings in IMCC class aggregation and RFET assessment-date handling. No maturity state is advanced by this CI result.
