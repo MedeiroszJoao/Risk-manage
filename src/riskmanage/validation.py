@@ -370,6 +370,8 @@ def rfet_diagnostic(\n    evidence_ledger: pd.DataFrame,\n    *,\n    as_of_date
     ):
         raise ValueError("lookback_days must be a positive integer")
 
+    if as_of_date is None:
+        raise ValueError("as_of_date must be a valid explicit assessment date")
     try:
         assessment_date = pd.Timestamp(pd.to_datetime(as_of_date, errors="raise", utc=True))
     except (TypeError, ValueError) as exc:
@@ -382,7 +384,7 @@ def rfet_diagnostic(\n    evidence_ledger: pd.DataFrame,\n    *,\n    as_of_date
     input_rows = int(len(data))
     data["date"] = pd.to_datetime(data["date"], errors="coerce", utc=True)
     invalid_date = data["date"].isna()
-    future_date = data["date"] > assessment_date
+    future_date = data["date"].dt.normalize() > assessment_date
     missing_factor = (
         data["factor_id"].isna()
         | data["factor_id"].astype("string").str.strip().eq("").fillna(True)
@@ -436,7 +438,12 @@ def rfet_diagnostic(\n    evidence_ledger: pd.DataFrame,\n    *,\n    as_of_date
 
     results = {}
     for factor, group in data.groupby("factor_id"):
-        eligible = group[(group["date"] >= cutoff) & group["_eligible_evidence"]]
+        observation_days = group["date"].dt.normalize()
+        eligible = group[
+            (observation_days >= cutoff.normalize())
+            & (observation_days <= assessment_date)
+            & group["_eligible_evidence"]
+        ]
         dates = eligible["date"].dt.normalize().drop_duplicates().sort_values()
         count = int(len(dates))
         if count:
