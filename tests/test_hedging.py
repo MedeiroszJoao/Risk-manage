@@ -1,7 +1,10 @@
 import numpy as np
 import pytest
 
-from riskmanage.hedging import heston_delta_hedge_experiment
+from riskmanage.hedging import (
+    _paired_pathwise_statistics,
+    heston_delta_hedge_experiment,
+)
 from riskmanage.heston import HestonParameters
 
 
@@ -18,6 +21,41 @@ def parameter_set(**overrides):
     )
     values.update(overrides)
     return HestonParameters(**values)
+
+
+def test_paired_path_statistics_report_t_and_wilson_intervals():
+    differences = np.array([-1.0, 0.0, 1.0, 2.0, 3.0, 4.0])
+    result = _paired_pathwise_statistics(differences)
+
+    expected_sd = np.std(differences, ddof=1)
+    expected_se = expected_sd / np.sqrt(differences.size)
+    assert result["paired_path_count"] == 6
+    assert result["mean_difference"] == pytest.approx(1.5)
+    assert result["standard_deviation_difference"] == pytest.approx(expected_sd)
+    assert result["standard_error_of_mean_difference"] == pytest.approx(expected_se)
+    interval = result["mean_difference_95_percent_t_interval"]
+    assert interval[0] == pytest.approx(1.5 - 2.570581835636314 * expected_se)
+    assert interval[1] == pytest.approx(1.5 + 2.570581835636314 * expected_se)
+    assert result["pathwise_wins"] == 4
+    assert result["pathwise_losses"] == 1
+    assert result["pathwise_ties"] == 1
+    assert result["pathwise_outperformance_fraction"] == pytest.approx(4.0 / 6.0)
+    wilson = result["pathwise_outperformance_95_percent_wilson_interval"]
+    assert wilson[0] <= 4.0 / 6.0 <= wilson[1]
+
+
+@pytest.mark.parametrize(
+    "bad_values",
+    [
+        np.array([[1.0, 2.0]]),
+        np.array([1.0]),
+        np.array([1.0, np.nan]),
+        np.array([1.0, np.inf]),
+    ],
+)
+def test_paired_path_statistics_reject_invalid_samples(bad_values):
+    with pytest.raises(ValueError, match="finite one-dimensional sample"):
+        _paired_pathwise_statistics(bad_values)
 
 
 def test_heston_delta_hedge_runs_two_policies_on_same_physical_paths():
@@ -47,8 +85,16 @@ def test_heston_delta_hedge_runs_two_policies_on_same_physical_paths():
             strategy["net_loss_var_es"]["var"]
         )
         assert strategy["average_transaction_cost"] == 0.0
-    assert np.isfinite(
-        result["paired_comparison"]["mean_pnl_difference_heston_minus_bs"]
+    paired = result["paired_comparison"]
+    assert np.isfinite(paired["mean_pnl_difference_heston_minus_bs"])
+    assert paired["paired_path_count"] == 500
+    assert paired["standard_error_of_mean_difference"] > 0.0
+    assert paired["mean_difference_95_percent_t_interval"][0] <= (
+        paired["mean_pnl_difference_heston_minus_bs"]
+    ) <= paired["mean_difference_95_percent_t_interval"][1]
+    assert paired["pairing_unit"].startswith("one independently simulated")
+    assert result["simulation"]["statistical_sampling_unit"].startswith(
+        "independent simulated physical path"
     )
 
 

@@ -227,3 +227,15 @@ The 2026-11-27 audit is the current baseline. It does not claim that the remaini
 **Interpretation restrictions:** non-overlapping daily observations do not guarantee statistical independence across folds. The repeated-fold output is descriptive stability evidence, not a test of MAR33 group-level compliance or a statistical confidence interval. Each 250-day 97.5% ES estimate has only about six nominal 10-day tail observations. The single latest holdout retains its conditional block-bootstrap sensitivity analysis.
 
 **Acceptance tests:** exact fold boundaries and no-overlap assertions; modification of a fold's holdout must not change that fold's selected set; latest fold must match the single-holdout selection and ratio; insufficient history returns an explicit status.
+
+
+
+## HED-01 — Quantify paired Monte Carlo uncertainty in Heston hedge comparisons
+
+**Finding:** both hedge policies are evaluated on the same simulated physical paths, but the comparison originally reported only the sample mean, standard deviation and pathwise win fraction. It did not report the paired standard error or an interval for the mean policy difference.
+
+**Remediation:** compute the pathwise net-P&L difference (Heston delta minus frozen-volatility Black–Scholes delta) on matched paths. Report the paired standard error, a two-sided 95% Student-t interval for the mean difference, the pathwise win/loss/tie counts, and a 95% Wilson interval for the win fraction.
+
+**Interpretation restrictions:** intervals condition on the selected physical scenario, pricing model, hedge frequency and QE-M discretization. They measure Monte Carlo sampling variability across independently simulated paths, not parameter, model, market-data, transaction-cost, or discretization uncertainty. A positive mean difference is not evidence of market outperformance.
+
+**EVT sample-unit clarification:** the POT-GPD hedge experiment models one terminal cumulative hedge-loss observation per independently simulated path. IID resampling across completed paths is the appropriate sampling unit for this Monte Carlo experiment; simulated within-path dynamics are not resampled as independent observations. This is not a historical chronological time-series tail-dependence study.

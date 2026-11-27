@@ -4,6 +4,7 @@ import math
 
 import numpy as np
 from scipy.special import ndtr
+from scipy.stats import t as student_t
 
 from .heston import (
     HestonParameters,
@@ -11,6 +12,75 @@ from .heston import (
     heston_price_fourier,
     heston_simulate_paths,
 )
+
+
+def _paired_pathwise_statistics(differences: np.ndarray) -> dict:
+    """Summarize matched strategy differences across independent simulation paths."""
+    values = np.asarray(differences, dtype=float)
+    if values.ndim != 1 or values.size < 2 or not np.isfinite(values).all():
+        raise ValueError(
+            "paired path differences must be a finite one-dimensional sample "
+            "with at least two pairs"
+        )
+
+    n_pairs = int(values.size)
+    mean_difference = float(np.mean(values))
+    standard_deviation = float(np.std(values, ddof=1))
+    standard_error = float(standard_deviation / math.sqrt(n_pairs))
+    critical_value = float(student_t.ppf(0.975, df=n_pairs - 1))
+    half_width = critical_value * standard_error
+
+    wins = int(np.count_nonzero(values > 0.0))
+    losses = int(np.count_nonzero(values < 0.0))
+    ties = int(n_pairs - wins - losses)
+    win_fraction = float(wins / n_pairs)
+
+    # Wilson score interval for the pathwise outperformance fraction.
+    z_value = 1.959963984540054
+    z_squared = z_value * z_value
+    denominator = 1.0 + z_squared / n_pairs
+    centre = (win_fraction + z_squared / (2.0 * n_pairs)) / denominator
+    radius = (
+        z_value
+        * math.sqrt(
+            win_fraction * (1.0 - win_fraction) / n_pairs
+            + z_squared / (4.0 * n_pairs * n_pairs)
+        )
+        / denominator
+    )
+
+    return {
+        "paired_path_count": n_pairs,
+        "mean_difference": mean_difference,
+        "standard_deviation_difference": standard_deviation,
+        "standard_error_of_mean_difference": standard_error,
+        "mean_difference_95_percent_t_interval": [
+            float(mean_difference - half_width),
+            float(mean_difference + half_width),
+        ],
+        "mean_difference_interval_method": (
+            "paired_student_t_interval_across_independent_simulated_paths"
+        ),
+        "pathwise_wins": wins,
+        "pathwise_losses": losses,
+        "pathwise_ties": ties,
+        "pathwise_outperformance_fraction": win_fraction,
+        "pathwise_outperformance_95_percent_wilson_interval": [
+            float(max(0.0, centre - radius)),
+            float(min(1.0, centre + radius)),
+        ],
+        "paired_standardized_mean_difference": (
+            float(mean_difference / standard_deviation)
+            if standard_deviation > 0.0
+            else None
+        ),
+        "sampling_assumption": (
+            "Each pair is one independently simulated physical path evaluated under "
+            "both hedge policies. Intervals are conditional on the supplied scenario "
+            "parameters, pricing model and QE-M discretization; they do not cover "
+            "parameter, model, market-data or discretization uncertainty."
+        ),
+    }
 
 
 def _black_scholes_delta(
@@ -272,6 +342,7 @@ def heston_delta_hedge_experiment(
     heston_summary = summarize(heston_result)
     bs_summary = summarize(bs_result)
     pnl_difference = heston_result["net_pnl"] - bs_result["net_pnl"]
+    paired_statistics = _paired_pathwise_statistics(pnl_difference)
     # Remove path vectors from the public summary; the JSON runner writes aggregate metrics.
     for summary in (heston_summary, bs_summary):
         summary.pop("net_pnl")
@@ -307,16 +378,26 @@ def heston_delta_hedge_experiment(
             "n_steps": int(n_steps),
             "hedge_frequency_per_year": float(n_steps / maturity),
             "confidence_level": float(confidence_level),
+            "statistical_sampling_unit": (
+                "independent simulated physical path; both hedge strategies are evaluated "
+                "on the same path index"
+            ),
         },
         "strategies": {
             "heston_fourier_delta": heston_summary,
             "frozen_black_scholes_delta": bs_summary,
         },
         "paired_comparison": {
-            "mean_pnl_difference_heston_minus_bs": float(np.mean(pnl_difference)),
-            "standard_deviation_pnl_difference": float(np.std(pnl_difference, ddof=1)),
-            "probability_heston_pnl_exceeds_bs_pnl": float(
-                np.mean(pnl_difference > 0.0)
+            "mean_pnl_difference_heston_minus_bs": paired_statistics["mean_difference"],
+            "standard_deviation_pnl_difference": paired_statistics[
+                "standard_deviation_difference"
+            ],
+            "probability_heston_pnl_exceeds_bs_pnl": paired_statistics[
+                "pathwise_outperformance_fraction"
+            ],
+            **paired_statistics,
+            "pairing_unit": (
+                "one independently simulated physical path evaluated under both strategies"
             ),
         },
         "interpretation_boundary": (
