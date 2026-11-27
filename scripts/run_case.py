@@ -247,6 +247,13 @@ def main():
       if capital["imcc"] is not None
       else f"- Research IMCC formula primitive: not computed; the supplied factor map omits regulatory classes {capital['missing_regulatory_risk_classes']} and/or selected factors omit mapped classes {capital['missing_selected_risk_classes']}."
     )
+    holdout_uncertainty = capital["reduced_set"]["holdout"].get("conditional_uncertainty", {})
+    block_sensitivity = holdout_uncertainty.get("block_length_sensitivity", {})
+    bootstrap_ci_line = "; ".join(
+        f"block {block}: {result['confidence_interval'][0]:.3f}–{result['confidence_interval'][1]:.3f}"
+        for block, result in block_sensitivity.items()
+        if result.get("confidence_interval") is not None
+    ) or "not computed"
     md += ["","## Capital and stress outputs","",
       f"- Liquidity-adjusted ES research diagnostic: USD {liquidity['liquidity_adjusted_es']:,.2f} (10-day base, 97.5%).",
       f"- Descriptive 250-observation high-tail window: {stress['start_date']} to {stress['end_date']}.",
@@ -255,6 +262,8 @@ def main():
       f"- Selection-sample reduced/full ES ratio (factor-selection diagnostic only): {capital['reduced_set']['explained_ratio']:.1%}.",
       f"- Reduced/full ES ratio on the non-overlapping 250-observation holdout (research diagnostic): {capital['reduced_set']['holdout'].get('ratio')}.",
       f"- Holdout chronology verified from explicit dates: {capital['reduced_set']['holdout'].get('chronology_verified', False)}.",
+      f"- Conditional 95% circular moving-block bootstrap intervals for reduced/full ES ratio (block lengths in overlapping 10-day observations): {bootstrap_ci_line}.",
+      "- Bootstrap intervals condition on the frozen selected-factor set and one observed holdout; they do not include selection, model, data or regime uncertainty.",
       "- RFET: public-close-only evidence is not used to certify modellability.",
       "","## Interpretation guardrails","",
       "- HPL backtesting is not APL backtesting.",

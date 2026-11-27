@@ -204,3 +204,14 @@ The 2026-11-27 audit is the current baseline. It does not claim that the remaini
 **Remediation:** replace the rolling diagnostic as the primary holdout by one disjoint chronological design: 250 selection observations followed by 250 holdout observations. The selected factor set is frozen before the holdout. Ten-day overlapping loss aggregates are built separately within each sample, yielding 241 aggregates per sample and no cross-boundary overlap.
 
 **Limitations:** with 241 overlapping ten-day observations and a 97.5% confidence level, the empirical tail is based on roughly six observations. The ratio is descriptive; dependence-adjusted block-bootstrap uncertainty and additional non-overlapping periods are still required. This is not a supervisory reduced-factor test or a group-level MAR33 approval.
+
+
+## CAP-08 — Quantify conditional sampling uncertainty in the reduced-factor holdout
+
+**Finding:** the disjoint 250-day holdout fixes sample overlap, but its 241 overlapping ten-day loss observations provide only about six nominal observations beyond the 97.5% quantile. A point ratio alone is too weak to communicate finite-sample uncertainty.
+
+**Remediation:** add a circular moving-block bootstrap on the synchronized 10-day factor-loss vectors. Every factor column uses the same sampled block indices, preserving contemporaneous cross-factor dependence and local serial dependence. Report two-sided 95% percentile intervals for block lengths 10, 20 and 40, plus requested/valid/failed replicates, denominator failures, seed, and the share of bootstrap ratios below the declared target.
+
+**Interpretation restrictions:** intervals are conditional on the frozen factor set and observed holdout. They do not include factor-selection, model, data or regime uncertainty. Block-length sensitivity is reported rather than selecting the most favorable result. No regulatory, statistical-significance or model-validation claim follows from the bootstrap alone.
+
+**Acceptance tests:** deterministic seed reproducibility; exact ratio invariance under perfectly proportional factor columns when rows are resampled jointly; block-length and replication-count validation; integrated report exposes the conditional interval and scope.

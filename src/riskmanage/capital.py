@@ -8,6 +8,9 @@ from .risk import _ten_day_losses, historical_var_es
 
 MIN_CURRENT_OBSERVATIONS = 250
 REDUCED_SET_HOLDOUT_OBSERVATIONS = MIN_CURRENT_OBSERVATIONS
+DEFAULT_HOLDOUT_BOOTSTRAP_REPLICATES = 1000
+DEFAULT_HOLDOUT_BOOTSTRAP_BLOCK_LENGTHS = (10, 20, 40)
+DEFAULT_HOLDOUT_BOOTSTRAP_SEED = 20261127
 BASEL_IMCC_RHO = 0.5
 BASEL_NMRF_RHO = 0.6
 
@@ -117,6 +120,166 @@ def _portfolio_es(mapping, names, confidence):
     return float(historical_var_es(_ten_day_losses(daily), confidence)["expected_shortfall"])
 
 
+def _circular_moving_block_bootstrap_es_ratio(
+    daily_factor_losses,
+    selected,
+    confidence,
+    target_explained=0.75,
+    bootstrap_replicates=DEFAULT_HOLDOUT_BOOTSTRAP_REPLICATES,
+    block_lengths=DEFAULT_HOLDOUT_BOOTSTRAP_BLOCK_LENGTHS,
+    seed=DEFAULT_HOLDOUT_BOOTSTRAP_SEED,
+):
+    """Conditional block-bootstrap uncertainty for a frozen reduced-factor set.
+
+    Each factor's overlapping ten-day losses are constructed first. The
+    bootstrap resamples synchronized rows across all factors in circular
+    contiguous blocks, preserving contemporaneous factor dependence and
+    short-run serial dependence in the ten-day loss series.
+
+    Intervals are conditional on the already-selected factor set and the
+    observed holdout. They do not include factor-selection, model, data or
+    regime uncertainty.
+    """
+    bootstrap_replicates = _strict_integer(
+        bootstrap_replicates, "bootstrap_replicates"
+    )
+    seed = _strict_integer(seed, "bootstrap_seed")
+    target = _strict_float(target_explained, "target_explained")
+    if bootstrap_replicates < 100:
+        raise ValueError("bootstrap_replicates must be at least 100")
+    if seed < 0:
+        raise ValueError("bootstrap_seed must be nonnegative")
+    if not 0.0 < target <= 1.0:
+        raise ValueError("target_explained must be in (0, 1]")
+
+    if not isinstance(block_lengths, (tuple, list)) or not block_lengths:
+        raise ValueError("bootstrap_block_lengths must be a non-empty tuple or list")
+    normalized_blocks = tuple(
+        _strict_integer(value, "bootstrap_block_length") for value in block_lengths
+    )
+    if len(set(normalized_blocks)) != len(normalized_blocks):
+        raise ValueError("bootstrap_block_lengths must be unique")
+    if any(value < 10 for value in normalized_blocks):
+        raise ValueError(
+            "bootstrap block lengths must be at least 10 overlapping ten-day observations"
+        )
+
+    if not daily_factor_losses:
+        raise ValueError("daily_factor_losses cannot be empty")
+    if not selected or not set(selected).issubset(daily_factor_losses):
+        raise ValueError("selected must contain known risk factors")
+
+    names = list(daily_factor_losses)
+    ten_day = {
+        name: _ten_day_losses(np.asarray(values, dtype=float), 10)
+        for name, values in daily_factor_losses.items()
+    }
+    lengths = {len(values) for values in ten_day.values()}
+    if len(lengths) != 1:
+        raise ValueError("ten-day factor loss vectors must have equal lengths")
+    matrix = np.column_stack([ten_day[name] for name in names])
+    observations = matrix.shape[0]
+    if any(value > observations for value in normalized_blocks):
+        raise ValueError(
+            f"bootstrap block lengths cannot exceed {observations} ten-day observations"
+        )
+
+    selected_columns = [names.index(name) for name in selected]
+    rng = np.random.default_rng(seed)
+    sensitivity = {}
+    required_valid = int(np.ceil(0.95 * bootstrap_replicates))
+
+    for block_length in normalized_blocks:
+        blocks_per_replication = int(np.ceil(observations / block_length))
+        ratios = np.empty(bootstrap_replicates, dtype=float)
+        valid = 0
+        nonpositive_full_es = 0
+        nonfinite_es = 0
+
+        for _ in range(bootstrap_replicates):
+            starts = rng.integers(0, observations, size=blocks_per_replication)
+            indices = np.concatenate(
+                [
+                    (start + np.arange(block_length, dtype=int)) % observations
+                    for start in starts
+                ]
+            )[:observations]
+            sample = matrix[indices, :]
+            full_losses = np.sum(sample, axis=1)
+            reduced_losses = np.sum(sample[:, selected_columns], axis=1)
+            full_es = historical_var_es(full_losses, confidence)["expected_shortfall"]
+            reduced_es = historical_var_es(
+                reduced_losses, confidence
+            )["expected_shortfall"]
+
+            if not np.isfinite(full_es) or not np.isfinite(reduced_es):
+                nonfinite_es += 1
+                continue
+            if full_es <= 0.0:
+                nonpositive_full_es += 1
+                continue
+            ratios[valid] = float(reduced_es / full_es)
+            valid += 1
+
+        valid_fraction = valid / bootstrap_replicates
+        ci = (
+            np.percentile(ratios[:valid], [2.5, 97.5]).astype(float).tolist()
+            if valid >= required_valid
+            else None
+        )
+        sensitivity[str(block_length)] = {
+            "status": (
+                "computed_conditional_percentile_interval"
+                if ci is not None
+                else "insufficient_valid_replicates"
+            ),
+            "block_length": int(block_length),
+            "block_length_unit": (
+                "consecutive overlapping ten-day loss observations; "
+                "each observation starts one trading day after the prior one"
+            ),
+            "requested_replicates": int(bootstrap_replicates),
+            "valid_replicates": int(valid),
+            "failed_replicates": int(bootstrap_replicates - valid),
+            "nonpositive_full_es_replicates": int(nonpositive_full_es),
+            "nonfinite_es_replicates": int(nonfinite_es),
+            "valid_fraction": float(valid_fraction),
+            "bootstrap_mean_ratio": (
+                float(np.mean(ratios[:valid])) if valid else None
+            ),
+            "bootstrap_median_ratio": (
+                float(np.median(ratios[:valid])) if valid else None
+            ),
+            "confidence_interval_level": 0.95,
+            "confidence_interval": ci,
+            "fraction_below_target": (
+                float(np.mean(ratios[:valid] < target)) if valid else None
+            ),
+        }
+
+    return {
+        "status": "computed_conditional_block_bootstrap",
+        "method": "circular_moving_block_bootstrap_on_synchronized_ten_day_factor_losses",
+        "replicates_per_block_length": int(bootstrap_replicates),
+        "seed": int(seed),
+        "confidence_interval_method": "two_sided_percentile_95_percent",
+        "nominal_tail_observations": float(observations * (1.0 - confidence)),
+        "ten_day_loss_observations": int(observations),
+        "factor_columns_resampled_together": True,
+        "factor_set_reselected_in_replicates": False,
+        "conditional_on_frozen_factor_selection": True,
+        "block_length_sensitivity": sensitivity,
+        "interpretation": (
+            "Intervals condition on the factor set selected before the holdout "
+            "and on the observed holdout design. They quantify only sampling "
+            "variation under the stated circular moving-block bootstrap; they "
+            "do not include factor-selection, model, market-data or regime "
+            "uncertainty. Block-length sensitivity must be read across all "
+            "reported values rather than selecting the most favorable interval."
+        ),
+    }
+
+
 def _non_overlapping_reduced_holdout(
     factors,
     selected,
@@ -124,6 +287,10 @@ def _non_overlapping_reduced_holdout(
     estimation_window=MIN_CURRENT_OBSERVATIONS,
     holdout_observations=REDUCED_SET_HOLDOUT_OBSERVATIONS,
     observation_dates=None,
+    target_explained=0.75,
+    bootstrap_replicates=DEFAULT_HOLDOUT_BOOTSTRAP_REPLICATES,
+    bootstrap_block_lengths=DEFAULT_HOLDOUT_BOOTSTRAP_BLOCK_LENGTHS,
+    bootstrap_seed=DEFAULT_HOLDOUT_BOOTSTRAP_SEED,
 ):
     """Evaluate a frozen factor set on a disjoint chronological holdout.
 
@@ -202,12 +369,22 @@ def _non_overlapping_reduced_holdout(
             "reduced_es": None,
         }
 
+    uncertainty = _circular_moving_block_bootstrap_es_ratio(
+        holdout_sample,
+        selected,
+        confidence,
+        target_explained=target_explained,
+        bootstrap_replicates=bootstrap_replicates,
+        block_lengths=bootstrap_block_lengths,
+        seed=bootstrap_seed,
+    )
     return {
         **common,
         "status": "computed_non_overlapping_holdout",
         "ratio": float(reduced_es / full_es),
         "full_es": float(full_es),
         "reduced_es": float(reduced_es),
+        "conditional_uncertainty": uncertainty,
         "interpretation": (
             "The factor set was selected using a disjoint historical sample and "
             "evaluated once on the subsequent holdout sample. Each sample's "
@@ -260,6 +437,9 @@ def select_reduced_factor_set(
     estimation_window: int = MIN_CURRENT_OBSERVATIONS,
     holdout_observations: int = REDUCED_SET_HOLDOUT_OBSERVATIONS,
     observation_dates=None,
+    bootstrap_replicates: int = DEFAULT_HOLDOUT_BOOTSTRAP_REPLICATES,
+    bootstrap_block_lengths=DEFAULT_HOLDOUT_BOOTSTRAP_BLOCK_LENGTHS,
+    bootstrap_seed: int = DEFAULT_HOLDOUT_BOOTSTRAP_SEED,
 ):
     """Select on one sample and evaluate once on a disjoint chronological holdout."""
     factors = _align_factor_losses(current_factor_losses)
@@ -327,6 +507,10 @@ def select_reduced_factor_set(
         estimation_window,
         holdout_observations,
         dates,
+        target_explained,
+        bootstrap_replicates,
+        bootstrap_block_lengths,
+        bootstrap_seed,
     )
     holdout_target_met = bool(
         holdout["status"] == "computed_non_overlapping_holdout"
@@ -471,6 +655,9 @@ def build_ima_capital(
     confidence: float = 0.975,
     rho: float = 0.5,
     observation_dates=None,
+    bootstrap_replicates: int = DEFAULT_HOLDOUT_BOOTSTRAP_REPLICATES,
+    bootstrap_block_lengths=DEFAULT_HOLDOUT_BOOTSTRAP_BLOCK_LENGTHS,
+    bootstrap_seed: int = DEFAULT_HOLDOUT_BOOTSTRAP_SEED,
 ):
     """Build a non-regulatory research aggregation, failing closed on short data."""
     factors = _align_factor_losses(factor_losses)
@@ -514,6 +701,9 @@ def build_ima_capital(
         estimation_window=MIN_CURRENT_OBSERVATIONS,
         holdout_observations=REDUCED_SET_HOLDOUT_OBSERVATIONS,
         observation_dates=observation_dates,
+        bootstrap_replicates=bootstrap_replicates,
+        bootstrap_block_lengths=bootstrap_block_lengths,
+        bootstrap_seed=bootstrap_seed,
     )
     selected = reduced["selected_factors"]
 

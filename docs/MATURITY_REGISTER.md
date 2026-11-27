@@ -130,3 +130,10 @@ A second audit found that the former 60-endpoint rolling ES windows reused 190â€
 The current method requires 250 daily observations for selection and a separate 250 daily observations for evaluation. The factor set is frozen before the holdout begins. Ten-day overlapping losses are constructed separately inside each sample (241 observations per sample), so neither ten-day aggregate crosses the sample boundary.
 
 This is still a descriptive holdout ratio. At 97.5%, its tail is based on roughly six ten-day observations; block-bootstrap confidence intervals and stability over multiple non-overlapping periods remain necessary before drawing inferential conclusions.
+
+
+## Reduced-factor holdout uncertainty â€” 2026-11-27
+
+The 250-observation disjoint holdout now includes a synchronized circular moving-block bootstrap on the 241 overlapping ten-day factor-loss vectors. All factor columns are resampled with the same block indices, preserving contemporaneous cross-factor dependence and local serial dependence. Percentile intervals are reported for block lengths 10, 20 and 40 ten-day observations, with seed and valid/failed replicate counts recorded.
+
+**Evidence scope:** the intervals are conditional on the factor set selected before the holdout and on the single observed holdout. They do not incorporate factor-selection uncertainty, model uncertainty, market-data uncertainty or regime uncertainty. The roughly six nominal 97.5% tail observations remain a severe finite-sample limitation. The bootstrap is a sensitivity diagnostic, not regulatory validation or proof of statistical significance.

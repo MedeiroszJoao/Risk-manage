@@ -6,6 +6,7 @@ from riskmanage.capital import (
     aggregate_nmrf_ses,
     build_ima_capital,
     calculate_imcc,
+    _circular_moving_block_bootstrap_es_ratio,
     select_reduced_factor_set,
     select_stress_window,
 )
@@ -401,3 +402,71 @@ def test_reduced_factor_holdout_records_real_selection_and_validation_dates():
     assert holdout["holdout_window"]["start_date"] == dates[250].tz_localize("UTC").isoformat()
     assert holdout["holdout_window"]["end_date"] == dates[-1].tz_localize("UTC").isoformat()
     assert holdout["selection_window"]["end_index"] + 1 == holdout["holdout_window"]["start_index"]
+
+
+def test_holdout_block_bootstrap_is_reproducible_and_preserves_joint_factor_rows():
+    rng = np.random.default_rng(20261127)
+    core = np.abs(rng.normal(2.0, 0.4, 250)) + 0.2
+    offset = 0.5 * core
+    factors = {"core": core, "offset": offset}
+
+    first = _circular_moving_block_bootstrap_es_ratio(
+        factors, selected=["core"], confidence=0.975,
+        bootstrap_replicates=100, block_lengths=(10, 20), seed=90817,
+    )
+    second = _circular_moving_block_bootstrap_es_ratio(
+        factors, selected=["core"], confidence=0.975,
+        bootstrap_replicates=100, block_lengths=(10, 20), seed=90817,
+    )
+
+    assert first == second
+    assert first["factor_columns_resampled_together"] is True
+    assert first["conditional_on_frozen_factor_selection"] is True
+    assert first["factor_set_reselected_in_replicates"] is False
+    for result in first["block_length_sensitivity"].values():
+        assert result["status"] == "computed_conditional_percentile_interval"
+        assert result["valid_replicates"] == 100
+        assert result["failed_replicates"] == 0
+        assert result["confidence_interval"] == pytest.approx(
+            [2.0 / 3.0, 2.0 / 3.0], abs=1e-12
+        )
+
+
+def test_holdout_block_bootstrap_rejects_invalid_block_lengths_and_replicates():
+    rng = np.random.default_rng(90818)
+    factors = {"core": np.abs(rng.normal(2.0, 0.4, 250)) + 0.2}
+
+    with pytest.raises(ValueError, match="at least 10"):
+        _circular_moving_block_bootstrap_es_ratio(
+            factors, ["core"], 0.975, bootstrap_replicates=100,
+            block_lengths=(9,), seed=1
+        )
+    with pytest.raises(ValueError, match="unique"):
+        _circular_moving_block_bootstrap_es_ratio(
+            factors, ["core"], 0.975, bootstrap_replicates=100,
+            block_lengths=(10, 10), seed=1
+        )
+    with pytest.raises(ValueError, match="at least 100"):
+        _circular_moving_block_bootstrap_es_ratio(
+            factors, ["core"], 0.975, bootstrap_replicates=99,
+            block_lengths=(10,), seed=1
+        )
+
+
+def test_disjoint_holdout_reports_conditional_bootstrap_uncertainty():
+    rng = np.random.default_rng(90819)
+    core = np.abs(rng.normal(1.0, 0.3, 500)) + 0.1
+    factors = {"equity": core, "rates": 0.1 * core}
+    result = select_reduced_factor_set(
+        factors, observation_dates=_dates(500),
+        bootstrap_replicates=100, bootstrap_block_lengths=(10, 20),
+        bootstrap_seed=777,
+    )
+    uncertainty = result["holdout"]["conditional_uncertainty"]
+
+    assert uncertainty["status"] == "computed_conditional_block_bootstrap"
+    assert uncertainty["replicates_per_block_length"] == 100
+    assert uncertainty["nominal_tail_observations"] == pytest.approx(241 * 0.025)
+    assert set(uncertainty["block_length_sensitivity"]) == {"10", "20"}
+    assert uncertainty["conditional_on_frozen_factor_selection"] is True
+    assert result["holdout"]["ratio"] == pytest.approx(1.0 / 1.1, rel=1e-3)
