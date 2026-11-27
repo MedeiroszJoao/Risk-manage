@@ -162,3 +162,40 @@ def test_ima_rejects_unknown_risk_class_mapping():
     stress = select_stress_window(factors, window_days=250)
     with pytest.raises(ValueError, match="unsupported regulatory risk class"):
         build_ima_capital(factors, stress, {"equity": "misc"})
+
+
+@pytest.mark.parametrize("bad_value", ["1.0", True, np.nan, np.inf])
+def test_capital_rejects_non_numeric_or_non_finite_factor_losses(bad_value):
+    values = np.array([1.0, 2.0, 3.0], dtype=object)
+    values[1] = bad_value
+    with pytest.raises(ValueError, match="numeric vector"):
+        select_reduced_factor_set({"equity": values}, estimation_window=2)
+
+
+@pytest.mark.parametrize("bad_confidence", ["0.975", True, np.nan])
+def test_capital_rejects_non_numeric_confidence(bad_confidence):
+    rng = np.random.default_rng(44)
+    with pytest.raises(ValueError, match="confidence"):
+        select_reduced_factor_set({"equity": rng.normal(size=300)}, confidence=bad_confidence)
+
+
+def test_capital_rejects_string_es_and_rho_inputs():
+    with pytest.raises(ValueError, match="es_full_current must be numeric"):
+        calculate_imcc(
+            "120", 80, 100,
+            {"equity": {"full_current": 60, "reduced_current": 40, "reduced_stress": 50}},
+        )
+    with pytest.raises(ValueError, match="rho must be numeric"):
+        calculate_imcc(
+            120, 80, 100,
+            {"equity": {"full_current": 60, "reduced_current": 40, "reduced_stress": 50}},
+            rho="0.5",
+        )
+
+
+def test_build_ima_capital_validates_rho_even_if_required_class_is_missing():
+    rng = np.random.default_rng(45)
+    factors = {"equity": rng.normal(size=500)}
+    stress = select_stress_window(factors, window_days=250)
+    with pytest.raises(ValueError, match="rho must be numeric"):
+        build_ima_capital(factors, stress, {"equity": "equity"}, rho="0.5")

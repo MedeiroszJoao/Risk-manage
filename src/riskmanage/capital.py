@@ -17,6 +17,17 @@ def _strict_integer(value, name: str) -> int:
     return int(value)
 
 
+def _strict_float(value, name: str) -> float:
+    if isinstance(value, (bool, np.bool_)) or not isinstance(
+        value, (int, float, np.integer, np.floating)
+    ):
+        raise ValueError(f"{name} must be numeric; strings and booleans are not accepted")
+    result = float(value)
+    if not np.isfinite(result):
+        raise ValueError(f"{name} must be finite")
+    return result
+
+
 def _normalize_risk_class(value: str) -> str:
     aliases = {
         "rates": "interest_rate",
@@ -41,20 +52,25 @@ def _normalize_risk_class(value: str) -> str:
 def _align_factor_losses(factor_losses):
     if not factor_losses:
         raise ValueError("factor losses cannot be empty")
-    values = {name: np.asarray(series, dtype=float) for name, series in factor_losses.items()}
-    if any(
-        series.ndim != 1 or series.size == 0 or not np.isfinite(series).all()
-        for series in values.values()
-    ):
-        raise ValueError("factor loss arrays must be non-empty, finite 1D vectors")
+    values = {}
+    for name, series in factor_losses.items():
+        raw = np.asarray(series)
+        if raw.ndim != 1 or raw.dtype.kind not in "iuf":
+            raise ValueError(
+                f"factor losses for {name} must be a 1D numeric vector; "
+                "boolean, string and object coercion is not allowed"
+            )
+        values[name] = raw.astype(float, copy=False)
+    if any(series.size == 0 or not np.isfinite(series).all() for series in values.values()):
+        raise ValueError("factor loss arrays must be non-empty and finite")
     if len({len(series) for series in values.values()}) != 1:
         raise ValueError("factor arrays must align")
     return values
 
 
 def _confidence_level(confidence):
-    value = float(confidence)
-    if not np.isfinite(value) or not 0.5 < value < 1.0:
+    value = _strict_float(confidence, "confidence")
+    if not 0.5 < value < 1.0:
         raise ValueError("confidence must be finite and in (0.5, 1)")
     return value
 
@@ -138,10 +154,7 @@ def select_stress_window(
     """Select a descriptive worst historical window; not supervisory stress selection."""
     factors = _align_factor_losses(factor_losses)
     n = len(next(iter(factors.values())))
-    if not isinstance(window_days, (int, np.integer)) or isinstance(
-        window_days, (bool, np.bool_)
-    ):
-        raise ValueError("window_days must be an integer")
+    window_days = _strict_integer(window_days, "window_days")
     if window_days < 11 or n < window_days:
         raise ValueError("insufficient observations for requested stress window")
     c = _confidence_level(confidence)
@@ -176,6 +189,7 @@ def select_reduced_factor_set(
 ):
     factors = _align_factor_losses(current_factor_losses)
     c = _confidence_level(confidence)
+    target_explained = _strict_float(target_explained, "target_explained")
     if not 0.0 < target_explained <= 1.0:
         raise ValueError("target_explained must be in (0, 1]")
     estimation_window = _strict_integer(estimation_window, "estimation_window")
@@ -254,11 +268,15 @@ def calculate_imcc(
     class_components: dict[str, dict[str, float]],
     rho: float = 0.5,
 ):
-    values = [float(es_full_current), float(es_reduced_current), float(es_reduced_stress)]
+    values = [
+        _strict_float(es_full_current, "es_full_current"),
+        _strict_float(es_reduced_current, "es_reduced_current"),
+        _strict_float(es_reduced_stress, "es_reduced_stress"),
+    ]
     if any(not np.isfinite(value) or value <= 0.0 for value in values):
         raise ValueError("ES inputs must be positive and finite")
-    rho_value = float(rho)
-    if not np.isfinite(rho_value) or not np.isclose(rho_value, BASEL_IMCC_RHO, rtol=0.0, atol=1e-12):
+    rho_value = _strict_float(rho, "rho")
+    if not np.isclose(rho_value, BASEL_IMCC_RHO, rtol=0.0, atol=1e-12):
         raise ValueError("Basel IMCC aggregation uses fixed rho = 0.5")
     if not class_components:
         raise ValueError("class_components cannot be empty")
@@ -269,7 +287,7 @@ def calculate_imcc(
     for name, component in class_components.items():
         try:
             class_values = [
-                float(component[key])
+                _strict_float(component[key], f"class_components[{name}][{key}]")
                 for key in ("full_current", "reduced_current", "reduced_stress")
             ]
         except (KeyError, TypeError, ValueError) as exc:
@@ -297,11 +315,11 @@ def aggregate_nmrf_ses(
 ):
     if set(charges_by_factor) != set(factor_groups):
         raise ValueError("every NMRF charge needs a group")
-    rho_value = float(rho)
-    if not np.isfinite(rho_value) or not np.isclose(rho_value, BASEL_NMRF_RHO, rtol=0.0, atol=1e-12):
+    rho_value = _strict_float(rho, "rho")
+    if not np.isclose(rho_value, BASEL_NMRF_RHO, rtol=0.0, atol=1e-12):
         raise ValueError("Basel NMRF aggregation uses fixed rho = 0.6")
     try:
-        charges = {key: float(value) for key, value in charges_by_factor.items()}
+        charges = {key: _strict_float(value, f"charges_by_factor[{key}]") for key, value in charges_by_factor.items()}
     except (TypeError, ValueError) as exc:
         raise ValueError("NMRF charges must be numeric") from exc
     if any(not np.isfinite(value) or value < 0.0 for value in charges.values()):
@@ -338,6 +356,9 @@ def build_ima_capital(
     """Build a non-regulatory research aggregation, failing closed on short data."""
     factors = _align_factor_losses(factor_losses)
     c = _confidence_level(confidence)
+    rho = _strict_float(rho, "rho")
+    if not np.isclose(rho, BASEL_IMCC_RHO, rtol=0.0, atol=1e-12):
+        raise ValueError("Basel IMCC aggregation uses fixed rho = 0.5")
     if set(class_mapping) != set(factors):
         raise ValueError("each factor must map to one risk class")
     normalized_class_mapping = {
