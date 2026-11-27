@@ -95,7 +95,7 @@ def test_rfet_public_closes_do_not_count():
             "verified": True,
         }
     )
-    result = rfet_diagnostic(ledger)
+    result = rfet_diagnostic(ledger, as_of_date="2025-12-26")
     assert result["factors"]["SPX"]["classification"] == "not_evidenced"
     assert result["regulatory_status"] == "not_assessed"
 
@@ -109,7 +109,7 @@ def test_rfet_does_not_treat_string_false_as_verified():
             "verified": "False",
         }
     )
-    result = rfet_diagnostic(ledger)
+    result = rfet_diagnostic(ledger, as_of_date="2026-04-30")
     assert result["factors"]["SPX"]["eligible_candidate_real_price_days"] == 0
 
 
@@ -122,7 +122,7 @@ def test_rfet_count_threshold_is_only_a_review_candidate_not_a_pass():
             "verified": True,
         }
     )
-    result = rfet_diagnostic(ledger)
+    result = rfet_diagnostic(ledger, as_of_date="2026-04-30")
     factor = result["factors"]["SPX"]
     assert factor["numerical_count_screen_met"]
     assert factor["classification"] == "candidate_for_independent_RFET_review"
@@ -251,7 +251,7 @@ def test_rfet_reports_invalid_rows_instead_of_silently_dropping_them():
         }
     )
 
-    result = rfet_diagnostic(ledger)
+    result = rfet_diagnostic(ledger, as_of_date="2026-01-04")
 
     assert result["input_rows"] == 4
     assert result["invalid_date_rows"] == 1
@@ -270,7 +270,7 @@ def test_rfet_empty_valid_population_still_reports_exclusions():
         }
     )
 
-    result = rfet_diagnostic(ledger)
+    result = rfet_diagnostic(ledger, as_of_date="2026-01-01")
 
     assert result["status"] == "not_evidenced"
     assert result["input_rows"] == 1
@@ -284,3 +284,43 @@ def test_validation_rejects_boolean_mixed_with_numeric_before_numpy_promotion():
         _one_dimensional_numeric([True, 0.25, 0.5], "sample")
     with pytest.raises(ValueError, match="booleans"):
         christoffersen_independence([True, 0, 1])
+
+
+def test_rfet_stale_historically_dense_ledger_fails_at_current_assessment_date():
+    ledger = pd.DataFrame(
+        {
+            "date": pd.date_range("2024-01-01", periods=120, freq="D"),
+            "factor_id": "SPX",
+            "evidence_type": "transaction",
+            "verified": True,
+        }
+    )
+
+    result = rfet_diagnostic(ledger, as_of_date="2026-01-01")
+    factor = result["factors"]["SPX"]
+
+    assert result["as_of_date"] == "2026-01-01"
+    assert factor["eligible_candidate_real_price_days"] == 0
+    assert factor["classification"] == "not_evidenced"
+
+
+def test_rfet_excludes_future_evidence_relative_to_assessment_date():
+    ledger = pd.DataFrame(
+        {
+            "date": ["2026-01-01", "2026-01-02", "2026-01-03"],
+            "factor_id": ["SPX", "SPX", "SPX"],
+            "evidence_type": ["transaction"] * 3,
+            "verified": [True] * 3,
+        }
+    )
+
+    result = rfet_diagnostic(ledger, as_of_date="2026-01-02")
+
+    assert result["future_date_rows"] == 1
+    assert result["excluded_rows"] == 1
+    assert result["factors"]["SPX"]["eligible_candidate_real_price_days"] == 2
+
+
+def test_rfet_requires_explicit_assessment_date():
+    with pytest.raises(TypeError):
+        rfet_diagnostic(pd.DataFrame())
