@@ -9,6 +9,12 @@ from scipy.special import xlogy
 from scipy.stats import chi2, ks_2samp, spearmanr
 
 
+def _contains_boolean(values) -> bool:
+    """Detect booleans before NumPy can promote them to integer/float dtype."""
+    objects = np.asarray(values, dtype=object)
+    return any(isinstance(value, (bool, np.bool_)) for value in objects.flat)
+
+
 def _probability(confidence: float) -> float:
     """Validate a probability without accepting strings or boolean coercion."""
     if isinstance(confidence, (bool, np.bool_)) or not isinstance(
@@ -22,6 +28,10 @@ def _probability(confidence: float) -> float:
 
 
 def _one_dimensional_numeric(values, name: str) -> np.ndarray:
+    if _contains_boolean(values):
+        raise ValueError(
+            f"{name} must be a one-dimensional numeric array; booleans are not measurements"
+        )
     raw = np.asarray(values)
     if raw.ndim != 1 or raw.dtype.kind not in "iuf":
         raise ValueError(
@@ -31,6 +41,8 @@ def _one_dimensional_numeric(values, name: str) -> np.ndarray:
 
 
 def _binary_sequence(values) -> np.ndarray:
+    if _contains_boolean(values):
+        raise ValueError("exceptions must contain numeric 0/1 values; booleans are not allowed")
     raw = np.asarray(values)
     if raw.ndim != 1 or raw.size < 3:
         raise ValueError("exceptions must be a 0/1 vector with at least 3 observations")
