@@ -150,7 +150,6 @@ def _rolling_reduced_coverage(
     if not selected or not set(selected).issubset(factors):
         raise ValueError("selected must contain known risk factors")
 
-    dates = _validate_observation_dates(observation_dates, n)
     validation_start = n - validation_days
     selection_start = validation_start - estimation_window
     selection_end = validation_start - 1
@@ -313,6 +312,7 @@ def select_reduced_factor_set(
             "are required for a non-overlapping selection/validation split"
         )
 
+    dates = _validate_observation_dates(observation_dates, n)
     validation_start = n - validation_days
     selection_start = validation_start - estimation_window
     selection_end = validation_start - 1
@@ -367,11 +367,15 @@ def select_reduced_factor_set(
         "selection_window": {
             "start_index": int(selection_start),
             "end_index": int(selection_end),
+            "start_date": dates[selection_start].isoformat(),
+            "end_date": dates[selection_end].isoformat(),
             "observations": int(estimation_window),
         },
         "validation_window": {
             "start_index": int(validation_start),
             "end_index": int(n - 1),
+            "start_date": dates[validation_start].isoformat(),
+            "end_date": dates[-1].isoformat(),
             "observations": int(validation_days),
         },
         "coverage_method": (
