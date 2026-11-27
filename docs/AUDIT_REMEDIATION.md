@@ -172,3 +172,12 @@ The 2026-11-27 audit is the current baseline. It does not claim that the remaini
 
 
 **Compatibility follow-up:** the legacy `explained_ratio` output key is retained as an alias for `selection_sample_explained_ratio`, because existing reports consume it. It is explicitly a selection-sample statistic and is not the forward holdout result; `target_met` remains based only on the OOS holdout.
+
+
+## CAP-06 — Make reduced-factor chronology explicit
+
+**Finding:** index separation alone cannot prove a chronological holdout if callers pass arrays in an unknown order.
+
+**Remediation:** select_reduced_factor_set and build_ima_capital require an observation-date vector aligned with the factor arrays. Dates are parsed to UTC, checked for missing values, duplicate UTC calendar dates, strict monotonicity and exact length. Selection and validation windows now include date boundaries. The integrated case passes actual dates from factor P&L attribution.
+
+**Acceptance evidence:** tests cover duplicate dates, reversed dates, vector-length mismatch, absence of dates, and exact date boundaries for selection and holdout. Out-of-sample results are not produced without explicit dates.

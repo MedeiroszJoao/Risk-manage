@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 
 from .risk import _ten_day_losses, historical_var_es
 
@@ -26,6 +27,32 @@ def _strict_float(value, name: str) -> float:
     if not np.isfinite(result):
         raise ValueError(f"{name} must be finite")
     return result
+
+
+def _validate_observation_dates(observation_dates, expected_length: int) -> pd.DatetimeIndex:
+    """Require a one-to-one, strictly increasing daily observation calendar."""
+    if observation_dates is None:
+        raise ValueError(
+            "observation_dates are required for chronological out-of-sample validation"
+        )
+    try:
+        dates = pd.DatetimeIndex(
+            pd.to_datetime(observation_dates, errors="raise", utc=True)
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError("observation_dates must contain valid timestamps") from exc
+    if len(dates) != expected_length:
+        raise ValueError(
+            f"observation_dates length {len(dates)} does not match "
+            f"factor history length {expected_length}"
+        )
+    if dates.hasnans:
+        raise ValueError("observation_dates cannot contain missing timestamps")
+    if dates.normalize().has_duplicates:
+        raise ValueError("observation_dates must be unique by UTC calendar date")
+    if not dates.is_monotonic_increasing:
+        raise ValueError("observation_dates must be strictly increasing")
+    return dates
 
 
 def _normalize_risk_class(value: str) -> str:
@@ -96,6 +123,7 @@ def _rolling_reduced_coverage(
     confidence=0.975,
     estimation_window=MIN_CURRENT_OBSERVATIONS,
     validation_days=REDUCED_SET_VALIDATION_DAYS,
+    observation_dates=None,
 ):
     """Evaluate a frozen reduced set on a forward, rolling-origin holdout.
 
@@ -105,6 +133,7 @@ def _rolling_reduced_coverage(
     diagnostic, not a supervisory approval test.
     """
     n = len(next(iter(factors.values())))
+    dates = pd.DatetimeIndex(observation_dates)
     required = estimation_window + validation_days
     if n < required:
         return {
@@ -121,6 +150,7 @@ def _rolling_reduced_coverage(
     if not selected or not set(selected).issubset(factors):
         raise ValueError("selected must contain known risk factors")
 
+    dates = _validate_observation_dates(observation_dates, n)
     validation_start = n - validation_days
     selection_start = validation_start - estimation_window
     selection_end = validation_start - 1
@@ -153,14 +183,19 @@ def _rolling_reduced_coverage(
             "maximum_ratio": None,
             "out_of_sample": True,
             "selection_overlap": False,
+            "chronology_verified": True,
             "selection_window": {
                 "start_index": int(selection_start),
                 "end_index": int(selection_end),
+                "start_date": dates[selection_start].isoformat(),
+                "end_date": dates[selection_end].isoformat(),
                 "observations": int(estimation_window),
             },
             "validation_window": {
                 "start_index": int(validation_start),
                 "end_index": int(n - 1),
+                "start_date": dates[validation_start].isoformat(),
+                "end_date": dates[-1].isoformat(),
                 "observations": int(validation_days),
             },
         }
@@ -178,19 +213,26 @@ def _rolling_reduced_coverage(
         "ratios": numeric_ratios.tolist(),
         "out_of_sample": True,
         "selection_overlap": False,
+        "chronology_verified": True,
         "selection_window": {
             "start_index": int(selection_start),
             "end_index": int(selection_end),
+            "start_date": dates[selection_start].isoformat(),
+            "end_date": dates[selection_end].isoformat(),
             "observations": int(estimation_window),
         },
         "validation_window": {
             "start_index": int(validation_start),
             "end_index": int(n - 1),
+            "start_date": dates[validation_start].isoformat(),
+            "end_date": dates[-1].isoformat(),
             "observations": int(validation_days),
         },
         "first_validation_estimation_window": {
             "start_index": int(first_window_start),
             "end_index": int(validation_start),
+            "start_date": dates[first_window_start].isoformat(),
+            "end_date": dates[validation_start].isoformat(),
             "observations": int(estimation_window),
         },
         "interpretation": (
@@ -243,6 +285,7 @@ def select_reduced_factor_set(
     target_explained: float = 0.75,
     estimation_window: int = MIN_CURRENT_OBSERVATIONS,
     validation_days: int = REDUCED_SET_VALIDATION_DAYS,
+    observation_dates=None,
 ):
     """Select on a past window, then assess the frozen set on a forward holdout.
 
@@ -299,7 +342,7 @@ def select_reduced_factor_set(
             break
 
     coverage = _rolling_reduced_coverage(
-        factors, selected, c, estimation_window, validation_days
+        factors, selected, c, estimation_window, validation_days, dates
     )
     oos_target_met = bool(
         coverage["status"] == "computed_out_of_sample"
@@ -430,6 +473,7 @@ def build_ima_capital(
     class_mapping: dict[str, str],
     confidence: float = 0.975,
     rho: float = 0.5,
+    observation_dates=None,
 ):
     """Build a non-regulatory research aggregation, failing closed on short data."""
     factors = _align_factor_losses(factor_losses)
@@ -472,6 +516,7 @@ def build_ima_capital(
         target_explained=0.75,
         estimation_window=MIN_CURRENT_OBSERVATIONS,
         validation_days=REDUCED_SET_VALIDATION_DAYS,
+        observation_dates=observation_dates,
     )
     selected = reduced["selected_factors"]
 

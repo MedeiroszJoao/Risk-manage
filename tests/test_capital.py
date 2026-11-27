@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import pytest
 
 from riskmanage.capital import (
@@ -8,6 +9,10 @@ from riskmanage.capital import (
     select_reduced_factor_set,
     select_stress_window,
 )
+
+
+def _dates(n):
+    return pd.bdate_range("2000-01-03", periods=n)
 
 
 def test_stress_window_selects_worst_cluster():
@@ -59,7 +64,7 @@ def test_reduced_factor_coverage_uses_a_forward_untouched_holdout():
         "rates": 0.7 * common + rng.normal(0, 0.4, 700),
         "fx": rng.normal(0, 0.25, 700),
     }
-    result = select_reduced_factor_set(factors, 0.975, 0.75)
+    result = select_reduced_factor_set(factors, 0.975, 0.75, observation_dates=_dates(700))
     coverage = result["coverage_12w"]
 
     assert coverage["status"] == "computed_out_of_sample"
@@ -87,8 +92,8 @@ def test_holdout_observations_cannot_change_factor_selection():
     altered = {name: values.copy() for name, values in factors.items()}
     altered["fx"][-60:] *= 25.0
 
-    baseline = select_reduced_factor_set(factors)
-    changed_holdout = select_reduced_factor_set(altered)
+    baseline = select_reduced_factor_set(factors, observation_dates=_dates(500))
+    changed_holdout = select_reduced_factor_set(altered, observation_dates=_dates(500))
 
     assert baseline["selected_factors"] == changed_holdout["selected_factors"]
     assert baseline["selection_sample_explained_ratio"] == pytest.approx(
@@ -111,7 +116,7 @@ def test_reduced_factor_selection_requires_full_310_observation_holdout_design()
         select_reduced_factor_set(factors_309)
 
     factors_310 = {"equity": rng.normal(size=310)}
-    result = select_reduced_factor_set(factors_310)
+    result = select_reduced_factor_set(factors_310, observation_dates=_dates(310))
     assert result["coverage_12w"]["status"] == "computed_out_of_sample"
     assert result["coverage_12w"]["observations"] == 60
 
@@ -120,7 +125,7 @@ def test_ima_research_aggregation_fails_closed_on_short_history():
     factors = {"equity": rng.normal(0, 1, 250)}
     stress = {"start_index": 0, "end_index": 249, "window_days": 250}
     with pytest.raises(ValueError, match="at least 310"):
-        build_ima_capital(factors, stress, {"equity": "equity"})
+        build_ima_capital(factors, stress, {"equity": "equity"}, observation_dates=_dates(len(next(iter(factors.values())))))
 
 
 def test_ima_research_aggregation_fails_closed_on_invalid_stress_indices():
@@ -139,7 +144,7 @@ def test_ima_aggregation_is_never_labelled_as_regulatory_capital():
         "fx": common * 0.1 + rng.normal(0, 0.2, 500),
     }
     stress = select_stress_window(factors, window_days=250)
-    result = build_ima_capital(factors, stress, {"equity": "equity", "fx": "fx"})
+    result = build_ima_capital(factors, stress, {"equity": "equity", "fx": "fx"}, observation_dates=_dates(len(next(iter(factors.values())))))
     assert result["capital_label"] == "research_only_non_regulatory"
     assert result["regulatory_status"] == "not_assessed"
     assert result["imcc"] is None
@@ -167,9 +172,9 @@ def test_reduced_factor_selection_rejects_boolean_window_values():
     rng = np.random.default_rng(32)
     factors = {"equity": rng.normal(0, 1, 400)}
     with pytest.raises(ValueError, match="estimation_window must be an integer"):
-        select_reduced_factor_set(factors, estimation_window=True)
+        select_reduced_factor_set(factors, estimation_window=True, observation_dates=_dates(400))
     with pytest.raises(ValueError, match="validation_days must be an integer"):
-        select_reduced_factor_set(factors, validation_days=True)
+        select_reduced_factor_set(factors, validation_days=True, observation_dates=_dates(400))
 
 
 def test_imcc_uses_fixed_basel_weight():
@@ -204,14 +209,14 @@ def test_capital_rejects_non_numeric_or_non_finite_factor_losses(bad_value):
     values = np.array([1.0, 2.0, 3.0], dtype=object)
     values[1] = bad_value
     with pytest.raises(ValueError, match="numeric vector"):
-        select_reduced_factor_set({"equity": values}, estimation_window=2)
+        select_reduced_factor_set({"equity": values}, estimation_window=2, observation_dates=_dates(len(values)))
 
 
 @pytest.mark.parametrize("bad_confidence", ["0.975", True, np.nan])
 def test_capital_rejects_non_numeric_confidence(bad_confidence):
     rng = np.random.default_rng(44)
     with pytest.raises(ValueError, match="confidence"):
-        select_reduced_factor_set({"equity": rng.normal(size=300)}, confidence=bad_confidence)
+        select_reduced_factor_set({"equity": rng.normal(size=300)}, confidence=bad_confidence, observation_dates=_dates(300))
 
 
 def test_capital_rejects_string_es_and_rho_inputs():
@@ -238,7 +243,7 @@ def test_build_ima_capital_validates_rho_even_if_required_class_is_missing():
 
 def test_capital_rejects_boolean_mixed_with_float_before_numpy_promotion():
     with pytest.raises(ValueError, match="boolean"):
-        select_reduced_factor_set({"equity": [True, 0.5, 1.0, 2.0]})
+        select_reduced_factor_set({"equity": [True, 0.5, 1.0, 2.0]}, observation_dates=_dates(4))
 
 
 def test_imcc_does_not_apply_portfolio_floor_to_individual_risk_classes():
@@ -357,3 +362,36 @@ def test_imcc_applies_floor_to_portfolio_ratio_but_not_class_ratios():
     assert result["class_components"]["equity"] == pytest.approx(25.0)
     assert result["constrained_sum"] == pytest.approx(45.0)
     assert result["imcc"] == pytest.approx(82.5)
+
+
+def test_reduced_factor_selection_requires_valid_chronological_dates():
+    rng = np.random.default_rng(811)
+    factors = {"equity": rng.normal(size=310)}
+    dates = _dates(310)
+
+    duplicate_dates = dates.to_series().reset_index(drop=True)
+    duplicate_dates.iloc[200] = duplicate_dates.iloc[199]
+    with pytest.raises(ValueError, match="unique by UTC calendar date"):
+        select_reduced_factor_set(factors, observation_dates=duplicate_dates)
+
+    with pytest.raises(ValueError, match="strictly increasing"):
+        select_reduced_factor_set(factors, observation_dates=dates[::-1])
+
+    with pytest.raises(ValueError, match="length"):
+        select_reduced_factor_set(factors, observation_dates=_dates(309))
+
+    with pytest.raises(ValueError, match="observation_dates are required"):
+        select_reduced_factor_set(factors)
+
+
+def test_reduced_factor_holdout_records_real_selection_and_validation_dates():
+    rng = np.random.default_rng(812)
+    factors = {"equity": rng.normal(size=500)}
+    dates = _dates(500)
+    result = select_reduced_factor_set(factors, observation_dates=dates)
+    coverage = result["coverage_12w"]
+
+    assert coverage["chronology_verified"] is True
+    assert coverage["selection_window"]["end_date"] == dates[439].tz_localize("UTC").isoformat()
+    assert coverage["validation_window"]["start_date"] == dates[440].tz_localize("UTC").isoformat()
+    assert coverage["validation_window"]["end_date"] == dates[-1].tz_localize("UTC").isoformat()

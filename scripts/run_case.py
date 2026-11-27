@@ -131,7 +131,10 @@ def main():
     stress=select_stress_window(factor_losses,250,.975)
     stress["start_date"]=str(market.date.iloc[stress["start_index"]].date())
     stress["end_date"]=str(market.date.iloc[stress["end_index"]].date())
-    capital=build_ima_capital(factor_losses,stress,RISK_CLASSES,.975,.5)
+    capital=build_ima_capital(
+      factor_losses, stress, RISK_CLASSES, .975, .5,
+      observation_dates=factor_pnl["date"],
+    )
 
     evidence=[{"date":market.date.max(),"factor_id":factor,"evidence_type":"public_close","verified":True}
               for factor in factor_names]

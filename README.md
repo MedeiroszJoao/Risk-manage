@@ -97,3 +97,6 @@ The parser requires an exact accession, preserves reported percentages as percen
 ## Technical governance
 
 The project follows the [Project Excellence Directive](docs/PROJECT_EXCELLENCE_DIRECTIVE.md). Confirmed defects, open methodological questions and remediation gates are tracked in [the technical audit register](docs/AUDIT_REMEDIATION.md); evidence-specific component states are tracked in the [maturity register](docs/MATURITY_REGISTER.md). Implementation, unit tests, analytic/numerical benchmarks, empirical validation and regulatory assessment are not interchangeable.
+
+
+**Chronological holdout contract:** reduced-factor out-of-sample validation requires an explicit date vector aligned one-to-one with factor-loss observations. Missing, duplicate, non-monotone or length-mismatched dates fail closed. Calls without dates are not accepted as chronological OOS evidence. This remains a research diagnostic, not supervisory 75% approval.

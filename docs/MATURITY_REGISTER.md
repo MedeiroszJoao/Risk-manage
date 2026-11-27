@@ -107,3 +107,8 @@ The current implementation now:
 5. Requires 310 observations for the 250 + 60 design.
 
 This is a rolling-origin research diagnostic for one frozen selection. It is not a supervisory approval, does not implement group-level factor selection across approved desks, and does not by itself establish the Basel MAR33 75% requirement.
+
+
+## Chronology control for reduced-factor holdout — 2026-11-26
+
+Out-of-sample evaluation requires an explicit observation-date vector aligned one-to-one with the factor-loss arrays. Duplicate UTC calendar dates, missing timestamps, non-monotone dates and length mismatches are rejected. Selection and validation windows expose their actual first/last dates as well as positional indices. The integrated case pipeline supplies dates from the factor P&L table.
