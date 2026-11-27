@@ -25,6 +25,26 @@ _PARAMETER_NAMES = (
     "correlation",
 )
 _PARAMETER_INDEX = {name: index for index, name in enumerate(_PARAMETER_NAMES)}
+
+
+def _strict_integer(value, name: str, minimum: int = 0) -> int:
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
+        raise ValueError(f"{name} must be an integer")
+    result = int(value)
+    if result < minimum:
+        raise ValueError(f"{name} must be at least {minimum}")
+    return result
+
+
+def _positive_quote_mids(
+    fitted_prices: np.ndarray, noise_sd: np.ndarray, rng
+) -> tuple[np.ndarray, np.ndarray]:
+    """Draw Gaussian quote mids without clipping; return non-positive mask."""
+    simulated = np.asarray(fitted_prices, dtype=float) + rng.normal(0.0, noise_sd)
+    invalid = ~np.isfinite(simulated) | (simulated <= 0.0)
+    return simulated, invalid
+
+
 _LOWER = np.array(
     [
         math.log(1e-5),
@@ -161,16 +181,14 @@ def bootstrap_heston_calibration(
     not a market-data or model-risk confidence interval.
     """
     quotes = tuple(quotes)
-    if n_bootstrap < 2:
-        raise ValueError("n_bootstrap must be at least 2")
-    if seed < 0:
-        raise ValueError("seed must be non-negative")
+    n_bootstrap = _strict_integer(n_bootstrap, "n_bootstrap", minimum=2)
+    seed = _strict_integer(seed, "seed")
+    n_starts = _strict_integer(n_starts, "n_starts", minimum=1)
+    max_nfev = _strict_integer(max_nfev, "max_nfev", minimum=1)
     if not np.isfinite(noise_scale) or noise_scale <= 0.0:
         raise ValueError("noise_scale must be finite and positive")
     if not np.isfinite(min_price_scale) or min_price_scale <= 0.0:
         raise ValueError("min_price_scale must be finite and positive")
-    if n_starts < 1 or max_nfev < 1:
-        raise ValueError("n_starts and max_nfev must be positive")
     if fitted_parameters.vol_of_variance <= 0.0:
         raise ValueError("fitted vol_of_variance must be positive for calibration")
     _validate_market_conventions(market, fitted_parameters)
@@ -181,11 +199,24 @@ def bootstrap_heston_calibration(
     samples = []
     failures = []
     costs = []
+    nonpositive_mid_replicates = 0
+    nonpositive_mid_quotes = 0
 
     for replicate in range(n_bootstrap):
-        simulated_mids = np.maximum(
-            fitted_prices + rng.normal(0.0, noise_sd), 1e-10
+        simulated_mids, invalid_mid_mask = _positive_quote_mids(
+            fitted_prices, noise_sd, rng
         )
+        if np.any(invalid_mid_mask):
+            nonpositive_mid_replicates += 1
+            nonpositive_mid_quotes += int(np.sum(invalid_mid_mask))
+            failures.append(
+                {
+                    "replicate": replicate,
+                    "reason": "non_positive_simulated_mid",
+                    "quote_indices": np.flatnonzero(invalid_mid_mask).tolist(),
+                }
+            )
+            continue
         bootstrap_quotes = []
         for quote, mid in zip(quotes, simulated_mids, strict=True):
             half_spread = max(0.5 * (quote.ask - quote.bid), min_price_scale)
@@ -243,7 +274,8 @@ def bootstrap_heston_calibration(
 
     if len(samples) < 2:
         raise RuntimeError(
-            f"only {len(samples)} successful bootstrap fits out of {n_bootstrap}"
+            f"only {len(samples)} successful bootstrap fits out of {n_bootstrap}; "
+            f"{nonpositive_mid_replicates} replicates contained non-positive simulated mids"
         )
 
     natural = np.array(
@@ -274,6 +306,12 @@ def bootstrap_heston_calibration(
         "successful_replicates": int(len(samples)),
         "failed_replicates": int(len(failures)),
         "success_rate": float(len(samples) / n_bootstrap),
+        "nonpositive_mid_replicates": int(nonpositive_mid_replicates),
+        "nonpositive_mid_quotes": int(nonpositive_mid_quotes),
+        "positive_price_policy": (
+            "Reject the entire replicate if any simulated quote mid is non-positive; "
+            "do not clip or create artificial probability mass at an epsilon price."
+        ),
         "noise_model": (
             "Independent Gaussian quote errors with standard deviation "
             "max(half_bid_ask_spread, min_price_scale)/sqrt(3); this matches "
