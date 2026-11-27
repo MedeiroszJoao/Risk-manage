@@ -18,7 +18,7 @@ The repository has a broad and technically nontrivial research implementation. I
 
 The latest completed CI run before the pandas-index alignment hardening completed successfully on Python 3.11 and 3.12:
 
-- 287 pytest tests passed on each interpreter.
+- 291 pytest tests passed on each interpreter.
 - Ruff passed on both.
 - The deterministic desk case and the Heston Fourier/QE-M, calibration, Monte Carlo Greeks, delta-hedging, randomized-QMC, calibration-uncertainty, hedge-uncertainty, crossed risk-decomposition and EVT experiment steps completed successfully.
 
@@ -48,11 +48,11 @@ This is a structured technical audit pass, not a claim that every line of every 
 
 ### 2.1 Evidence from CI
 
-Latest completed run before the pandas-index alignment change: [GitHub Actions run 45923474678](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45923474678). The follow-up alignment change is on the branch; its CI result has not yet been observed.
+Latest completed run including the pandas-index alignment change: [GitHub Actions run 45924282157](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45924282157).
 
 | Check | Python 3.11 | Python 3.12 |
 |---|---:|---:|
-| pytest | 287 passed | 287 passed |
+| pytest | 291 passed | 291 passed |
 | Ruff | passed | passed |
 | Deterministic case | passed | passed |
 | Heston Fourier / QE-M benchmark | passed | passed |
@@ -132,7 +132,7 @@ Status labels:
 
 ## 5. Test-suite audit
 
-All 21 test modules were inventoried. The latest completed suite has 287 passing tests on each supported Python version; four further index-alignment tests are now committed and their CI is pending.
+All 21 test modules were inventoried. The latest completed suite has 291 passing tests on each supported Python version, including the four new index-alignment tests.
 
 The suite has useful deterministic, edge-case, property-like and cross-method checks. It is not yet an independent validation suite.
 
@@ -376,9 +376,9 @@ A correction is not complete until all applicable items below are satisfied:
 - Basel Committee, [MAR33 — Internal models approach: capital requirements calculation](https://www.bis.org/committees/bcbs/basel-framework/standard/mar/33/inforce/2022-01-01/published/2019-12-15).
 - Basel Committee, [MAR32 — Backtesting and P&L attribution test requirements](https://www.bis.org/basel_framework/chapter/MAR/32.htm?inforce=20230101&published=20200327).
 - Basel Committee, [MAR31 — Internal models approach: model requirements and RFET](https://www.bis.org/committees/bcbs/basel-framework/standard/mar/31/inforce/2023-01-01/published/2020-03-27).
-- Risk-manage CI: [run 45923474678](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45923474678).
+- Risk-manage CI: [run 45924282157](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45924282157).
 - Materials repository: [README](https://github.com/MedeiroszJoao/materials/blob/main/README.md) and [GOVERNANCE](https://github.com/MedeiroszJoao/materials/blob/main/GOVERNANCE.md).
 
 ---
 
-**Audit conclusion:** Risk-manage should be preserved and deepened. The current test suite is a real software-quality asset, but not a substitute for independent quantitative validation. The global IMCC floor is consistent with MAR33.6; the next task is to finish validating the new time-index alignment guard and then deepen the position-level liquidity-horizon implementation. Beyond that, the largest gaps are external numerical benchmarks, dependence-aware statistical validation, point-in-time empirical data and a transparent distinction between simulated books, disclosed fund holdings and actual trading-desk evidence.
+**Audit conclusion:** Risk-manage should be preserved and deepened. The current test suite is a real software-quality asset, but not a substitute for independent quantitative validation. The global IMCC floor is consistent with MAR33.6; the new Series alignment guard is validated, and the next task is to enforce consistency between explicit observation dates and Series indexes. Beyond that, the largest gaps are external numerical benchmarks, dependence-aware statistical validation, point-in-time empirical data and a transparent distinction between simulated books, disclosed fund holdings and actual trading-desk evidence.
