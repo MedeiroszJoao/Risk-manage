@@ -417,7 +417,7 @@ def test_rfet_requires_one_calendar_year_calibration_period(
 ):
     with pytest.raises(ValueError, match="365 or 366 days"):
         rfet_diagnostic(
-            pd.DataFrame(),
+            pd.DataFrame(columns=["date", "factor_id", "evidence_type", "verified"]),
             as_of_date="2026-04-30",
             calibration_period_start=calibration_start,
             calibration_period_end=calibration_end,
@@ -427,7 +427,7 @@ def test_rfet_requires_one_calendar_year_calibration_period(
 def test_rfet_rejects_calibration_period_ending_more_than_one_month_before_assessment():
     with pytest.raises(ValueError, match="no more than one month"):
         rfet_diagnostic(
-            pd.DataFrame(),
+            pd.DataFrame(columns=["date", "factor_id", "evidence_type", "verified"]),
             as_of_date="2026-04-30",
             calibration_period_start="2025-03-30",
             calibration_period_end="2026-03-29",
