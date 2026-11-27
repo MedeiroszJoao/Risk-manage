@@ -12,8 +12,8 @@ from riskmanage.tail_risk import fit_pot_gpd_tail_risk
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Compare empirical hedge VaR/ES with Peaks-over-Threshold GPD "
-            "tail extrapolation across thresholds."
+            "Compare finite-sample Monte Carlo hedge VaR/ES with Peaks-over-Threshold "
+            "GPD tail extrapolation across thresholds."
         )
     )
     parser.add_argument("--paths", type=int, default=10_000)
@@ -95,7 +95,7 @@ def main() -> None:
             )
 
     report = {
-        "title": "Heston hedge loss tail risk: empirical versus POT-GPD",
+        "title": "Heston hedge loss tail risk: pathwise Monte Carlo versus POT-GPD",
         "classification": "synthetic_physical_scenario_evt_tail_model_experiment",
         "seed": args.seed,
         "scenario_parameters_Q": {
@@ -123,19 +123,42 @@ def main() -> None:
             "minimum_exceedances": args.min_exceedances,
             "conditional_exceedance_bootstrap_replicates": args.bootstrap,
             "full_sample_iid_bootstrap_replicates": args.full_sample_bootstrap,
-            "bootstrap_method": (
-                "non-parametric resampling of fitted GPD exceedances, conditional on "
-                "empirical threshold and exceedance count"
+            "conditional_exceedance_bootstrap_method": (
+                "IID resampling of fitted GPD exceedances, conditional on the empirical "
+                "threshold and observed exceedance count"
             ),
+            "full_sample_bootstrap_method": (
+                "IID resampling of complete terminal path-loss observations, with the "
+                "numerical threshold reselected in each replicate"
+            ),
+            "bootstrap_observation_unit": (
+                "one terminal cumulative hedge-loss observation per independently "
+                "simulated physical path"
+            ),
+            "path_independence_assumption": (
+                "Monte Carlo paths are generated independently across path indices; "
+                "both hedge policies are evaluated on each same path index"
+            ),
+            "within_path_time_dependence": (
+                "Time evolution and hedge rebalancing are simulated jointly within each "
+                "path. The bootstrap resamples completed path outcomes, not individual "
+                "time steps."
+            ),
+            "historical_time_series_claim": False,
         },
         "tail_risk_models": evt_results,
         "interpretation_boundary": (
-            "The POT-GPD fits extrapolate beyond empirical thresholds. The threshold grid is "
-            "reported rather than selecting a single optimum. GPD bootstrap intervals condition "
-            "on threshold and exceedance count; they exclude threshold-selection uncertainty, "
-            "serial dependence, structural breaks and model risk. Compare shape/scale and VaR/ES "
-            "across thresholds; do not report a precise ES when shape >= 1 or too few exceedances "
-            "are available. The physical dynamics are hypothetical scenario parameters, not forecasts."
+            "The POT-GPD fits extrapolate beyond empirical thresholds using one terminal "
+            "cumulative hedge-loss observation per independently simulated physical path. "
+            "The threshold grid is reported rather than selecting a single optimum. The "
+            "conditional-exceedance bootstrap conditions on threshold and exceedance count; "
+            "the full-sample bootstrap reselects the numerical threshold but neither bootstrap "
+            "covers threshold-grid choice, physical-parameter uncertainty, model risk, or "
+            "discretization bias. Within-path time dependence is retained by simulating whole "
+            "paths; resampling does not treat time steps as independent. This is not a historical "
+            "time-series tail-dependence study. Compare shape/scale and VaR/ES across thresholds; "
+            "do not report a finite ES when shape >= 1 or too few exceedances are available. "
+            "Physical dynamics are hypothetical scenario parameters, not forecasts."
         ),
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)

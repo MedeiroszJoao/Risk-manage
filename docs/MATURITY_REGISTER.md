@@ -81,9 +81,11 @@ The following is a conservative assessment after the first technical-integrity r
 
 ### Current automated verification
 
-- [Risk-engine CI](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45934732549): successful on Python 3.11 and 3.12.
-- Python 3.11 and 3.12: 309 tests, Ruff, deterministic case and all configured Heston experiments passed, including the strengthened QE-M moment tests.
-- [Live EIA ingestion workflow](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45934732668): successful.
+- [Risk-engine CI](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45936170941): successful on Python 3.11 and 3.12 at commit `1f17c711`.
+- Python 3.11: 317 tests passed; Ruff, deterministic case and all configured Heston experiments passed.
+- Python 3.12: 317 tests passed; Ruff, deterministic case and all configured Heston experiments passed.
+- The paired Heston hedge comparison is tested in both environments and included in the Heston hedge EVT artifact; the intervals are conditional on the synthetic path-generating scenario.
+- [Live EIA ingestion workflow](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45936170954): successful.
 
 This evidence does not change the empirical or regulatory limitations listed above.
 

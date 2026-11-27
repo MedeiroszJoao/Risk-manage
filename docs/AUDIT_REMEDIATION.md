@@ -239,3 +239,13 @@ The 2026-11-27 audit is the current baseline. It does not claim that the remaini
 **Interpretation restrictions:** intervals condition on the selected physical scenario, pricing model, hedge frequency and QE-M discretization. They measure Monte Carlo sampling variability across independently simulated paths, not parameter, model, market-data, transaction-cost, or discretization uncertainty. A positive mean difference is not evidence of market outperformance.
 
 **EVT sample-unit clarification:** the POT-GPD hedge experiment models one terminal cumulative hedge-loss observation per independently simulated path. IID resampling across completed paths is the appropriate sampling unit for this Monte Carlo experiment; simulated within-path dynamics are not resampled as independent observations. This is not a historical chronological time-series tail-dependence study.
+
+
+
+## EVT-02 — Make the POT-GPD Monte Carlo resampling unit explicit
+
+**Finding:** the Heston hedge EVT runner used terminal cumulative losses, one per simulated physical path, but described its bootstrap method generically as resampling exceedances. That wording did not distinguish dependence within a simulated path from the independence assumption across Monte Carlo paths.
+
+**Remediation:** report the observation unit, path independence assumption and within-path time-dependence treatment explicitly. The conditional exceedance bootstrap resamples fitted exceedances; the full-sample bootstrap resamples complete terminal path losses and reselects the numerical threshold in every replicate. The experiment is labelled pathwise Monte Carlo rather than empirical market evidence.
+
+**Interpretation restrictions:** path-level IID resampling supports Monte Carlo sampling uncertainty conditional on the scenario generator. It is not evidence about serial dependence, clustering or regime shifts in a historical daily P&L series. Neither bootstrap addresses physical-parameter uncertainty, model risk or QE-M discretization bias.
