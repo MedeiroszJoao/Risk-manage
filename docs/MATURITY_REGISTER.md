@@ -36,7 +36,7 @@ These states are not interchangeable. A test of a synthetic model is not an empi
 | POT-GPD | Yes | Synthetic known-GPD recovery, threshold grid and bootstrap diagnostics | No independent chronological financial loss series | Not assessed |
 | Liquidity-adjusted ES | Research implementation | Formula-shape and unit tests | Factor horizon mapping remains illustrative | MAR33 mapping not implemented |
 | Reduced-factor selection | Research implementation | In-sample overlapping descriptive coverage only | No out-of-sample factor-set validation | IMA requirements not established |
-| IMCC / NMRF primitives | Formula primitives | Unit examples only | The current book lacks at least one required broad class (credit spread) and has no validated stress capital | Not a regulatory calculation |
+| IMCC / NMRF primitives | Formula primitives | Unit examples only | The current book lacks credit-spread factors, and the stress-period / group-level reduced-factor procedures are not implemented | Not a regulatory calculation |
 | Data ingestion | FRED/EIA pipelines | Live source/parse checks recorded in CI | Public prices do not constitute portfolio/transaction history | Not RFET evidence |
 | Portfolio / HPL / RTPL | Yes, hypothetical constant-maturity test books | P&L reconciliation and formula/property tests | No real bank desk positions or APL | Regulatory backtest/PLA incomplete |
 

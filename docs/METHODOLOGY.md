@@ -34,16 +34,16 @@ Rolling one-day VaR at date \(t\) uses only the previous 250 daily observations.
 
 ## 2. Backtesting
 
-A daily VaR exception occurs when the loss exceeds the corresponding one-day VaR. For a trading desk, MAR32.18 requires separate backtesting of actual P&L (APL) and hypothetical P&L (HPL), at both the 97.5th and 99th percentiles, over at least one year of current observations. MAR32.18(1) defines the overall exception count as the greater of the separately counted APL and HPL exceptions. MAR32.18(2) counts a date as an outlier when either P&L or the daily VaR measure is unavailable or impossible to compute.
+For a trading desk, Basel MAR32.18 requires separate HPL and APL backtests at 97.5% and 99% over at least one year of current observations. The overall exception count is the greater of the HPL and APL counts. MAR32.18(2) counts an unavailable P&L or daily risk measure as an outlier.
 
-This repository has HPL only. The implementation therefore:
-- Counts an HPL exception when the HPL loss exceeds the one-day VaR forecast.
-- Counts a missing HPL or VaR observation as an HPL outlier; it does not silently remove the date.
-- Evaluates the latest 250 observations against the desk-level MAR32.19 numeric limits: more than 12 exceptions at 99%, or more than 30 at 97.5%.
-- Reports a below-limit HPL count as `below_hpl_limit_apl_unknown`, not as a pass. It cannot calculate the overall APL/HPL exception count or determine desk eligibility.
-- Does not apply the separate bank-wide MAR32.9 green/amber/red zones or bank-wide capital multipliers to desk results.
+This repository has HPL only. It therefore:
+- Counts an HPL exception when the HPL loss exceeds one-day VaR.
+- Counts a missing HPL or VaR observation as an outlier; it does not drop the date.
+- Evaluates the latest 250 observations against the desk-level MAR32.19 limits: more than 12 exceptions at 99%, or more than 30 at 97.5%.
+- Reports a below-limit HPL count as `below_hpl_limit_apl_unknown`, not a pass. Without APL, it cannot calculate the overall APL/HPL exception count or establish desk eligibility.
+- Does not apply separate bank-wide MAR32.9 green/amber/red zones or bank-wide capital multipliers to a desk.
 
-Kupiec and Christoffersen likelihood-ratio statistics are asymptotic statistical diagnostics. A constant or transition-degenerate exception sequence is marked as not estimable; the code does not fabricate a numeric result. This is not a complete supervisory backtesting process.
+Kupiec and Christoffersen likelihood-ratio statistics are asymptotic diagnostics. A constant or transition-degenerate exception sequence is marked as not estimable. This is not a complete supervisory backtesting process.
 
 ## 3. P&L attribution
 
@@ -217,3 +217,11 @@ The desk-level numeric limits above are distinct from bank-wide exception zones 
 - [Basel MAR33 — IMA capital calculation](https://www.bis.org/basel_framework/chapter/MAR/33.htm): ES liquidity horizons, reduced-factor requirement, stress-period selection, five broad risk classes, IMCC and NMRF.
 
 The code applies selected formulas and control principles as research primitives. It does not implement all requirements, data governance, model validation or supervisory approvals across MAR31–MAR33.
+
+
+## Standards applied and scope
+
+- [Basel MAR32 — backtesting and PLA](https://www.bis.org/basel_framework/chapter/MAR/32.htm): desk-level HPL/APL backtesting, missing-data outlier treatment and PLA.
+- [Basel MAR33 — IMA capital calculation](https://www.bis.org/basel_framework/chapter/MAR/33.htm): liquidity horizons, reduced-factor criterion, stress-period selection, broad risk classes, IMCC and NMRF.
+
+The code implements selected mathematical controls and research primitives. It does not implement all requirements, data controls, model validation or supervisory approvals across MAR31–MAR33.
