@@ -378,6 +378,8 @@ def rfet_diagnostic(
             or not isinstance(value, (str, pd.Timestamp, np.datetime64))
             and not hasattr(value, "isoformat")
         ):
+            if name == "as_of_date":
+                raise ValueError("as_of_date must be an explicit assessment date or timestamp")
             raise ValueError(f"{name} must be an explicit date or timestamp")
         try:
             parsed = pd.Timestamp(pd.to_datetime(value, errors="raise", utc=True))
