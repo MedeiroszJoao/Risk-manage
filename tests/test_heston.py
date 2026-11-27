@@ -326,3 +326,8 @@ def test_heston_fourier_rejects_boolean_and_string_scalars(value):
 def test_heston_batch_rejects_mixed_boolean_and_numeric_strikes():
     with pytest.raises(ValueError, match="boolean"):
         heston_prices_fourier_batch([True, 100.0], 1.0, baseline())
+
+
+def test_heston_characteristic_function_rejects_mixed_boolean_frequency():
+    with pytest.raises(ValueError, match="boolean"):
+        heston_characteristic_function([True, 0.5, 1.0], 1.0, baseline())
