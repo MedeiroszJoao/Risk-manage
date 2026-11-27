@@ -22,7 +22,7 @@ The latest inspected CI run completed successfully on Python 3.11 and 3.12:
 
 CI proves that the committed code executes under those environments and passes its current test suite. It does **not** establish mathematical correctness, independent validation, market calibration, OOS performance, or regulatory compliance.
 
-**A material formula defect was identified in `capital.py`: the unconstrained IMCC primitive applies a floor of 1 to the ratio (ES_{F,C}/ES_{R,C}). The Basel MAR33.15 formula does not specify that floor.** The current unit test exercises only a ratio above 1 and therefore misses the defect. This is the first code correction to make after this audit baseline is recorded.
+**The IMCC unconstrained floor in `capital.py` is not a defect.** I initially compared the implementation only with the compact MAR33.15 equation and missed the preceding MAR33.6 rule, which explicitly floors the current full/reduced ES ratio at 1. The implementation's `max(full_current / reduced_current, 1.0)` is consistent with MAR33.6. The current test uses a ratio above 1, however, so a regression test below 1 is still needed to prove that the floor branch is intentional and correct.
 
 The project should retain its identity as a quantitative market-risk research laboratory. The remedy is not a rewrite. It is to close specific mathematical, statistical, numerical and empirical evidence gaps in the existing modules.
 
@@ -67,9 +67,9 @@ The CI installs the latest versions satisfying lower-bound dependency constraint
 
 ---
 
-## 3. Confirmed high-priority defect
+## 3. IMCC formula review — no defect confirmed
 
-### P0 — `src/riskmanage/capital.py::calculate_imcc`
+### `src/riskmanage/capital.py::calculate_imcc`
 
 Current implementation:
 
@@ -77,35 +77,21 @@ Current implementation:
 unconstrained = reduced_stress * max(full_current / reduced_current, 1.0)
 ```
 
-Basel MAR33.15 defines:
+The compact MAR33.15 equation is:
 
 [
 IMCC(C)=ES_{R,S}\frac{ES_{F,C}}{ES_{R,C}}
 ]
 
-and:
+However, MAR33.6 explicitly states that the ratio (ES_{F,C}/ES_{R,C}) used to scale (ES_{R,S}) is floored at 1. Therefore the implementation's `max(..., 1.0)` is consistent with the Basel rule for the unconstrained component. The constrained class components are calculated using the separate MAR33.15 class-level ratios.
 
-[
-IMCC=\rho IMCC(C)+(1-\rho)\sum_i IMCC(C_i),\qquad \rho=0.5.
-]
+**Correction to the audit process:** the earlier suspected defect was a false positive caused by reading MAR33.15 without carrying forward the MAR33.6 scaling rule. No code change is authorized for this item.
 
-There is no `max(ratio, 1)` term in the published formula. The class-level implementation in this repository does not apply that floor, so the global and class-level primitives are internally inconsistent.
+**Remaining test gap:** `test_imcc_formula_exact` exercises a ratio above 1, so it does not test the floor branch. Add a case with (ES_{F,C}<ES_{R,C}), a case at equality, and retain the above-one case. Expected unconstrained results should be calculated independently from MAR33.6. This is a test-coverage improvement, not a formula correction.
 
-**Counterexample:** let (ES_{R,S}=120), (ES_{F,C}=80), and (ES_{R,C}=100). The formula gives (IMCC(C)=96). The current implementation returns 120. That is a 25% overstatement of this primitive.
-
-**Why the existing test misses it:** `test_imcc_formula_exact` uses (ES_{F,C}/ES_{R,C}=120/80=1.5), where the floor is inactive.
-
-**Required correction and acceptance criteria:**
-
-1. Remove the unsupported floor from the unconstrained formula.
-2. Add a regression test with (ES_{F,C}<ES_{R,C}).
-3. Add a second test at equality and retain the existing ratio-above-one case.
-4. Test the final weighted aggregation against a separately calculated scalar reference.
-5. Preserve the regulatory caveat: a correct formula primitive is not an implemented or approved bank IMA.
-
-**Primary reference:** Basel Committee, MAR33.15 — [Internal models approach: capital requirements calculation](https://www.bis.org/committees/bcbs/basel-framework/standard/mar/33/inforce/2022-01-01/published/2019-12-15).
-
----
+**Primary references:**
+- Basel MAR33.6 — [ES stress scaling and ratio floor](https://www.bis.org/committees/bcbs/basel-framework/standard/mar/33/inforce/2022-01-01/published/2019-12-15).
+- Basel MAR33.15 — [Constrained/unconstrained IMCC aggregation](https://www.bis.org/committees/bcbs/basel-framework/standard/mar/33/inforce/2022-01-01/published/2019-12-15).
 
 ## 4. File-by-file module audit
 
@@ -119,7 +105,7 @@ Status labels:
 | `__init__.py` | Minimal package initializer | No material issue identified. Keep the public API intentional; avoid turning the package root into an uncontrolled export surface. |
 | `black76.py` | Black-76 price, vega and implied volatility | Analytic identities and finite-difference vega tests exist. Add independent library/reference-price comparisons, near-intrinsic and short-expiry conditioning tests, solver residual and convergence reporting. |
 | `calibration.py` | Heston quote representation and nonlinear calibration | Current recovery evidence is synthetic. Add identifiability/profile studies, multi-start stability, optimizer-failure accounting and a real dated option-chain experiment before calling it market-calibrated. |
-| `capital.py` | Reduced-factor selection, stress-window selection, IMCC and NMRF primitives | **Confirmed IMCC floor defect above.** Factor ranking uses standalone ES rather than marginal contribution or dependence-aware selection; this is a research baseline, not an optimal selection method. The rolling reduced-set coverage explicitly overlaps the selection sample and is in-sample descriptive only. Stress-window selection is exploratory, not supervisory. |
+| `capital.py` | Reduced-factor selection, stress-window selection, IMCC and NMRF primitives | **The unconstrained IMCC floor is consistent with MAR33.6; add a regression case below 1 to cover the floor branch.** Factor ranking uses standalone ES rather than marginal contribution or dependence-aware selection; this is a research baseline, not an optimal selection method. The rolling reduced-set coverage explicitly overlaps the selection sample and is in-sample descriptive only. Stress-window selection is exploratory, not supervisory. |
 | `commodity.py` | WTI/Brent spot-proxy P&L and risk case | Good handling of negative WTI values and exact-date inner joins. Portfolio quantities remain hypothetical; spot proxies are not futures settlements. No curve, roll, basis, storage or convenience-yield risk. |
 | `data.py` | FRED/EIA panel validation, ingestion and merging | The panel uses business-day reindexing and forward-fill up to four rows. This requires per-series staleness and publication-calendar diagnostics; a common date index does not prove simultaneous information availability. No complete point-in-time/vintage reconstruction. |
 | `eia.py` | Official EIA petroleum bulk ZIP ingestion, parser and manifest | Strong raw snapshot/hash/provenance foundation. Archive hash identifies the downloaded snapshot, not historical vintages available at each past date. Spot observations must not be represented as futures settlement history. |
@@ -322,8 +308,8 @@ The above table intentionally avoids a 9/10 claim. A component may be mathematic
 
 ### P0 — Correctness blockers
 
-1. Fix the IMCC unconstrained ratio floor in `capital.py`; add below/equal/above-one regression cases.
-2. Reconcile every formula in `capital.py` against the exact applicable Basel MAR33 paragraphs, including all numerator/denominator definitions and stress/current period conventions.
+1. Add below/equal/above-one regression cases for the IMCC floor and verify the class-level ratios against MAR33.15.
+2. Reconcile every remaining formula in `capital.py` against the exact applicable Basel MAR33 paragraphs, including numerator/denominator definitions and stress/current period conventions.
 3. Reconcile `liquidity_adjusted_es` to the exact intended liquidity-horizon formula, including assumptions about independent/non-overlapping risk-factor shocks and scaling.
 4. Audit all price/return/loss sign conventions and units end-to-end from source data through P&L and VaR/ES.
 5. Confirm that no data transformation creates an implicit future-information leak.
@@ -391,4 +377,4 @@ A correction is not complete until all applicable items below are satisfied:
 
 ---
 
-**Audit conclusion:** Risk-manage should be preserved and deepened. The current test suite is a real software-quality asset, but not a substitute for independent quantitative validation. The IMCC floor is a concrete mathematical correction to make first. Beyond that, the largest gaps are external numerical benchmarks, dependence-aware statistical validation, point-in-time empirical data and a transparent distinction between simulated books, disclosed fund holdings and actual trading-desk evidence.
+**Audit conclusion:** Risk-manage should be preserved and deepened. The current test suite is a real software-quality asset, but not a substitute for independent quantitative validation. The IMCC floor is consistent with MAR33.6; the next task is to test that branch explicitly, not to remove it. Beyond that, the largest gaps are external numerical benchmarks, dependence-aware statistical validation, point-in-time empirical data and a transparent distinction between simulated books, disclosed fund holdings and actual trading-desk evidence.
