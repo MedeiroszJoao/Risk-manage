@@ -188,3 +188,54 @@ def test_pla_constant_input_is_not_classified_without_scipy_warning():
     assert result["status"] == "undefined_spearman"
     assert result["zone"] == "not_classifiable"
     assert result["spearman"] is None
+
+
+@pytest.mark.parametrize("confidence", [True, False, "0.99", "0.975"])
+def test_validation_probability_rejects_booleans_and_strings(confidence):
+    from riskmanage.validation import _probability
+
+    with pytest.raises(ValueError, match="numeric"):
+        _probability(confidence)
+
+
+@pytest.mark.parametrize("values", [[True, False, True], ["1", "2", "3"]])
+def test_validation_numeric_vectors_reject_boolean_and_string_coercion(values):
+    from riskmanage.validation import _one_dimensional_numeric
+
+    with pytest.raises(ValueError, match="numeric array"):
+        _one_dimensional_numeric(values, "sample")
+
+
+def test_backtest_missing_values_are_not_fabricated_as_statistical_exceptions():
+    hpl = np.zeros(250)
+    var = np.ones(250)
+    hpl[20] = np.nan
+    var[80] = np.nan
+    hpl[120] = -2.0
+
+    result = backtest_var(hpl, var, 0.99)
+
+    assert result["exceptions"] == 3
+    assert result["matched_observations"] == 248
+    assert result["kupiec"]["observations"] == 248
+    assert result["kupiec"]["exceptions"] == 1
+    assert result["kupiec_inference_population"] == "finite_matched_HPL_VaR_pairs_only"
+    assert result["christoffersen"]["valid_transitions"] == 246
+    assert result["christoffersen_inference_population"] == (
+        "adjacent_finite_matched_HPL_VaR_pairs_only"
+    )
+
+
+def test_backtest_does_not_bridge_missing_observation_in_christoffersen_transitions():
+    hpl = np.zeros(25)
+    var = np.ones(25)
+    hpl[10] = np.nan
+
+    result = backtest_var(hpl, var)
+
+    assert result["christoffersen"]["valid_transitions"] == 22
+
+
+def test_christoffersen_rejects_boolean_exception_sequence():
+    with pytest.raises(ValueError, match="booleans"):
+        christoffersen_independence([False, True, False])
