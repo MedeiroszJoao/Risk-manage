@@ -10,6 +10,11 @@ EMPIRICAL_QUANTILE_METHOD = "inverted_cdf"
 
 
 def _finite_vector(values, name="values"):
+    objects = np.asarray(values, dtype=object)
+    if any(isinstance(value, (bool, np.bool_)) for value in objects.flat):
+        raise ValueError(
+            f"{name} must be a 1D numeric vector; boolean observations are not allowed"
+        )
     raw = np.asarray(values)
     if raw.ndim != 1 or raw.dtype.kind not in "iuf":
         raise ValueError(
