@@ -81,9 +81,9 @@ The following is a conservative assessment after the first technical-integrity r
 
 ### Current automated verification
 
-- [Risk-engine CI #477](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45920629074): successful on Python 3.11 and 3.12.
-- Python 3.11: 245 tests passed; Ruff, deterministic case and configured Heston experiments passed.
-- Python 3.12: tests, Ruff, deterministic case and configured Heston experiments passed.
-- [Live EIA/FRED integrated workflow](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45920629066): successful.
+- [Risk-engine CI](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45921183208): successful on Python 3.11 and 3.12.
+- Python 3.11: 255 tests passed in 69.51 seconds; Ruff and all configured Heston experiments passed.
+- Python 3.12: 255 tests passed in 50.80 seconds; Ruff and all configured Heston experiments passed.
+- [Live EIA/FRED integrated workflow](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45921183227): successful.
 
 This evidence does not change the empirical or regulatory limitations listed above.
