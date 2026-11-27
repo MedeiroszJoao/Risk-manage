@@ -16,7 +16,7 @@
 
 The repository has a broad and technically nontrivial research implementation. Its current strongest evidence is software execution and controlled numerical experiments, not empirical market validation or regulatory validation.
 
-The latest inspected CI run completed successfully on Python 3.11 and 3.12:
+The latest completed CI run before the pandas-index alignment hardening completed successfully on Python 3.11 and 3.12:
 
 - 287 pytest tests passed on each interpreter.
 - Ruff passed on both.
@@ -52,7 +52,7 @@ Latest completed run before the pandas-index alignment change: [GitHub Actions r
 
 | Check | Python 3.11 | Python 3.12 |
 |---|---:|---:|
-| pytest | 283 passed | 283 passed |
+| pytest | 287 passed | 287 passed |
 | Ruff | passed | passed |
 | Deterministic case | passed | passed |
 | Heston Fourier / QE-M benchmark | passed | passed |
@@ -89,7 +89,7 @@ However, MAR33.6 explicitly states that the ratio (ES_{F,C}/ES_{R,C}) used to sc
 
 **Correction to the audit process:** the earlier suspected defect was a false positive caused by reading MAR33.15 without carrying forward the MAR33.6 scaling rule. No code change is authorized for this item.
 
-**Remaining test gap:** `test_imcc_formula_exact` exercises a ratio above 1, so it does not test the floor branch. Add a case with (ES_{F,C}<ES_{R,C}), a case at equality, and retain the above-one case. Expected unconstrained results should be calculated independently from MAR33.6. This is a test-coverage improvement, not a formula correction.
+**Follow-up test coverage:** the branch now includes cases for a portfolio ratio below 1 (floor active), equality, and class-level ratios below 1 (no class-level floor). These tests protect the distinction between MAR33.6 and the partial-ES class calculation.
 
 **Primary references:**
 - Basel MAR33.6 — [ES stress scaling and ratio floor](https://www.bis.org/committees/bcbs/basel-framework/standard/mar/33/inforce/2022-01-01/published/2019-12-15).
@@ -147,7 +147,7 @@ The suite has useful deterministic, edge-case, property-like and cross-method ch
 
 ### 5.2 Test gaps that materially affect claims
 
-1. **IMCC floor branch:** now covered by follow-up tests for portfolio ratio below one, equality, and class-level ratios below one; the earlier suspected global-floor defect was a false positive.
+1. **IMCC floor branch:** covered by tests for portfolio ratio below one, equality, and class-level ratios below one; the earlier suspected global-floor defect was a false positive.
 2. **Independent Heston oracle:** Fourier and QE-M are different methods, but both are implemented in this repository. This is cross-method evidence, not an external reference.
 3. **Calibration identifiability:** synthetic parameter recovery is not proof that parameters are uniquely identified.
 4. **Empirical option quotes:** no dated real bid/ask option chain is present.
