@@ -1,0 +1,303 @@
+import numpy as np
+import pandas as pd
+import pytest
+from riskmanage.pricing import black_scholes_call, garman_kohlhagen_call
+from riskmanage.fixtures import build_synthetic_market_data
+from riskmanage.portfolio import Position
+from riskmanage.pnl import (
+    _effective_position_liquidity_horizon,
+    build_desk_pnl,
+    build_joint_liquidity_horizon_10d_pnl,
+    build_joint_liquidity_horizon_pnl,
+    enrich_market_data,
+    market_state,
+    _mixed_second_derivative,
+    _taylor_rtpl,
+    value_position,
+)
+
+def test_black_scholes_call_is_monotone_in_spot_and_nonnegative():
+    low = black_scholes_call(90, 100, 1.0, .03, .20)
+    high = black_scholes_call(110, 100, 1.0, .03, .20)
+    assert 0 <= low < high
+
+def test_garman_kohlhagen_call_respects_positive_bounds():
+    price = garman_kohlhagen_call(1.10, 1.05, 1.0, .04, .02, .12)
+    assert 0 <= price <= 1.10
+
+def test_expired_call_is_intrinsic():
+    assert black_scholes_call(110, 100, 0.0, .03, .2) == pytest.approx(10)
+
+def test_desk_pnl_has_hpl_rtpl_and_residual():
+    data = build_synthetic_market_data(500)
+    result = build_desk_pnl(data, "Equity Options", model="delta_only")
+    assert {"date", "hpl", "rtpl", "residual"}.issubset(result.columns)
+    assert result.hpl.notna().all() and result.rtpl.notna().all()
+
+def test_linear_commodity_desk_has_exact_delta_explain():
+    data = build_synthetic_market_data(500)
+    result = build_desk_pnl(data, "Commodities", model="diagonal_second_order")
+    assert np.max(np.abs(result.residual.to_numpy())) < 1e-7
+
+def test_delta_only_option_model_misses_non_linear_risk_vs_diagonal_second_order():
+    data = build_synthetic_market_data(800, seed=88)
+    delta = build_desk_pnl(data, "Equity Options", model="delta_only")
+    full = build_desk_pnl(data, "Equity Options", model="diagonal_second_order")
+    assert delta.residual.abs().mean() > full.residual.abs().mean()
+
+def test_equity_options_delta_only_fails_pla_and_diagonal_second_order_repairs_it():
+    from riskmanage.validation import pla_test
+    data=build_synthetic_market_data(1800,seed=20261124)
+    delta=build_desk_pnl(data,"Equity Options",model="delta_only")
+    full=build_desk_pnl(data,"Equity Options",model="diagonal_second_order")
+    assert pla_test(delta.hpl,delta.rtpl)["zone"]=="red"
+    assert pla_test(full.hpl,full.rtpl)["zone"]=="green"
+    assert full.residual.abs().mean() < .2*delta.residual.abs().mean()
+
+
+def test_mixed_second_derivative_matches_analytic_black_scholes_vanna():
+    spot = 100.0
+    strike = 100.0
+    maturity = 0.75
+    volatility = 0.24
+    position = Position(
+        "Equity Options",
+        "EQUITY_CALL",
+        quantity=1.0,
+        maturity=maturity,
+        strike=strike,
+        multiplier=1.0,
+    )
+    state = {"sp500": spot, "equity_vol": volatility}
+    observed = _mixed_second_derivative(
+        [position], "Equity Options", state, 0,
+        "sp500", "equity_vol", 0.01, 0.00024
+    )
+
+    d1 = (
+        np.log(spot / strike) + (0.035 + 0.5 * volatility**2) * maturity
+    ) / (volatility * np.sqrt(maturity))
+    d2 = d1 - volatility * np.sqrt(maturity)
+    normal_density = np.exp(-0.5 * d1**2) / np.sqrt(2.0 * np.pi)
+    analytic_vanna = -normal_density * d2 / volatility
+
+    assert observed == pytest.approx(analytic_vanna, rel=1e-4, abs=1e-7)
+
+
+def test_mixed_second_derivative_converges_toward_analytic_vanna():
+    spot = 100.0
+    strike = 100.0
+    maturity = 0.75
+    volatility = 0.24
+    position = Position(
+        "Equity Options",
+        "EQUITY_CALL",
+        quantity=1.0,
+        maturity=maturity,
+        strike=strike,
+        multiplier=1.0,
+    )
+    state = {"sp500": spot, "equity_vol": volatility}
+    d1 = (
+        np.log(spot / strike) + (0.035 + 0.5 * volatility**2) * maturity
+    ) / (volatility * np.sqrt(maturity))
+    d2 = d1 - volatility * np.sqrt(maturity)
+    analytic_vanna = (
+        -np.exp(-0.5 * d1**2) / np.sqrt(2.0 * np.pi) * d2 / volatility
+    )
+
+    errors = []
+    for scale in (4.0, 2.0, 1.0):
+        observed = _mixed_second_derivative(
+            [position], "Equity Options", state, 0,
+            "sp500", "equity_vol", 0.01 * scale, 0.00024 * scale
+        )
+        errors.append(abs(observed - analytic_vanna))
+
+    assert errors[2] < errors[1] < errors[0]
+
+
+def test_full_hessian_cross_term_reduces_bivariate_taylor_error():
+    position = Position(
+        "Equity Options",
+        "EQUITY_CALL",
+        quantity=1.0,
+        maturity=0.75,
+        strike=100.0,
+        multiplier=1.0,
+    )
+    positions = [position]
+    previous = {"sp500": 100.0, "equity_vol": 0.24}
+    current = {"sp500": 105.0, "equity_vol": 0.27}
+    hpl = (
+        value_position(position, current, 1)
+        - value_position(position, previous, 0)
+    )
+    diagonal = _taylor_rtpl(
+        positions, "Equity Options", previous, current, 0, "diagonal_second_order"
+    )
+    full = _taylor_rtpl(
+        positions, "Equity Options", previous, current, 0, "full_hessian"
+    )
+
+    assert abs(hpl - full) < abs(hpl - diagonal)
+
+
+def test_full_hessian_mode_reports_its_cross_term_scope():
+    data = build_synthetic_market_data(500, seed=440)
+    result = build_desk_pnl(data, "Equity Options", model="full_hessian")
+    assert set(result["risk_model"]) == {"full_hessian"}
+    assert set(result["rtpl_approximation"]) == {
+        "full_market_factor_hessian_no_time_market_cross_terms"
+    }
+    assert result["residual"].notna().all()
+
+
+def test_legacy_full_greeks_name_is_deprecated_diagonal_alias():
+    data = build_synthetic_market_data(500, seed=441)
+    with pytest.warns(DeprecationWarning, match="legacy name"):
+        legacy = build_desk_pnl(data, "Equity Options", model="full_greeks")
+    diagonal = build_desk_pnl(data, "Equity Options", model="diagonal_second_order")
+
+    assert legacy["risk_model"].eq("diagonal_second_order").all()
+    assert np.allclose(legacy["rtpl"].to_numpy(), diagonal["rtpl"].to_numpy())
+
+
+def test_effective_position_liquidity_horizon_applies_next_longer_maturity_bucket():
+    assert _effective_position_liquidity_horizon(60, 30 / 252) == 40
+    assert _effective_position_liquidity_horizon(60, 20 / 252) == 40
+    assert _effective_position_liquidity_horizon(20, 15 / 252) == 20
+    assert _effective_position_liquidity_horizon(10, 5 / 252) == 10
+    assert _effective_position_liquidity_horizon(20, 0.0) == 20
+
+
+def test_joint_liquidity_horizon_pnl_revalues_position_level_factor_subsets():
+    market = build_synthetic_market_data(300, seed=771)
+    market.loc[0, "sp500"] = 100.0
+    market.loc[1, "sp500"] = 112.0
+    market.loc[0, "vix"] = 20.0
+    market.loc[1, "vix"] = 42.0
+    position = Position(
+        "Equity Options", "EQUITY_CALL", quantity=1.0,
+        maturity=0.40, strike=100.0, multiplier=1.0,
+    )
+    horizons = {
+        "sp500": 10, "equity_vol": 20, "eurusd": 10, "eurusd_vol": 40,
+        "ust2y": 10, "ust10y": 10, "wti": 20, "brent": 20,
+    }
+    result = build_joint_liquidity_horizon_pnl(market, horizons, positions=[position])
+
+    enriched = enrich_market_data(market)
+    state0 = market_state(enriched.iloc[0])
+    state1 = market_state(enriched.iloc[1])
+    unchanged_aged_value = value_position(position, state0, 1)
+    full_revaluation = value_position(position, state1, 1) - unchanged_aged_value
+
+    vol_only_state = dict(state0)
+    vol_only_state["equity_vol"] = state1["equity_vol"]
+    vol_only_revaluation = (
+        value_position(position, vol_only_state, 1) - unchanged_aged_value
+    )
+    spot_only_state = dict(state0)
+    spot_only_state["sp500"] = state1["sp500"]
+    additive_one_factor_explain = (
+        value_position(position, spot_only_state, 1) - unchanged_aged_value
+        + vol_only_revaluation
+    )
+
+    assert result.loc[0, "pnl_lh_10"] == pytest.approx(full_revaluation)
+    assert result.loc[0, "pnl_lh_20"] == pytest.approx(vol_only_revaluation)
+    assert result.loc[0, "pnl_lh_40"] == pytest.approx(0.0)
+    assert abs(full_revaluation - additive_one_factor_explain) > 1e-5
+    metadata = result.attrs["liquidity_horizon_metadata"]
+    assert metadata["method"] == "position_level_joint_full_revaluation"
+    assert metadata["time_decay_treatment"].startswith("theta is isolated")
+
+
+def test_joint_liquidity_horizon_pnl_rejects_missing_factor_horizon_mapping():
+    market = build_synthetic_market_data(300, seed=772)
+    with pytest.raises(ValueError, match="every declared desk risk factor"):
+        build_joint_liquidity_horizon_pnl(market, {"sp500": 10})
+
+
+def test_joint_liquidity_horizon_pnl_rejects_unmapped_instruments():
+    market = build_synthetic_market_data(300, seed=773)
+    position = Position("Equity Options", "UNKNOWN_INSTRUMENT", 1.0)
+    horizons = {
+        "sp500": 10, "equity_vol": 20, "eurusd": 10, "eurusd_vol": 40,
+        "ust2y": 10, "ust10y": 10, "wti": 20, "brent": 20,
+    }
+    with pytest.raises(ValueError, match="no risk-factor mapping"):
+        build_joint_liquidity_horizon_pnl(market, horizons, positions=[position])
+
+
+def test_direct_ten_day_liquidity_horizon_revalues_overlapping_static_windows():
+    data = build_synthetic_market_data(40, seed=20261127)
+    positions = [
+        Position(
+            "Equity Options",
+            "EQUITY_CALL",
+            quantity=1.0,
+            maturity=0.5,
+            strike=100.0,
+            multiplier=1.0,
+            label="test call",
+        )
+    ]
+    horizons = {
+        "sp500": 10,
+        "equity_vol": 20,
+        "eurusd": 10,
+        "eurusd_vol": 40,
+        "ust2y": 10,
+        "ust10y": 10,
+        "wti": 20,
+        "brent": 20,
+    }
+
+    direct = build_joint_liquidity_horizon_10d_pnl(
+        data, horizons, positions=positions
+    )
+    daily = build_joint_liquidity_horizon_pnl(
+        data, horizons, positions=positions
+    )
+    enriched = enrich_market_data(data)
+    start_state = market_state(enriched.iloc[0])
+    end_state = market_state(enriched.iloc[10])
+
+    full_shock = dict(start_state)
+    full_shock["sp500"] = end_state["sp500"]
+    full_shock["equity_vol"] = end_state["equity_vol"]
+    expected_full = (
+        value_position(positions[0], full_shock, day_offset=10)
+        - value_position(positions[0], start_state, day_offset=10)
+    )
+
+    volatility_only = dict(start_state)
+    volatility_only["equity_vol"] = end_state["equity_vol"]
+    expected_vol_only = (
+        value_position(positions[0], volatility_only, day_offset=10)
+        - value_position(positions[0], start_state, day_offset=10)
+    )
+
+    assert len(direct) == len(data) - 10
+    assert direct.iloc[0]["date"] == pd.Timestamp(enriched.iloc[10]["date"])
+    assert direct.iloc[0]["pnl_lh_10"] == pytest.approx(expected_full, rel=1e-12, abs=1e-10)
+    assert direct.iloc[0]["pnl_lh_20"] == pytest.approx(expected_vol_only, rel=1e-12, abs=1e-10)
+    assert direct.iloc[0]["pnl_lh_40"] == pytest.approx(0.0, abs=1e-12)
+    metadata = direct.attrs["liquidity_horizon_metadata"]
+    assert metadata["observation_horizon_days"] == 10
+    assert metadata["overlapping_windows"] is True
+    assert metadata["theta_included"] is False
+    assert metadata["method"] == (
+        "position_level_joint_10d_overlapping_full_revaluation"
+    )
+
+    # The legacy rolling-book sum holds a one-day aged maturity at every daily
+    # mark; it is a distinct estimator for a nonlinear option position.
+    daily_roll_ten_day = np.convolve(
+        daily["pnl_lh_10"].to_numpy(), np.ones(10), mode="valid"
+    )
+    assert not np.isclose(
+        daily_roll_ten_day[0], direct.iloc[0]["pnl_lh_10"], rtol=1e-7, atol=1e-9
+    )

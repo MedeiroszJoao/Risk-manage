@@ -1,0 +1,553 @@
+import numpy as np
+import pandas as pd
+import pytest
+
+from riskmanage.capital import (
+    aggregate_nmrf_ses,
+    build_ima_capital,
+    calculate_imcc,
+    _circular_moving_block_bootstrap_es_ratio,
+    evaluate_reduced_factor_folds,
+    select_reduced_factor_set,
+    select_stress_window,
+)
+
+
+def _dates(n):
+    return pd.bdate_range("2000-01-03", periods=n)
+
+
+def test_stress_window_selects_worst_cluster():
+    rng = np.random.default_rng(10)
+    values = rng.normal(0, 1, 700)
+    values[330:360] += 5
+    result = select_stress_window({"market": values}, window_days=100, confidence=0.975)
+    overlap = min(result["end_index"] + 1, 360) - max(result["start_index"], 330)
+    assert overlap >= 25
+    assert result["supervisory_status"] == "not_assessed"
+
+
+def test_imcc_formula_exact():
+    result = calculate_imcc(
+        es_full_current=120,
+        es_reduced_current=80,
+        es_reduced_stress=100,
+        class_components={
+            "equity": {"full_current": 60, "reduced_current": 40, "reduced_stress": 50},
+            "rates": {"full_current": 60, "reduced_current": 40, "reduced_stress": 50},
+        },
+        rho=0.5,
+    )
+    assert result["unconstrained"] == pytest.approx(150)
+    assert result["constrained_sum"] == pytest.approx(150)
+    assert result["imcc"] == pytest.approx(150)
+    assert result["status"] == "formula_primitive_only"
+
+
+def test_nmrf_aggregation_separates_special_groups():
+    charges = {"credit1": 3.0, "equity1": 4.0, "other1": 5.0, "other2": 12.0}
+    groups = {
+        "credit1": "credit_idio",
+        "equity1": "equity_idio",
+        "other1": "other",
+        "other2": "other",
+    }
+    result = aggregate_nmrf_ses(charges, groups, 0.6)
+    expected = 3 + 4 + np.sqrt((0.6 * 17) ** 2 + (1 - 0.6**2) * (5**2 + 12**2))
+    assert result["aggregate"] == pytest.approx(expected)
+    assert result["status"] == "formula_primitive_only"
+
+
+def test_reduced_factor_coverage_uses_a_disjoint_250_observation_holdout():
+    rng = np.random.default_rng(77)
+    common = rng.normal(0, 1, 700)
+    factors = {
+        "equity": common,
+        "rates": 0.7 * common + rng.normal(0, 0.4, 700),
+        "fx": rng.normal(0, 0.25, 700),
+    }
+    result = select_reduced_factor_set(factors, 0.975, 0.75, observation_dates=_dates(700))
+    holdout = result["holdout"]
+
+    assert holdout["status"] == "computed_non_overlapping_holdout"
+    assert holdout["observations"] == 250
+    assert holdout["ten_day_es_observations"] == 241
+    assert holdout["out_of_sample"] is True
+    assert holdout["independent_holdout"] is True
+    assert holdout["selection_overlap"] is False
+    assert holdout["estimation_window_overlap"] is False
+    assert result["holdout_is_independent"] is True
+    assert result["coverage_is_out_of_sample"] is True
+    assert result["factor_set_frozen_during_validation"] is True
+    assert result["selection_window"]["end_index"] < result["holdout_window"]["start_index"]
+    assert result["selection_window"]["end_index"] + 1 == result["holdout_window"]["start_index"]
+    assert result["holdout_window"]["observations"] == 250
+    assert result["target_met"] == (holdout["ratio"] >= 0.75)
+    assert result["explained_ratio"] == pytest.approx(
+        result["selection_sample_explained_ratio"]
+    )
+
+
+def test_holdout_observations_cannot_change_factor_selection():
+    rng = np.random.default_rng(20261126)
+    common = rng.normal(0.0, 1.0, 500)
+    factors = {
+        "equity": common,
+        "rates": 0.65 * common + rng.normal(0.0, 0.35, 500),
+        "fx": rng.normal(0.0, 0.20, 500),
+    }
+    altered = {name: values.copy() for name, values in factors.items()}
+    altered["fx"][-250:] *= 25.0
+
+    baseline = select_reduced_factor_set(factors, observation_dates=_dates(500))
+    changed_holdout = select_reduced_factor_set(altered, observation_dates=_dates(500))
+
+    assert baseline["selected_factors"] == changed_holdout["selected_factors"]
+    assert baseline["selection_sample_explained_ratio"] == pytest.approx(
+        changed_holdout["selection_sample_explained_ratio"]
+    )
+    assert baseline["selection_window"] == changed_holdout["selection_window"]
+    assert baseline["holdout"]["ratio"] != pytest.approx(
+        changed_holdout["holdout"]["ratio"]
+    )
+
+def test_reduced_factor_selection_requires_full_estimation_window():
+    with pytest.raises(ValueError, match="insufficient history"):
+        select_reduced_factor_set({"equity": np.ones(249)})
+
+
+def test_reduced_factor_selection_requires_full_500_observation_disjoint_holdout_design():
+    rng = np.random.default_rng(20)
+    factors_499 = {"equity": rng.normal(size=499)}
+    with pytest.raises(ValueError, match="at least 500"):
+        select_reduced_factor_set(factors_499)
+
+    factors_500 = {"equity": rng.normal(size=500)}
+    result = select_reduced_factor_set(factors_500, observation_dates=_dates(500))
+    assert result["holdout"]["status"] == "computed_non_overlapping_holdout"
+    assert result["holdout"]["observations"] == 250
+
+def test_ima_research_aggregation_fails_closed_on_short_history():
+    rng = np.random.default_rng(21)
+    factors = {"equity": rng.normal(0, 1, 250)}
+    stress = {"start_index": 0, "end_index": 249, "window_days": 250}
+    with pytest.raises(ValueError, match="at least 500"):
+        build_ima_capital(factors, stress, {"equity": "equity"}, observation_dates=_dates(len(next(iter(factors.values())))))
+
+
+def test_ima_research_aggregation_fails_closed_on_invalid_stress_indices():
+    rng = np.random.default_rng(22)
+    factors = {"equity": rng.normal(0, 1, 500)}
+    stress = {"start_index": 200, "end_index": 399, "window_days": 250}
+    with pytest.raises(ValueError, match="outside|do not match"):
+        build_ima_capital(factors, stress, {"equity": "equity"})
+
+
+def test_ima_aggregation_is_never_labelled_as_regulatory_capital():
+    rng = np.random.default_rng(23)
+    common = rng.normal(0, 1, 500)
+    factors = {
+        "equity": common + rng.normal(0, 0.05, 500),
+        "fx": common * 0.1 + rng.normal(0, 0.2, 500),
+    }
+    stress = select_stress_window(factors, window_days=250)
+    result = build_ima_capital(factors, stress, {"equity": "equity", "fx": "fx"}, observation_dates=_dates(len(next(iter(factors.values())))))
+    assert result["capital_label"] == "research_only_non_regulatory"
+    assert result["regulatory_status"] == "not_assessed"
+    assert result["imcc"] is None
+    assert "credit_spread" in result["missing_regulatory_risk_classes"]
+    assert result["regulatory_requirements_not_evidenced"]
+
+
+@pytest.mark.parametrize(
+    "stress",
+    [
+        {"start_index": 0.9, "end_index": 249, "window_days": 250},
+        {"start_index": 0, "end_index": 249.9, "window_days": 250},
+        {"start_index": 0, "end_index": 249, "window_days": 250.9},
+        {"start_index": True, "end_index": 249, "window_days": 250},
+    ],
+)
+def test_ima_research_aggregation_rejects_non_integer_stress_metadata(stress):
+    rng = np.random.default_rng(31)
+    factors = {"equity": rng.normal(0, 1, 500)}
+    with pytest.raises(ValueError, match="integer"):
+        build_ima_capital(factors, stress, {"equity": "equity"})
+
+
+def test_reduced_factor_selection_rejects_boolean_window_values():
+    rng = np.random.default_rng(32)
+    factors = {"equity": rng.normal(0, 1, 400)}
+    with pytest.raises(ValueError, match="estimation_window must be an integer"):
+        select_reduced_factor_set(factors, estimation_window=True, observation_dates=_dates(400))
+    with pytest.raises(ValueError, match="holdout_observations must be an integer"):
+        select_reduced_factor_set(factors, holdout_observations=True, observation_dates=_dates(400))
+
+
+def test_imcc_uses_fixed_basel_weight():
+    with pytest.raises(ValueError, match="fixed rho = 0.5"):
+        calculate_imcc(
+            120, 80, 100,
+            {
+                "equity": {"full_current": 60, "reduced_current": 40, "reduced_stress": 50},
+                "rates": {"full_current": 60, "reduced_current": 40, "reduced_stress": 50},
+            },
+            rho=0.6,
+        )
+
+
+def test_nmrf_uses_fixed_basel_weight():
+    with pytest.raises(ValueError, match="fixed rho = 0.6"):
+        aggregate_nmrf_ses(
+            {"credit": 3.0}, {"credit": "credit_idio"}, rho=0.5
+        )
+
+
+def test_ima_rejects_unknown_risk_class_mapping():
+    rng = np.random.default_rng(33)
+    factors = {"equity": rng.normal(0, 1, 500)}
+    stress = select_stress_window(factors, window_days=250)
+    with pytest.raises(ValueError, match="unsupported regulatory risk class"):
+        build_ima_capital(factors, stress, {"equity": "misc"})
+
+
+@pytest.mark.parametrize("bad_value", ["1.0", True, np.nan, np.inf])
+def test_capital_rejects_non_numeric_or_non_finite_factor_losses(bad_value):
+    values = np.array([1.0, 2.0, 3.0], dtype=object)
+    values[1] = bad_value
+    with pytest.raises(ValueError, match="numeric vector"):
+        select_reduced_factor_set({"equity": values}, estimation_window=2, observation_dates=_dates(len(values)))
+
+
+@pytest.mark.parametrize("bad_confidence", ["0.975", True, np.nan])
+def test_capital_rejects_non_numeric_confidence(bad_confidence):
+    rng = np.random.default_rng(44)
+    with pytest.raises(ValueError, match="confidence"):
+        select_reduced_factor_set({"equity": rng.normal(size=300)}, confidence=bad_confidence, observation_dates=_dates(300))
+
+
+def test_capital_rejects_string_es_and_rho_inputs():
+    with pytest.raises(ValueError, match="es_full_current must be numeric"):
+        calculate_imcc(
+            "120", 80, 100,
+            {"equity": {"full_current": 60, "reduced_current": 40, "reduced_stress": 50}},
+        )
+    with pytest.raises(ValueError, match="rho must be numeric"):
+        calculate_imcc(
+            120, 80, 100,
+            {"equity": {"full_current": 60, "reduced_current": 40, "reduced_stress": 50}},
+            rho="0.5",
+        )
+
+
+def test_build_ima_capital_validates_rho_even_if_required_class_is_missing():
+    rng = np.random.default_rng(45)
+    factors = {"equity": rng.normal(size=500)}
+    stress = select_stress_window(factors, window_days=250)
+    with pytest.raises(ValueError, match="rho must be numeric"):
+        build_ima_capital(factors, stress, {"equity": "equity"}, rho="0.5")
+
+
+def test_capital_rejects_boolean_mixed_with_float_before_numpy_promotion():
+    with pytest.raises(ValueError, match="boolean"):
+        select_reduced_factor_set({"equity": [True, 0.5, 1.0, 2.0]}, observation_dates=_dates(4))
+
+
+def test_imcc_does_not_apply_portfolio_floor_to_individual_risk_classes():
+    result = calculate_imcc(
+        es_full_current=100.0,
+        es_reduced_current=80.0,
+        es_reduced_stress=90.0,
+        class_components={
+            "equity": {"full_current": 40.0, "reduced_current": 80.0, "reduced_stress": 10.0},
+            "rates": {"full_current": 90.0, "reduced_current": 60.0, "reduced_stress": 20.0},
+        },
+    )
+
+    # Unconstrained: 90 * max(100/80, 1) = 112.5.
+    # Constrained: 10 * (40/80) + 20 * (90/60) = 35.
+    # The class-level ratio below one must not be floored independently.
+    assert result["unconstrained"] == pytest.approx(112.5)
+    assert result["class_components"]["equity"] == pytest.approx(5.0)
+    assert result["class_components"]["rates"] == pytest.approx(30.0)
+    assert result["constrained_sum"] == pytest.approx(35.0)
+    assert result["imcc"] == pytest.approx(73.75)
+
+
+def test_imcc_does_not_floor_individual_risk_class_ratios_at_one():
+    result = calculate_imcc(
+        es_full_current=100.0,
+        es_reduced_current=80.0,
+        es_reduced_stress=120.0,
+        class_components={
+            "rates": {
+                "full_current": 30.0,
+                "reduced_current": 60.0,
+                "reduced_stress": 40.0,
+            },
+            "equity": {
+                "full_current": 70.0,
+                "reduced_current": 20.0,
+                "reduced_stress": 30.0,
+            },
+        },
+    )
+
+    # MAR33.6 floors the portfolio-wide scaling ratio; MAR33.15 does not
+    # independently floor each partial risk-class ratio.
+    assert result["unconstrained"] == pytest.approx(150.0)
+    assert result["class_components"]["rates"] == pytest.approx(20.0)
+    assert result["class_components"]["equity"] == pytest.approx(105.0)
+    assert result["constrained_sum"] == pytest.approx(125.0)
+    assert result["imcc"] == pytest.approx(137.5)
+
+
+def test_imcc_portfolio_scaling_ratio_below_one_is_floored_by_mar33_6():
+    result = calculate_imcc(
+        es_full_current=80.0,
+        es_reduced_current=100.0,
+        es_reduced_stress=120.0,
+        class_components={
+            "equity": {
+                "full_current": 40.0,
+                "reduced_current": 80.0,
+                "reduced_stress": 10.0,
+            },
+        },
+    )
+
+    # MAR33.6: the portfolio-wide full/reduced current ES ratio is floored at 1.
+    # MAR33.15: the partial class ratio is not independently floored.
+    assert result["unconstrained"] == pytest.approx(120.0)
+    assert result["class_components"]["equity"] == pytest.approx(5.0)
+    assert result["constrained_sum"] == pytest.approx(5.0)
+    assert result["imcc"] == pytest.approx(62.5)
+
+
+def test_imcc_portfolio_scaling_ratio_equal_to_one_is_unchanged():
+    result = calculate_imcc(
+        es_full_current=100.0,
+        es_reduced_current=100.0,
+        es_reduced_stress=120.0,
+        class_components={
+            "equity": {
+                "full_current": 50.0,
+                "reduced_current": 50.0,
+                "reduced_stress": 20.0,
+            },
+        },
+    )
+
+    assert result["unconstrained"] == pytest.approx(120.0)
+    assert result["class_components"]["equity"] == pytest.approx(20.0)
+    assert result["imcc"] == pytest.approx(70.0)
+
+
+def test_imcc_applies_floor_to_portfolio_ratio_but_not_class_ratios():
+    result = calculate_imcc(
+        es_full_current=80.0,
+        es_reduced_current=100.0,
+        es_reduced_stress=120.0,
+        class_components={
+            "rates": {
+                "full_current": 30.0,
+                "reduced_current": 60.0,
+                "reduced_stress": 40.0,
+            },
+            "equity": {
+                "full_current": 50.0,
+                "reduced_current": 40.0,
+                "reduced_stress": 20.0,
+            },
+        },
+    )
+
+    # MAR33.6 floors the portfolio-wide ratio at one. MAR33.15's
+    # constrained partial risk-class terms retain their own ratios.
+    assert result["unconstrained"] == pytest.approx(120.0)
+    assert result["class_components"]["rates"] == pytest.approx(20.0)
+    assert result["class_components"]["equity"] == pytest.approx(25.0)
+    assert result["constrained_sum"] == pytest.approx(45.0)
+    assert result["imcc"] == pytest.approx(82.5)
+
+
+def test_reduced_factor_selection_requires_valid_chronological_dates():
+    rng = np.random.default_rng(811)
+    factors = {"equity": rng.normal(size=500)}
+    dates = _dates(500)
+
+    duplicate_dates = dates.to_series().reset_index(drop=True)
+    duplicate_dates.iloc[200] = duplicate_dates.iloc[199]
+    with pytest.raises(ValueError, match="unique by UTC calendar date"):
+        select_reduced_factor_set(factors, observation_dates=duplicate_dates)
+
+    with pytest.raises(ValueError, match="strictly increasing"):
+        select_reduced_factor_set(factors, observation_dates=dates[::-1])
+
+    with pytest.raises(ValueError, match="length"):
+        select_reduced_factor_set(factors, observation_dates=_dates(499))
+
+    with pytest.raises(ValueError, match="observation_dates are required"):
+        select_reduced_factor_set(factors)
+
+
+def test_reduced_factor_holdout_records_real_selection_and_validation_dates():
+    rng = np.random.default_rng(812)
+    factors = {"equity": rng.normal(size=500)}
+    dates = _dates(500)
+    result = select_reduced_factor_set(factors, observation_dates=dates)
+    holdout = result["holdout"]
+
+    assert holdout["chronology_verified"] is True
+    assert holdout["selection_window"]["end_date"] == dates[249].tz_localize("UTC").isoformat()
+    assert holdout["holdout_window"]["start_date"] == dates[250].tz_localize("UTC").isoformat()
+    assert holdout["holdout_window"]["end_date"] == dates[-1].tz_localize("UTC").isoformat()
+    assert holdout["selection_window"]["end_index"] + 1 == holdout["holdout_window"]["start_index"]
+
+
+def test_holdout_block_bootstrap_is_reproducible_and_preserves_joint_factor_rows():
+    rng = np.random.default_rng(20261127)
+    core = np.abs(rng.normal(2.0, 0.4, 250)) + 0.2
+    offset = 0.5 * core
+    factors = {"core": core, "offset": offset}
+
+    first = _circular_moving_block_bootstrap_es_ratio(
+        factors, selected=["core"], confidence=0.975,
+        bootstrap_replicates=100, block_lengths=(10, 20), seed=90817,
+    )
+    second = _circular_moving_block_bootstrap_es_ratio(
+        factors, selected=["core"], confidence=0.975,
+        bootstrap_replicates=100, block_lengths=(10, 20), seed=90817,
+    )
+
+    assert first == second
+    assert first["factor_columns_resampled_together"] is True
+    assert first["conditional_on_frozen_factor_selection"] is True
+    assert first["factor_set_reselected_in_replicates"] is False
+    for result in first["block_length_sensitivity"].values():
+        assert result["status"] == "computed_conditional_percentile_interval"
+        assert result["valid_replicates"] == 100
+        assert result["failed_replicates"] == 0
+        assert result["confidence_interval"] == pytest.approx(
+            [2.0 / 3.0, 2.0 / 3.0], abs=1e-12
+        )
+
+
+def test_holdout_block_bootstrap_rejects_invalid_block_lengths_and_replicates():
+    rng = np.random.default_rng(90818)
+    factors = {"core": np.abs(rng.normal(2.0, 0.4, 250)) + 0.2}
+
+    with pytest.raises(ValueError, match="at least 10"):
+        _circular_moving_block_bootstrap_es_ratio(
+            factors, ["core"], 0.975, bootstrap_replicates=100,
+            block_lengths=(9,), seed=1
+        )
+    with pytest.raises(ValueError, match="unique"):
+        _circular_moving_block_bootstrap_es_ratio(
+            factors, ["core"], 0.975, bootstrap_replicates=100,
+            block_lengths=(10, 10), seed=1
+        )
+    with pytest.raises(ValueError, match="at least 100"):
+        _circular_moving_block_bootstrap_es_ratio(
+            factors, ["core"], 0.975, bootstrap_replicates=99,
+            block_lengths=(10,), seed=1
+        )
+
+
+def test_disjoint_holdout_reports_conditional_bootstrap_uncertainty():
+    rng = np.random.default_rng(90819)
+    core = np.abs(rng.normal(1.0, 0.3, 500)) + 0.1
+    factors = {"equity": core, "rates": 0.1 * core}
+    result = select_reduced_factor_set(
+        factors, observation_dates=_dates(500),
+        bootstrap_replicates=100, bootstrap_block_lengths=(10, 20),
+        bootstrap_seed=777,
+    )
+    uncertainty = result["holdout"]["conditional_uncertainty"]
+
+    assert uncertainty["status"] == "computed_conditional_block_bootstrap"
+    assert uncertainty["replicates_per_block_length"] == 100
+    assert uncertainty["nominal_tail_observations"] == pytest.approx(241 * 0.025)
+    assert set(uncertainty["block_length_sensitivity"]) == {"10", "20"}
+    assert uncertainty["conditional_on_frozen_factor_selection"] is True
+    assert result["holdout"]["ratio"] == pytest.approx(1.0 / 1.1, rel=1e-3)
+
+
+def test_non_overlapping_factor_folds_retain_every_chronological_holdout_and_latest_fold():
+    rng = np.random.default_rng(92001)
+    core = np.abs(rng.normal(2.0, 0.18, 1500)) + 0.5
+    secondary = np.abs(rng.normal(0.20, 0.025, 1500)) + 0.02
+    factors = {"equity": core, "rates": secondary}
+    dates = _dates(1500)
+
+    result = evaluate_reduced_factor_folds(
+        factors, observation_dates=dates, confidence=0.975, target_explained=0.75
+    )
+
+    assert result["status"] == "computed_all_folds"
+    assert result["fold_count"] == 3
+    assert result["folds_non_overlapping"] is True
+    assert result["chronology_verified"] is True
+    assert result["unused_prefix_observations"] == 0
+    assert result["holdout_ratio_summary"]["folds"] == 3
+    assert len(result["holdout_ratio_summary"]["ratios"]) == 3
+
+    for index, fold in enumerate(result["folds"]):
+        selection = fold["selection_window"]
+        holdout = fold["holdout_window"]
+        assert selection["observations"] == 250
+        assert holdout["observations"] == 250
+        assert selection["end_index"] + 1 == holdout["start_index"]
+        if index:
+            previous_holdout = result["folds"][index - 1]["holdout_window"]
+            assert previous_holdout["end_index"] + 1 == selection["start_index"]
+
+    latest = select_reduced_factor_set(
+        factors,
+        observation_dates=dates,
+        bootstrap_replicates=100,
+        bootstrap_block_lengths=(10, 20),
+        bootstrap_seed=92002,
+    )
+    assert result["folds"][-1]["selected_factors"] == latest["selected_factors"]
+    assert result["folds"][-1]["holdout_ratio"] == pytest.approx(
+        latest["holdout"]["ratio"], rel=1e-12
+    )
+
+
+def test_factor_fold_selection_never_uses_its_own_holdout_observations():
+    rng = np.random.default_rng(92003)
+    core = np.abs(rng.normal(2.0, 0.18, 1000)) + 0.5
+    secondary = np.abs(rng.normal(0.20, 0.025, 1000)) + 0.02
+    factors = {"equity": core, "rates": secondary}
+    altered = {name: values.copy() for name, values in factors.items()}
+    altered["rates"][250:500] *= 30.0
+
+    baseline = evaluate_reduced_factor_folds(
+        factors, observation_dates=_dates(1000)
+    )
+    changed = evaluate_reduced_factor_folds(
+        altered, observation_dates=_dates(1000)
+    )
+
+    first_base = baseline["folds"][0]
+    first_changed = changed["folds"][0]
+    assert first_base["selected_factors"] == first_changed["selected_factors"]
+    assert first_base["selection_ratio"] == pytest.approx(
+        first_changed["selection_ratio"]
+    )
+    assert first_base["holdout_ratio"] != pytest.approx(
+        first_changed["holdout_ratio"]
+    )
+    assert baseline["folds"][1]["selection_window"]["start_index"] == 500
+
+
+def test_factor_fold_evaluation_requires_at_least_one_complete_disjoint_pair():
+    rng = np.random.default_rng(92004)
+    factors = {"equity": np.abs(rng.normal(1.0, 0.1, 499)) + 0.1}
+    result = evaluate_reduced_factor_folds(
+        factors, observation_dates=_dates(499)
+    )
+    assert result["status"] == "insufficient_history"
+    assert result["fold_count"] == 0
+    assert result["holdout_ratio_summary"] is None
