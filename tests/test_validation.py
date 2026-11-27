@@ -350,3 +350,9 @@ def test_rfet_assessment_date_includes_all_observations_on_that_calendar_day():
 def test_rfet_rejects_explicit_none_assessment_date():
     with pytest.raises(ValueError, match="explicit assessment date"):
         rfet_diagnostic(pd.DataFrame(), as_of_date=None)
+
+
+@pytest.mark.parametrize("bad_date", [None, True, 20260430, 0.5])
+def test_rfet_rejects_implicit_numeric_or_boolean_assessment_dates(bad_date):
+    with pytest.raises(ValueError, match="as_of_date"):
+        rfet_diagnostic(pd.DataFrame(), as_of_date=bad_date)
