@@ -135,7 +135,7 @@ def test_ima_research_aggregation_fails_closed_on_short_history():
 
 def test_ima_research_aggregation_fails_closed_on_invalid_stress_indices():
     rng = np.random.default_rng(22)
-    factors = {"equity": rng.normal(0, 1, 400)}
+    factors = {"equity": rng.normal(0, 1, 500)}
     stress = {"start_index": 200, "end_index": 399, "window_days": 250}
     with pytest.raises(ValueError, match="outside|do not match"):
         build_ima_capital(factors, stress, {"equity": "equity"})
