@@ -239,3 +239,39 @@ def test_backtest_does_not_bridge_missing_observation_in_christoffersen_transiti
 def test_christoffersen_rejects_boolean_exception_sequence():
     with pytest.raises(ValueError, match="booleans"):
         christoffersen_independence([False, True, False])
+
+
+def test_rfet_reports_invalid_rows_instead_of_silently_dropping_them():
+    ledger = pd.DataFrame(
+        {
+            "date": ["2026-01-01", "not-a-date", "2026-01-03", "2026-01-04"],
+            "factor_id": ["SPX", "SPX", None, "   "],
+            "evidence_type": ["transaction"] * 4,
+            "verified": [True] * 4,
+        }
+    )
+
+    result = rfet_diagnostic(ledger)
+
+    assert result["input_rows"] == 4
+    assert result["invalid_date_rows"] == 1
+    assert result["missing_factor_id_rows"] == 2
+    assert result["excluded_rows"] == 3
+    assert result["factors"]["SPX"]["eligible_candidate_real_price_days"] == 1
+
+
+def test_rfet_empty_valid_population_still_reports_exclusions():
+    ledger = pd.DataFrame(
+        {
+            "date": ["bad-date"],
+            "factor_id": [None],
+            "evidence_type": ["transaction"],
+            "verified": [True],
+        }
+    )
+
+    result = rfet_diagnostic(ledger)
+
+    assert result["status"] == "not_evidenced"
+    assert result["input_rows"] == 1
+    assert result["excluded_rows"] == 1
