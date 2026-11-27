@@ -87,7 +87,7 @@ IMCC(C)=ES_{R,S}\frac{ES_{F,C}}{ES_{R,C}}
 
 However, MAR33.6 explicitly states that the ratio (ES_{F,C}/ES_{R,C}) used to scale (ES_{R,S}) is floored at 1. Therefore the implementation's `max(..., 1.0)` is consistent with the Basel rule for the unconstrained component. The constrained class components are calculated using the separate MAR33.15 class-level ratios.
 
-**Correction to the audit process:** the earlier suspected defect was a false positive caused by reading MAR33.15 without carrying forward the MAR33.6 scaling rule. No code change is authorized for this item.
+**Correction to the audit process:** the earlier suspected defect was a false positive caused by reading MAR33.15 without carrying forward the MAR33.6 scaling rule. No formula change is required; follow-up tests protect both the global floor and the separate class-level ratio convention.
 
 **Follow-up test coverage:** the branch now includes cases for a portfolio ratio below 1 (floor active), equality, and class-level ratios below 1 (no class-level floor). These tests protect the distinction between MAR33.6 and the partial-ES class calculation.
 
