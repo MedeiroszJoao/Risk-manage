@@ -85,7 +85,7 @@ The following is a conservative assessment after the first technical-integrity r
 - Python 3.11: 291 tests passed; Ruff and all configured Heston experiments passed.
 - Python 3.12: 291 tests passed; Ruff and all configured Heston experiments passed.
 - The four new index-alignment tests passed on both Python versions in run 45924282157.
-- [Live EIA ingestion workflow](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45923474676): successful.
+- [Live EIA ingestion workflow](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45924282153): successful.
 
 This evidence does not change the empirical or regulatory limitations listed above.
 
