@@ -324,3 +324,29 @@ def test_rfet_excludes_future_evidence_relative_to_assessment_date():
 def test_rfet_requires_explicit_assessment_date():
     with pytest.raises(TypeError):
         rfet_diagnostic(pd.DataFrame())
+
+
+def test_rfet_assessment_date_includes_all_observations_on_that_calendar_day():
+    ledger = pd.DataFrame(
+        {
+            "date": [
+                "2026-04-30T09:00:00Z",
+                "2026-04-30T16:00:00Z",
+                "2026-05-01T09:00:00Z",
+            ],
+            "factor_id": ["SPX"] * 3,
+            "evidence_type": ["transaction"] * 3,
+            "verified": [True] * 3,
+        }
+    )
+
+    result = rfet_diagnostic(ledger, as_of_date="2026-04-30")
+
+    assert result["future_date_rows"] == 1
+    assert result["factors"]["SPX"]["eligible_candidate_real_price_days"] == 1
+    assert result["factors"]["SPX"]["latest_eligible_observation_date"] == "2026-04-30"
+
+
+def test_rfet_rejects_explicit_none_assessment_date():
+    with pytest.raises(ValueError, match="explicit assessment date"):
+        rfet_diagnostic(pd.DataFrame(), as_of_date=None)
