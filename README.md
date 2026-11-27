@@ -8,12 +8,12 @@
 
 The deterministic reference run uses 1,800 **synthetic** business-day observations (2016-01-04 to 2022-11-25), not market observations or a real trading book.
 
-| Equity-options desk diagnostic | Delta-only RTPL | RTPL with gamma + vega |
+| Equity-options desk diagnostic | Delta-only RTPL | Diagonal second-order RTPL | Full market-factor Hessian RTPL |
 |---|---:|---:|
 | Spearman rank correlation | 0.375 | 0.999 |
 | Empirical CDF / KS distance | 0.396 | 0.024 |
 | Research PLA diagnostic | Red | Green |
-| Mean absolute HPL − RTPL residual | USD 5.63m | USD 0.58m |
+| Mean absolute HPL − RTPL residual | USD 5.63m | USD 0.58m | Generated per deterministic run; not hard-coded |
 
 The expanded sensitivity model reduces mean absolute residual by 89.7% in this deliberately constructed synthetic case. The delta-only model also has 3 HPL exceptions in 250 observations at 99%, below the HPL-only numeric threshold of 12; this is not desk approval because APL is unavailable. These numbers illustrate that exception counts and P&L explain answer different questions; they do not estimate real trading performance.
 
@@ -22,7 +22,7 @@ The expanded sensitivity model reduces mean absolute residual by 89.7% in this d
 - **Data:** public FRED equity/FX/rates and EIA WTI/Brent spot ingestion with source metadata and hashes; SEC N-PORT quarterly-data parser for dated, publicly disclosed fund-holdings snapshots; deterministic synthetic fixtures for offline testing.
 - **Hypothetical test books:** Equity Options, FX Options, Rates and Commodities. The commodity exposures are linear spot proxies, not listed futures.
 - **Pricing:** Black–Scholes, Garman–Kohlhagen, Black-76, power-law SSVI and Heston Fourier / QE-M research implementations.
-- **P&L:** close-to-close full-revaluation HPL and separately constructed sensitivity RTPL for positions static during each daily interval; constant-maturity positions are reset after each interval.
+- **P&L:** close-to-close full-revaluation HPL and three sensitivity RTPL levels: first-order delta, diagonal second-order, and full market-factor Hessian including mixed cross terms. One-day time decay is revalued separately; time-market cross derivatives are omitted. Positions remain static during each daily interval and constant-maturity positions are reset after each interval.
 - **Risk diagnostics:** historical VaR / ES, rolling historical VaR, Kupiec and Christoffersen tests, HPL-versus-RTPL PLA diagnostics, liquidity-adjusted ES structure, descriptive stress-window selection, reduced-factor selection and formula primitives for IMCC / NMRF.
 - **Tail and uncertainty research:** POT-GPD threshold diagnostics, Heston quote-noise bootstrap, profile likelihood and simulation-based hedge experiments.
 

@@ -1,4 +1,5 @@
 from __future__ import annotations
+import warnings
 import numpy as np
 import pandas as pd
 from .portfolio import DESKS, Position, build_default_portfolio
@@ -76,16 +77,54 @@ MODEL_FACTORS={
         "Rates":("ust2y","ust10y"),
         "Commodities":("wti","brent"),
     },
-    "full_greeks":DESK_FACTORS,
+    "diagonal_second_order":DESK_FACTORS,
+    "full_hessian":DESK_FACTORS,
 }
+LEGACY_MODEL_ALIASES={"full_greeks":"diagonal_second_order"}
 
 def _bump_size(name: str, value: float) -> float:
-    if name in ("ust2y","ust10y"): return 1e-3
-    return max(abs(value)*1e-4,1e-5)
+    if name in ("ust2y", "ust10y"):
+        return 1e-3
+    if name.endswith("_vol"):
+        return max(abs(value) * 1e-3, 1e-4)
+    return max(abs(value) * 1e-4, 1e-5)
 
-def _taylor_rtpl(positions,desk,previous_state,current_state,day_offset,model):
-    # Theta is isolated as time passage at the old market state.
-    if desk=="Commodities":
+
+def _mixed_second_derivative(
+    positions,
+    desk,
+    state,
+    day_offset,
+    factor_i,
+    factor_j,
+    bump_i,
+    bump_j,
+):
+    """Central finite-difference mixed second derivative of desk value."""
+    if factor_i == factor_j or bump_i <= 0.0 or bump_j <= 0.0:
+        raise ValueError("mixed derivative requires distinct factors and positive bumps")
+
+    def value_at(sign_i, sign_j):
+        scenario = dict(state)
+        scenario[factor_i] = float(state[factor_i]) + sign_i * bump_i
+        scenario[factor_j] = float(state[factor_j]) + sign_j * bump_j
+        return value_desk(positions, desk, scenario, day_offset)
+
+    return float(
+        (
+            value_at(1.0, 1.0)
+            - value_at(1.0, -1.0)
+            - value_at(-1.0, 1.0)
+            + value_at(-1.0, -1.0)
+        )
+        / (4.0 * bump_i * bump_j)
+    )
+
+
+def _taylor_rtpl(positions, desk, previous_state, current_state, day_offset, model):
+    # One-day aging is revalued exactly at unchanged market factors. No
+    # market-time cross derivatives are included in this approximation.
+    if desk == "Commodities":
         # Exact analytical deltas for both linear spot proxies; no finite-difference noise.
         instruments = {"wti": "WTI_SPOT_PROXY", "brent": "BRENT_SPOT_PROXY"}
         return float(sum(
@@ -93,46 +132,117 @@ def _taylor_rtpl(positions,desk,previous_state,current_state,day_offset,model):
             * (current_state[factor] - previous_state[factor])
             for factor, instrument in instruments.items()
         ))
-    old_value=value_desk(positions,desk,previous_state,day_offset)
-    theta_value=value_desk(positions,desk,previous_state,day_offset+1)
-    result=theta_value-old_value
-    selected=MODEL_FACTORS[model][desk]
+
+    old_value = value_desk(positions, desk, previous_state, day_offset)
+    theta_value = value_desk(positions, desk, previous_state, day_offset + 1)
+    result = theta_value - old_value
+    selected = MODEL_FACTORS[model][desk]
+    changes = {}
+
     for factor in selected:
-        x=float(previous_state[factor]); dx=float(current_state[factor])-x
-        h=_bump_size(factor,x)
-        up=dict(previous_state); down=dict(previous_state)
-        up[factor]=x+h; down[factor]=x-h
-        v_up=value_desk(positions,desk,up,day_offset)
-        v_down=value_desk(positions,desk,down,day_offset)
-        delta=(v_up-v_down)/(2*h)
-        result+=delta*dx
-        if model=="full_greeks":
-            gamma=(v_up-2*old_value+v_down)/(h*h)
-            result+=0.5*gamma*dx*dx
+        x = float(previous_state[factor])
+        dx = float(current_state[factor]) - x
+        h = _bump_size(factor, x)
+        up = dict(previous_state)
+        down = dict(previous_state)
+        up[factor] = x + h
+        down[factor] = x - h
+        v_up = value_desk(positions, desk, up, day_offset)
+        v_down = value_desk(positions, desk, down, day_offset)
+        delta = (v_up - v_down) / (2.0 * h)
+        result += delta * dx
+        changes[factor] = (dx, h)
+
+        if model in ("diagonal_second_order", "full_hessian"):
+            gamma = (v_up - 2.0 * old_value + v_down) / (h * h)
+            result += 0.5 * gamma * dx * dx
+
+    if model == "full_hessian":
+        for i, factor_i in enumerate(selected):
+            dx_i, bump_i = changes[factor_i]
+            if dx_i == 0.0:
+                continue
+            for factor_j in selected[i + 1:]:
+                dx_j, bump_j = changes[factor_j]
+                if dx_j == 0.0:
+                    continue
+                cross_gamma = _mixed_second_derivative(
+                    positions,
+                    desk,
+                    previous_state,
+                    day_offset,
+                    factor_i,
+                    factor_j,
+                    bump_i,
+                    bump_j,
+                )
+                result += cross_gamma * dx_i * dx_j
+
     return float(result)
 
-def build_desk_pnl(market_data: pd.DataFrame, desk: str, model: str="delta_only",
-                   positions: list[Position] | None=None) -> pd.DataFrame:
-    """Mark a constant-maturity hypothetical book; positions stay static during each daily HPL interval.
 
-    After the close-to-close HPL is measured, the test book is re-established at its
-    declared constant maturity for the next day. This is a research test portfolio,
-    not a buy-and-hold record of one trade over the whole history.
+def build_desk_pnl(market_data: pd.DataFrame, desk: str, model: str = "delta_only",
+                   positions: list[Position] | None = None) -> pd.DataFrame:
+    """Mark a constant-maturity hypothetical book and construct a sensitivity RTPL.
+
+    Models:
+      - delta_only: first-order market-factor delta with separately aged theta;
+      - diagonal_second_order: adds only diagonal gamma/volga terms;
+      - full_hessian: adds mixed market-factor second derivatives.
+
+    The full_hessian mode includes cross terms between declared desk market
+    factors (for example spot/volatility vanna). One-day time decay is revalued
+    separately; time-market mixed derivatives are not included.
+    Positions stay static during each daily HPL interval and are re-established
+    at declared constant maturity after the close-to-close interval.
     """
-    if desk not in DESKS: raise ValueError(f"unknown desk: {desk}")
-    if model not in MODEL_FACTORS: raise ValueError(f"unknown risk model: {model}")
-    data=enrich_market_data(market_data)
-    if positions is None: positions=build_default_portfolio(market_state(data.iloc[0]))
-    rows=[]
-    for i in range(1,len(data)):
-        previous=data.iloc[i-1]; current=data.iloc[i]
-        state0=market_state(previous); state1=market_state(current)
-        hpl=value_desk(positions,desk,state1,1)-value_desk(positions,desk,state0,0)
-        rtpl=_taylor_rtpl(positions,desk,state0,state1,0,model)
-        rows.append({"date":pd.Timestamp(current["date"]),"hpl":float(hpl),
-                     "rtpl":float(rtpl),"residual":float(hpl-rtpl),
-                     "risk_model":model})
-    return pd.DataFrame(rows)
+    if desk not in DESKS:
+        raise ValueError(f"unknown desk: {desk}")
+    if model in LEGACY_MODEL_ALIASES:
+        warnings.warn(
+            "model='full_greeks' is a legacy name for diagonal_second_order; "
+            "use diagonal_second_order or full_hessian explicitly",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        model = LEGACY_MODEL_ALIASES[model]
+    if model not in MODEL_FACTORS:
+        raise ValueError(f"unknown risk model: {model}")
+    data = enrich_market_data(market_data)
+    if positions is None:
+        positions = build_default_portfolio(market_state(data.iloc[0]))
+    rows = []
+    if desk == "Commodities":
+        approximation = "exact_linear_delta_for_spot_proxies"
+    elif model == "delta_only":
+        approximation = "first_order_market_factor_delta"
+    elif model == "diagonal_second_order":
+        approximation = "diagonal_second_order_market_factor_expansion_no_cross_terms"
+    else:
+        approximation = "full_market_factor_hessian_no_time_market_cross_terms"
+
+    for i in range(1, len(data)):
+        previous = data.iloc[i - 1]
+        current = data.iloc[i]
+        state0 = market_state(previous)
+        state1 = market_state(current)
+        hpl = value_desk(positions, desk, state1, 1) - value_desk(positions, desk, state0, 0)
+        rtpl = _taylor_rtpl(positions, desk, state0, state1, 0, model)
+        rows.append({
+            "date": pd.Timestamp(current["date"]),
+            "hpl": float(hpl),
+            "rtpl": float(rtpl),
+            "residual": float(hpl - rtpl),
+            "risk_model": model,
+            "rtpl_approximation": approximation,
+        })
+    result = pd.DataFrame(rows)
+    result.attrs["market_factor_approximation"] = approximation
+    result.attrs["time_decay_treatment"] = (
+        "exact one-day aging at unchanged market factors; time-market cross terms omitted"
+    )
+    return result
+
 
 def build_all_desk_pnl(market_data: pd.DataFrame, model: str="delta_only"):
     data=enrich_market_data(market_data)

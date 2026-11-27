@@ -34,6 +34,13 @@ jobs:
         run: ruff check src tests scripts
       - name: Run deterministic case
         run: python scripts/run_case.py --synthetic
+      - name: Upload deterministic research outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: deterministic-case-output-py${{ matrix.python-version }}
+          path: reports/generated/
+          if-no-files-found: error
+          retention-days: 30
       - name: Run Heston Fourier / QE-M benchmark
         run: |
           python scripts/run_heston_benchmark.py --paths 4000 --steps 32 --pilot-paths 512 --output /tmp/heston_benchmark.json

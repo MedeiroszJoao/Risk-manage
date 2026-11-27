@@ -181,3 +181,17 @@ The 2026-11-27 audit is the current baseline. It does not claim that the remaini
 **Remediation:** select_reduced_factor_set and build_ima_capital require an observation-date vector aligned with the factor arrays. Dates are parsed to UTC, checked for missing values, duplicate UTC calendar dates, strict monotonicity and exact length. Selection and validation windows now include date boundaries. The integrated case passes actual dates from factor P&L attribution.
 
 **Acceptance evidence:** tests cover duplicate dates, reversed dates, vector-length mismatch, absence of dates, and exact date boundaries for selection and holdout. Out-of-sample results are not produced without explicit dates.
+
+
+## PNL-04 — Add mixed market-factor second derivatives to RTPL
+
+**Finding:** the former full_greeks model computed per-factor delta and diagonal gamma/volga terms, but omitted mixed cross derivatives. Its name overstated what the implementation contained.
+
+**Remediation:**
+- Rename the existing diagonal method to diagonal_second_order.
+- Retain full_greeks only as a deprecated compatibility alias for diagonal_second_order.
+- Add full_hessian with central four-point mixed finite differences for every pair of declared desk market factors.
+- Use volatility-specific bumps and expose the exact RTPL approximation label in every output row.
+- Keep one-day theta as a separate exact aging revaluation; explicitly exclude market-time cross derivatives.
+
+**Independent numerical evidence:** test mixed spot/volatility second derivative against the analytic Black-Scholes call vanna, and test convergence under successively smaller bumps. A bivariate full-revaluation case checks that adding the mixed term improves the second-order Taylor approximation.

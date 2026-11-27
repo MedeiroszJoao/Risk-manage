@@ -112,3 +112,10 @@ This is a rolling-origin research diagnostic for one frozen selection. It is not
 ## Chronology control for reduced-factor holdout — 2026-11-26
 
 Out-of-sample evaluation requires an explicit observation-date vector aligned one-to-one with the factor-loss arrays. Duplicate UTC calendar dates, missing timestamps, non-monotone dates and length mismatches are rejected. Selection and validation windows expose their actual first/last dates as well as positional indices. The integrated case pipeline supplies dates from the factor P&L table.
+
+
+## RTPL cross-Greek remediation — 2026-11-26
+
+The P&L layer now exposes three distinct model levels: first-order delta, diagonal second-order, and full market-factor Hessian. The legacy full_greeks label is a deprecated alias for diagonal_second_order and no longer misstates its mathematical scope.
+
+The full_hessian mode adds mixed second derivatives by a central four-point stencil. A separate numerical benchmark compares the mixed spot/volatility derivative with the analytic Black-Scholes call vanna and verifies finite-difference convergence as bumps are reduced. The method revalues one-day aging separately and does not claim to include market-time mixed derivatives.

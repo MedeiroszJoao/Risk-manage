@@ -97,30 +97,46 @@ def main():
     desk_outputs={}; validation={}; combined=[]
     for desk in DESK_FACTORS:
         simple=build_desk_pnl(market,desk,"delta_only")
-        full=build_desk_pnl(market,desk,"full_greeks")
-        simple["desk"]=desk; full["desk"]=desk
-        simple["risk_model"]="delta_only"; full["risk_model"]="full_greeks"
-        combined.extend([simple,full])
+        diagonal=build_desk_pnl(market,desk,"diagonal_second_order")
+        full=build_desk_pnl(market,desk,"full_hessian")
+        for frame,model in (
+            (simple,"delta_only"),
+            (diagonal,"diagonal_second_order"),
+            (full,"full_hessian"),
+        ):
+            frame["desk"]=desk
+            frame["risk_model"]=model
+        combined.extend([simple,diagonal,full])
         losses=-simple.hpl.to_numpy()
         var97=rolling_historical_var(losses,250,.975)
         var99=rolling_historical_var(losses,250,.99)
         hpl_tail=simple.hpl.to_numpy()[-250:]
         v97_tail=var97.to_numpy()[-250:]; v99_tail=var99.to_numpy()[-250:]
         risk97=historical_var_es(losses,.975); risk99=historical_var_es(losses,.99)
-        pla_delta=pla_test(simple.hpl,simple.rtpl); pla_full=pla_test(full.hpl,full.rtpl)
+        pla_delta=pla_test(simple.hpl,simple.rtpl)
+        pla_diagonal=pla_test(diagonal.hpl,diagonal.rtpl)
+        pla_full=pla_test(full.hpl,full.rtpl)
+        residual_delta=float(simple.residual.abs().mean())
+        residual_diagonal=float(diagonal.residual.abs().mean())
+        residual_full=float(full.residual.abs().mean())
         validation[desk]={
           "observations":len(simple),"hpl_mean":float(simple.hpl.mean()),
           "hpl_volatility":float(simple.hpl.std(ddof=1)),
-          "absolute_residual_mean_delta_only":float(simple.residual.abs().mean()),
-          "absolute_residual_mean_full_greeks":float(full.residual.abs().mean()),
-          "residual_reduction_full_greeks":float(1-full.residual.abs().mean()/max(simple.residual.abs().mean(),1e-12)),
+          "absolute_residual_mean_delta_only":residual_delta,
+          "absolute_residual_mean_diagonal_second_order":residual_diagonal,
+          "absolute_residual_mean_full_hessian":residual_full,
+          "residual_reduction_diagonal_second_order":float(1-residual_diagonal/max(residual_delta,1e-12)),
+          "residual_reduction_full_hessian":float(1-residual_full/max(residual_delta,1e-12)),
+          "full_hessian_reduction_vs_diagonal":float(1-residual_full/max(residual_diagonal,1e-12)),
           "historical_risk_97_5":risk97,"historical_risk_99":risk99,
           "backtest_97_5_last_250":backtest_var(hpl_tail,v97_tail,.975),
           "backtest_99_last_250":backtest_var(hpl_tail,v99_tail,.99),
-          "pla_delta_only":pla_delta,"pla_full_greeks":pla_full,
-          "largest_abs_residual_dates":simple.assign(abs_residual=simple.residual.abs()).nlargest(5,"abs_residual")[["date","hpl","rtpl","residual"]].to_dict("records")
+          "pla_delta_only":pla_delta,
+          "pla_diagonal_second_order":pla_diagonal,
+          "pla_full_hessian":pla_full,
+          "largest_abs_residual_dates":full.assign(abs_residual=full.residual.abs()).nlargest(5,"abs_residual")[["date","hpl","rtpl","residual"]].to_dict("records")
         }
-        desk_outputs[desk]=simple
+        desk_outputs[desk]=full
     pd.concat(combined,ignore_index=True).to_csv(out/"desk_pnl.csv",index=False,date_format="%Y-%m-%d")
 
     factor_pnl=build_factor_pnl(market)
@@ -158,10 +174,14 @@ def main():
     desk_status={}
     for desk,metrics in validation.items():
         zone=metrics["pla_delta_only"]["zone"]
-        desk_status[desk]={"delta_only_pla_zone":zone,
-          "full_greeks_pla_zone":metrics["pla_full_greeks"]["zone"],
+        desk_status[desk]={
+          "delta_only_pla_zone":zone,
+          "diagonal_second_order_pla_zone":metrics["pla_diagonal_second_order"]["zone"],
+          "full_hessian_pla_zone":metrics["pla_full_hessian"]["zone"],
           "delta_only_research_pla_green":zone=="green",
-          "remediation_improves_residual":metrics["residual_reduction_full_greeks"]>0}
+          "full_hessian_reduces_residual_vs_delta_only":metrics["residual_reduction_full_hessian"]>0,
+          "full_hessian_reduces_residual_vs_diagonal":metrics["full_hessian_reduction_vs_diagonal"]>0
+        }
     scenario_stress=build_scenario_reports(market)
     scenario_stress.to_csv(out/"scenario_stress.csv",index=False)
     stress_history_assessment={
@@ -221,7 +241,7 @@ def main():
       "## Desk outcomes","","| Desk | PLA delta-only | PLA with gamma / vega | Mean abs residual reduction |",
       "|---|---:|---:|---:|"]
     for desk,m in validation.items():
-        md.append(f"| {desk} | {m['pla_delta_only']['zone']} | {m['pla_full_greeks']['zone']} | {m['residual_reduction_full_greeks']:.1%} |")
+        md.append(f"| {desk} | {m['pla_delta_only']['zone']} | {m['pla_full_hessian']['zone']} | {m['residual_reduction_full_hessian']:.1%} |")
     imcc_report_line = (
       f"- Research IMCC formula primitive (non-regulatory): USD {capital['imcc']['imcc']:,.2f}."
       if capital["imcc"] is not None
