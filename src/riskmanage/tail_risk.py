@@ -7,6 +7,40 @@ import numpy as np
 from scipy.stats import genpareto, kstest
 
 
+def _strict_numeric_vector(values, name: str, minimum_size: int = 1) -> np.ndarray:
+    raw = np.asarray(values)
+    if raw.ndim != 1 or raw.dtype.kind not in "iuf":
+        raise ValueError(
+            f"{name} must be a one-dimensional numeric vector; "
+            "booleans, strings and object coercion are not allowed"
+        )
+    result = raw.astype(float, copy=False)
+    if result.size < minimum_size or not np.isfinite(result).all():
+        raise ValueError(
+            f"{name} must contain at least {minimum_size} finite observations"
+        )
+    return result
+
+
+def _strict_integer(value, name: str, minimum: int = 0) -> int:
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
+        raise ValueError(f"{name} must be an integer")
+    result = int(value)
+    if result < minimum:
+        raise ValueError(f"{name} must be at least {minimum}")
+    return result
+
+
+def _strict_probability_tuple(values, name: str, lower: float, upper: float) -> tuple[float, ...]:
+    raw = np.asarray(values)
+    if raw.ndim != 1 or raw.dtype.kind not in "iuf":
+        raise ValueError(f"{name} must be a one-dimensional numeric sequence")
+    result = tuple(float(value) for value in raw)
+    if not result or any(not np.isfinite(value) or not lower < value < upper for value in result):
+        raise ValueError(f"{name} values must lie strictly between {lower} and {upper}")
+    return result
+
+
 def _empirical_var_es(losses: np.ndarray, confidence_level: float) -> dict:
     sample_size = losses.size
     tail_mass = sample_size * (1.0 - confidence_level)
@@ -333,27 +367,21 @@ def fit_pot_gpd_tail_risk(
     on threshold and exceedance count and do not include threshold-selection or
     time-series dependence uncertainty.
     """
-    values = np.asarray(losses, dtype=float)
-    if values.ndim != 1 or values.size < 50 or not np.isfinite(values).all():
-        raise ValueError("losses must be a finite one-dimensional sample of at least 50")
-    alphas = tuple(float(value) for value in confidence_levels)
-    thresholds = tuple(float(value) for value in threshold_quantiles)
-    if not alphas or any(not 0.5 < value < 1.0 for value in alphas):
-        raise ValueError("confidence_levels must lie in (0.5, 1)")
+    values = _strict_numeric_vector(losses, "losses", minimum_size=50)
+    alphas = _strict_probability_tuple(confidence_levels, "confidence_levels", 0.5, 1.0)
+    thresholds = _strict_probability_tuple(threshold_quantiles, "threshold_quantiles", 0.5, 1.0)
     if len(set(alphas)) != len(alphas):
         raise ValueError("confidence_levels must be unique")
-    if not thresholds or any(not 0.5 < value < 1.0 for value in thresholds):
-        raise ValueError("threshold_quantiles must lie in (0.5, 1)")
     if any(alpha <= max(thresholds) for alpha in alphas):
         raise ValueError("each confidence level must exceed every POT threshold quantile")
     if len(set(thresholds)) != len(thresholds):
         raise ValueError("threshold_quantiles must be unique")
-    if min_exceedances < 5:
-        raise ValueError("min_exceedances must be at least 5")
-    if n_bootstrap < 0 or n_full_sample_bootstrap < 0:
-        raise ValueError("bootstrap replicate counts must be non-negative")
-    if seed < 0:
-        raise ValueError("seed must be non-negative")
+    min_exceedances = _strict_integer(min_exceedances, "min_exceedances", minimum=5)
+    n_bootstrap = _strict_integer(n_bootstrap, "n_bootstrap")
+    n_full_sample_bootstrap = _strict_integer(
+        n_full_sample_bootstrap, "n_full_sample_bootstrap"
+    )
+    seed = _strict_integer(seed, "seed")
 
     rng = np.random.default_rng(seed)
     fits = []
