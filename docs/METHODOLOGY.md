@@ -34,13 +34,16 @@ Rolling one-day VaR at date \(t\) uses only the previous 250 daily observations.
 
 ## 2. Backtesting
 
-An exception occurs when one-day HPL loss exceeds the forecast VaR. The report includes:
-- Exception count and frequency.
-- Kupiec unconditional-coverage likelihood-ratio test.
-- Christoffersen first-order independence likelihood-ratio test.
-- 99% exception zones and multipliers for a 250-observation window: Green 0–4; Amber 5–9; Red 10 or more. Multipliers: 1.50 for 0–4, then 1.70 / 1.76 / 1.83 / 1.88 / 1.92 for 5–9, and 2.00 for 10 or more.
+A daily VaR exception occurs when the loss exceeds the corresponding one-day VaR. For a trading desk, MAR32.18 requires separate backtesting of actual P&L (APL) and hypothetical P&L (HPL), at both the 97.5th and 99th percentiles, over at least one year of current observations. MAR32.18(1) defines the overall exception count as the greater of the separately counted APL and HPL exceptions. MAR32.18(2) counts a date as an outlier when either P&L or the daily VaR measure is unavailable or impossible to compute.
 
-The desk report runs both 97.5% and 99%. It is explicitly **HPL-only** because the project has no Actual P&L (APL), desk-level valuation adjustments or bank data. Basel MAR32 requires backtesting against both actual and hypothetical P&L. This output is a research diagnostic, not a regulatory backtest.
+This repository has HPL only. The implementation therefore:
+- Counts an HPL exception when the HPL loss exceeds the one-day VaR forecast.
+- Counts a missing HPL or VaR observation as an HPL outlier; it does not silently remove the date.
+- Evaluates the latest 250 observations against the desk-level MAR32.19 numeric limits: more than 12 exceptions at 99%, or more than 30 at 97.5%.
+- Reports a below-limit HPL count as `below_hpl_limit_apl_unknown`, not as a pass. It cannot calculate the overall APL/HPL exception count or determine desk eligibility.
+- Does not apply the separate bank-wide MAR32.9 green/amber/red zones or bank-wide capital multipliers to desk results.
+
+Kupiec and Christoffersen likelihood-ratio statistics are asymptotic statistical diagnostics. A constant or transition-degenerate exception sequence is marked as not estimable; the code does not fabricate a numeric result. This is not a complete supervisory backtesting process.
 
 ## 3. P&L attribution
 
@@ -54,7 +57,7 @@ The implemented Basel-style PLA zones are:
 - Red: Spearman < 0.70 or KS > 0.12.
 - Amber: all intermediate cases.
 
-The code reports an insufficient-sample state unless 250 paired observations exist. If Spearman is undefined (for example, because HPL or RTPL is constant), it returns `not_classifiable` and no PLA zone; it does not replace an undefined correlation with zero. If Spearman is undefined (for example, because HPL or RTPL is constant), it returns not_classifiable and no PLA zone; it does not replace an undefined correlation with zero.
+The code reports an insufficient-sample state unless 250 paired observations exist. If Spearman is undefined (for example, because HPL or RTPL is constant), it returns `not_classifiable` and no PLA zone; it does not replace an undefined correlation with zero.
 
 ## 4. Instrument valuation and RTPL
 
@@ -80,7 +83,7 @@ ES_{LH}=\sqrt{ES_{10}(P)^2+
 
 ## 6. Stress and reduced-factor coverage
 
-The engine selects the 250-day window with the highest 97.5% ES from available historical / synthetic factor P&L. A reduced factor set is selected by descending individual-factor ES contribution using the current 250-observation sample. The reported ratio over the latest 60 endpoints, each using a 250-observation window, reuses observations from the factor-selection sample. It is therefore only a descriptive, overlapping **in-sample** diagnostic. The 75% threshold is a research heuristic, not out-of-sample validation or regulatory reduced-factor approval.
+The exploratory selector chooses a contiguous 250-observation window by maximizing 10-observation ES from available historical / synthetic factor P&L. This is not the Basel MAR33.5/33.7 stress-period procedure: the MAR33.5 FAQ1 says to maximize aggregate IMCC, while MAR33.7 requires a 12-month period from a history that reaches back to and includes 2007, with equally weighted observations and at least quarterly updates. A reduced factor set is selected by descending individual-factor ES contribution using the current 250-observation sample. The reported ratio over the latest 60 endpoints, each using a 250-observation window, reuses observations from the factor-selection sample. It is therefore only a descriptive, overlapping **in-sample** diagnostic. The 75% threshold is only a research reference here. Basel MAR33.5 applies it to the aggregate of all IMA-approved desks at group level, averaged over the preceding 12 weeks. A single synthetic book with overlapping observations is not that calculation.
 
 The Basel stress calibration framework requires a sufficiently long historical stress data span (including the 2007 period). The synthetic reference sample begins in 2016; the public FRED SP500 daily series used here also does not supply a complete daily record back to 2007. Therefore the report explicitly marks stress-history sufficiency as **not met**.
 
@@ -96,7 +99,7 @@ IMCC=\rho\,IMCC(C)+(1-\rho)\sum_iIMCC(C_i)
 IMCC(C)=ES_{R,S}\max\left(\frac{ES_{F,C}}{ES_{R,C}},1\right).
 \]
 
-Each partial risk class is calculated separately using its full-current, reduced-current and reduced-stress ES. All figures are research outputs with synthetic / public proxy inputs, not regulatory capital. The code now fails closed unless the current 250-observation sample plus the 60-endpoint descriptive window is available, and it refuses to emit an IMCC aggregate if a mapped risk class has no selected factor. Even when computed, the result is a formula primitive only: it does not implement the complete MAR33 factor mapping, stress calibration, risk-class aggregation, factor-specific liquidity horizons, NMRF stress scenarios or governance.
+Each partial risk class is calculated separately using its full-current, reduced-current and reduced-stress ES. The current case has no credit-spread risk factors, so the build function suppresses the IMCC output rather than silently aggregating only four of the five required broad classes. No capital value is computed. Even with all five classes supplied, the implementation would remain a research primitive, not a regulatory capital process. The code now fails closed unless the current 250-observation sample plus the 60-endpoint descriptive window is available, and it refuses to emit an IMCC aggregate if a mapped risk class has no selected factor. Even when computed, the result is a formula primitive only: it does not implement the complete MAR33 factor mapping, stress calibration, risk-class aggregation, factor-specific liquidity horizons, NMRF stress scenarios or governance.
 
 ## 8. RFET and NMRF
 
@@ -203,15 +206,14 @@ The 10/20/40/60/120-day liquidity-horizon scaling shape is implemented as a rese
 The Basel desk backtest is not complete without Actual P&L. Public daily closes and hypothetical HPL cannot stand in for the bank's APL. See [MATURITY_REGISTER.md](MATURITY_REGISTER.md).
 
 
-## Regulatory boundary: RFET, liquidity horizons and APL
-
-The RFET module calculates only a numerical evidence-count screen. A count does not establish that a row is a valid real-price observation or that the factor mapping is representative. Third-party observations require vendor audit information and documented counts/dates and identifier mapping. The output is therefore a candidate for independent review or not evidenced; it never issues a regulatory modellability pass.
-
-The 10/20/40/60/120-day liquidity-horizon scaling shape is implemented as a research primitive. Production FRTB mapping is instrument/risk-factor-specific under MAR33; the generic factor labels and manually supplied horizon values in this project do not implement that mapping.
-
-The Basel desk backtest is not complete without Actual P&L. Public daily closes and hypothetical HPL cannot stand in for the bank's APL. See [MATURITY_REGISTER.md](MATURITY_REGISTER.md).
-
-
 ## Desk-level backtesting interpretation
 
 The desk-level numeric limits above are distinct from bank-wide exception zones and multipliers. MAR32.18 requires separate comparisons against APL and HPL, and MAR32.19 sets the desk limits. This repository only has HPL, so it reports an HPL-only threshold result; it never reports a passing/approved desk. Missing HPL or VaR observations are counted as outliers, consistent with MAR32.18(2).
+
+
+## Standards applied and scope
+
+- [Basel MAR32 — backtesting and PLA](https://www.bis.org/basel_framework/chapter/MAR/32.htm): desk-level backtesting, separate HPL/APL counts and missing-data outlier treatment.
+- [Basel MAR33 — IMA capital calculation](https://www.bis.org/basel_framework/chapter/MAR/33.htm): ES liquidity horizons, reduced-factor requirement, stress-period selection, five broad risk classes, IMCC and NMRF.
+
+The code applies selected formulas and control principles as research primitives. It does not implement all requirements, data governance, model validation or supervisory approvals across MAR31–MAR33.

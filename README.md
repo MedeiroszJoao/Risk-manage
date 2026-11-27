@@ -15,7 +15,7 @@ The deterministic reference run uses 1,800 **synthetic** business-day observatio
 | Research PLA diagnostic | Red | Green |
 | Mean absolute HPL − RTPL residual | USD 5.63m | USD 0.58m |
 
-The expanded sensitivity model reduces mean absolute residual by 89.7% in this deliberately constructed synthetic case. The delta-only model also has 3 VaR exceptions in 250 observations at 99%. These numbers illustrate that exception counts and P&L explain answer different questions; they do not estimate real trading performance.
+The expanded sensitivity model reduces mean absolute residual by 89.7% in this deliberately constructed synthetic case. The delta-only model also has 3 HPL exceptions in 250 observations at 99%, below the HPL-only numeric threshold of 12; this is not desk approval because APL is unavailable. These numbers illustrate that exception counts and P&L explain answer different questions; they do not estimate real trading performance.
 
 ## Implemented scope
 
@@ -70,9 +70,9 @@ The dependency ranges in pyproject.toml are minimum-version constraints, **not a
 2. Backtesting here is HPL-only. The Basel desk framework requires both Actual P&L and Hypothetical P&L; missing HPL/VaR rows are counted as exceptions. The code applies the desk-level 12-exception (99%) / 30-exception (97.5%) numeric limits without bank-wide multipliers, but cannot establish eligibility without APL.
 3. Public daily closes do not establish RFET. Qualifying real-price evidence, vendor audit controls and defensible factor mapping need independent review.
 4. The integrated history begins in 2016, not 2007. It does not establish the full historical stress span required by the IMA framework.
-5. The current liquidity-horizon mapping is an illustrative research input, not the MAR33 instrument/risk-factor mapping.
+5. The current liquidity-horizon mapping is an illustrative research input, not the MAR33 instrument/risk-factor mapping. Stress-period selection currently maximizes portfolio ES rather than aggregate IMCC.
 6. Reduced-factor coverage currently uses overlapping windows that reuse the factor-selection sample. It is descriptive in-sample coverage, not out-of-sample validation.
-7. IMCC and NMRF functions are formula primitives. Their output is never a regulatory capital number; complete MAR33 mapping, stress scenarios and governance are absent.
+7. IMCC and NMRF functions are formula primitives. Their output is never a regulatory capital number; complete MAR33 mapping, IMCC-based stress-period selection, group-level 75% test, all five broad classes (including credit spread), stress scenarios and governance are absent.
 8. Heston / SSVI calibration tests use synthetic quotes or analytic limits; there is no live timestamped option chain, curve bootstrap or market-quality filter.
 9. No DRC, Standardised Approach, CVA/XVA, bank valuation adjustments, intraday risk, desk approval process or supervisory sign-off is implemented.
 

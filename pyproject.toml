@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "risk-manage"
 version = "0.1.0"
-description = "FRTB-inspired market risk desk validation and capital research lab"
+description = "Quantitative market-risk research prototype; non-regulatory and not a bank risk system"
 requires-python = ">=3.11"
 dependencies = [
   "numpy>=1.26",

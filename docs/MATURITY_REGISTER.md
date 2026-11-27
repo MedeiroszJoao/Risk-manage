@@ -31,7 +31,7 @@ These states are not interchangeable. A test of a synthetic model is not an empi
 | PLA | Yes | Spearman / empirical CDF checks and undefined-correlation handling | Hypothetical HPL / RTPL only | Not a regulatory desk PLA |
 | Black–Scholes / GK / Black-76 | Yes | Analytic properties and selected cross-checks | No timestamped real option chain | Not production |
 | Heston Fourier | Yes | Characteristic-function normalization, martingale forward, deterministic-variance Black–Scholes limit, parity and bounds | No live quotes | Not calibrated to market |
-| Heston QE-M | Yes | Conditional moment / martingale diagnostics and Monte Carlo comparison against Fourier | Synthetic parameters only; systematic time-grid bias study remains required | Not assessed |
+| Heston QE-M | Yes | Conditional moment / martingale diagnostics and Monte Carlo comparison against Fourier | Synthetic parameters only; CI runs 16/32/64/128/256-step sensitivity, but no accepted bias bound or market-calibrated time-grid criterion is established | Not assessed |
 | SSVI | Yes | Static-arbitrage sufficient-region checks and synthetic parameter/price recovery | No real option chain or stale/bid-ask governance | Not assessed |
 | POT-GPD | Yes | Synthetic known-GPD recovery, threshold grid and bootstrap diagnostics | No independent chronological financial loss series | Not assessed |
 | Liquidity-adjusted ES | Research implementation | Formula-shape and unit tests | Factor horizon mapping remains illustrative | MAR33 mapping not implemented |
@@ -46,8 +46,8 @@ These states are not interchangeable. A test of a synthetic model is not an empi
 2. Actual historical positions and frozen forecasts / model versions with point-in-time market data and timestamps.
 3. Full instrument identifiers, contract conventions, curves, volatility surfaces, calendars, corporate actions, futures rolls and basis.
 4. Independent risk-factor mapping and source evidence for RFET, including third-party vendor audit and representativeness.
-5. Complete MAR33 risk-factor liquidity-horizon mapping, stress calibration, broad risk classes, reduced-factor assessment and NMRF stress scenarios.
-6. Independent validation, governance, exception escalation, change control and supervisory requirements.
+5. Complete MAR33 risk-factor liquidity-horizon mapping, IMCC-based stress-period selection, group-level reduced-factor assessment, all five broad risk classes and NMRF stress scenarios.
+6. One-year APL/HPL desk-level backtesting and PLA, independent validation, governance, exception escalation, change control and supervisory requirements.
 
 ## Acceptance criteria before any stronger claim
 

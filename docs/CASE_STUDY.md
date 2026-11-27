@@ -14,7 +14,7 @@ The equity-options desk intentionally contains short at-the-money calls and puts
 | Mean absolute HPL − RTPL residual | USD 5.63m | USD 0.58m |
 | Mean absolute residual reduction | — | **89.7%** |
 
-The same delta-only model records **3 HPL exceptions in 250 observations at 99%**. That is below the Basel desk-level numerical limit of 13 exceptions at the 99th percentile, but it is not a desk approval: actual P&L is missing, and the desk test considers both HPL and APL. The case still demonstrates that a low HPL exception count does not prove that the model explains economic P&L. Backtesting and PLA answer different questions.
+The same delta-only model records **3 HPL exceptions in 250 observations at 99%**. That is below the desk-level HPL numeric threshold of 12 exceptions, but it is not a desk approval: Actual P&L is missing, and the regulatory test counts both APL and HPL. The case still demonstrates that a low HPL exception count does not prove that the model explains economic P&L. Backtesting and PLA answer different questions.
 
 ## Desks and model-risk hypotheses
 
@@ -44,12 +44,12 @@ For the most recent 250 aligned observations:
 
 The reference synthetic run also produces:
 - 97.5% historical ES and 10-day liquidity-adjusted ES across 10/20/40/60/120-day liquidity horizons.
-- A selected 250-day high-tail stress window.
+- A descriptive 250-observation high-tail window selected by maximum 10-day ES; it is not the MAR33.5/33.7 IMCC-based stress-period procedure.
 - Reduced-factor selection accompanied by a latest-60-endpoint, 250-observation overlapping in-sample ES ratio diagnostic. It is not a holdout or out-of-sample validation; the 75% threshold is a research heuristic.
-- Constrained / unconstrained IMCC aggregation with rho = 0.5.
+- No IMCC result: the case does not contain credit-spread risk factors, one of the five required broad classes. The helper formula is retained as a research primitive.
 - RFET evidence-count screen, deliberately not classified as regulatory modellability.
 
-The generated JSON / CSV files contain the exact run outputs. The stress and capital figures remain illustrative because the source history is synthetic and does not extend back to 2007.
+The generated JSON / CSV files contain the exact run outputs. The stress-window statistic is descriptive; IMCC is not computed because credit spread is missing. The source history is synthetic and does not extend back to 2007. The single-book 75% ratio is in-sample and cannot satisfy the group-level criterion.
 
 ## Scope and guardrails
 
