@@ -212,6 +212,7 @@ def main():
       "project":"RISK-MANAGE — FRTB IMA Desk Validation & Capital Lab",
       "run_utc":datetime.now(timezone.utc).isoformat(),"data_classification":data_kind,
       "market_data_provenance":provenance,"observations":len(market),
+      "reduced_factor_temporal_stability":capital["reduced_factor_stability"],
       "date_range":{"start":str(market.date.min().date()),"end":str(market.date.max().date())},
       "desks":validation,"desk_status":desk_status,"factor_pnl_reconciliation":factor_reconciliation,
       "liquidity_adjusted_es":liquidity,"stress_window":stress,"ima_capital":capital,
@@ -272,6 +273,42 @@ def main():
         for block, result in block_sensitivity.items()
         if result.get("confidence_interval") is not None
     ) or "not computed"
+    fold_stability = capital["reduced_factor_stability"]
+    fold_report_rows = [
+        "",
+        "## Reduced-factor temporal stability — non-overlapping chronological folds",
+        "",
+        "| Fold | Selection window | Holdout window | Selected factors | Selection ratio | Holdout ratio | Target met |",
+        "|---|---|---|---|---:|---:|---|",
+    ]
+    for fold in fold_stability.get("folds", []):
+        selection = fold["selection_window"]
+        holdout = fold["holdout_window"]
+        ratio = fold["holdout_ratio"]
+        ratio_text = f"{ratio:.1%}" if ratio is not None else "unclassifiable"
+        fold_report_rows.append(
+            f"| {fold['fold']} | {selection['start_date'][:10]}–{selection['end_date'][:10]} "
+            f"| {holdout['start_date'][:10]}–{holdout['end_date'][:10]} "
+            f"| {', '.join(fold['selected_factors'])} "
+            f"| {fold['selection_ratio']:.1%} | {ratio_text} "
+            f"| {fold['target_met_on_holdout']} |"
+        )
+    fold_summary = fold_stability.get("holdout_ratio_summary")
+    if fold_summary is None:
+        fold_report_rows += ["", "No aggregate fold statistic is reported because one or more folds were unclassifiable."]
+    else:
+        fold_report_rows += [
+            "",
+            f"- Holdout target achieved in {fold_summary['target_met_folds']}/{fold_summary['folds']} folds.",
+            f"- Mean / minimum holdout ratio: {fold_summary['mean']:.1%} / {fold_summary['minimum']:.1%}.",
+            f"- Mean pairwise factor-set Jaccard similarity: {fold_stability['mean_pairwise_selection_jaccard']}.",
+        ]
+    fold_report_rows += [
+        "",
+        "These folds do not overlap in daily observations, but are not assumed statistically independent. Results are descriptive; the data classification above must be considered.",
+        "",
+    ]
+    md += fold_report_rows
     md += ["","## Capital and stress outputs","",
       f"- Position-level joint-revaluation liquidity-adjusted ES research diagnostic: USD {liquidity['liquidity_adjusted_es']:,.2f} (10-day base, 97.5%).",
       f"- Liquidity ES calculation method: {liquidity['calculation_method']}; theta excluded from risk-factor shocks.",

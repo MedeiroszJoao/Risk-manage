@@ -7,6 +7,7 @@ from riskmanage.capital import (
     build_ima_capital,
     calculate_imcc,
     _circular_moving_block_bootstrap_es_ratio,
+    evaluate_reduced_factor_folds,
     select_reduced_factor_set,
     select_stress_window,
 )
@@ -470,3 +471,83 @@ def test_disjoint_holdout_reports_conditional_bootstrap_uncertainty():
     assert set(uncertainty["block_length_sensitivity"]) == {"10", "20"}
     assert uncertainty["conditional_on_frozen_factor_selection"] is True
     assert result["holdout"]["ratio"] == pytest.approx(1.0 / 1.1, rel=1e-3)
+
+
+def test_non_overlapping_factor_folds_retain_every_chronological_holdout_and_latest_fold():
+    rng = np.random.default_rng(92001)
+    core = np.abs(rng.normal(2.0, 0.18, 1500)) + 0.5
+    secondary = np.abs(rng.normal(0.20, 0.025, 1500)) + 0.02
+    factors = {"equity": core, "rates": secondary}
+    dates = _dates(1500)
+
+    result = evaluate_reduced_factor_folds(
+        factors, observation_dates=dates, confidence=0.975, target_explained=0.75
+    )
+
+    assert result["status"] == "computed_all_folds"
+    assert result["fold_count"] == 3
+    assert result["folds_non_overlapping"] is True
+    assert result["chronology_verified"] is True
+    assert result["unused_prefix_observations"] == 0
+    assert result["holdout_ratio_summary"]["folds"] == 3
+    assert len(result["holdout_ratio_summary"]["ratios"]) == 3
+
+    for index, fold in enumerate(result["folds"]):
+        selection = fold["selection_window"]
+        holdout = fold["holdout_window"]
+        assert selection["observations"] == 250
+        assert holdout["observations"] == 250
+        assert selection["end_index"] + 1 == holdout["start_index"]
+        if index:
+            previous_holdout = result["folds"][index - 1]["holdout_window"]
+            assert previous_holdout["end_index"] + 1 == selection["start_index"]
+
+    latest = select_reduced_factor_set(
+        factors,
+        observation_dates=dates,
+        bootstrap_replicates=100,
+        bootstrap_block_lengths=(10, 20),
+        bootstrap_seed=92002,
+    )
+    assert result["folds"][-1]["selected_factors"] == latest["selected_factors"]
+    assert result["folds"][-1]["holdout_ratio"] == pytest.approx(
+        latest["holdout"]["ratio"], rel=1e-12
+    )
+
+
+def test_factor_fold_selection_never_uses_its_own_holdout_observations():
+    rng = np.random.default_rng(92003)
+    core = np.abs(rng.normal(2.0, 0.18, 1000)) + 0.5
+    secondary = np.abs(rng.normal(0.20, 0.025, 1000)) + 0.02
+    factors = {"equity": core, "rates": secondary}
+    altered = {name: values.copy() for name, values in factors.items()}
+    altered["rates"][250:500] *= 30.0
+
+    baseline = evaluate_reduced_factor_folds(
+        factors, observation_dates=_dates(1000)
+    )
+    changed = evaluate_reduced_factor_folds(
+        altered, observation_dates=_dates(1000)
+    )
+
+    first_base = baseline["folds"][0]
+    first_changed = changed["folds"][0]
+    assert first_base["selected_factors"] == first_changed["selected_factors"]
+    assert first_base["selection_ratio"] == pytest.approx(
+        first_changed["selection_ratio"]
+    )
+    assert first_base["holdout_ratio"] != pytest.approx(
+        first_changed["holdout_ratio"]
+    )
+    assert baseline["folds"][1]["selection_window"]["start_index"] == 500
+
+
+def test_factor_fold_evaluation_requires_at_least_one_complete_disjoint_pair():
+    rng = np.random.default_rng(92004)
+    factors = {"equity": np.abs(rng.normal(1.0, 0.1, 499)) + 0.1}
+    result = evaluate_reduced_factor_folds(
+        factors, observation_dates=_dates(499)
+    )
+    assert result["status"] == "insufficient_history"
+    assert result["fold_count"] == 0
+    assert result["holdout_ratio_summary"] is None

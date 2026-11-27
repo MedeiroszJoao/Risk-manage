@@ -35,7 +35,7 @@ These states are not interchangeable. A test of a synthetic model is not an empi
 | SSVI | Yes | Static-arbitrage sufficient-region checks and synthetic parameter/price recovery | No real option chain or stale/bid-ask governance | Not assessed |
 | POT-GPD | Yes | Synthetic known-GPD recovery, threshold grid and bootstrap diagnostics | No independent chronological financial loss series | Not assessed |
 | Liquidity-adjusted ES | Research implementation | Formula-shape and unit tests | Factor horizon mapping remains illustrative | MAR33 mapping not implemented |
-| Reduced-factor selection | Research implementation | Selection-window ES ratio and disjoint 250-observation holdout | No shared daily observations between selection and holdout; tail-estimation uncertainty still material | IMA requirements not established |
+| Reduced-factor selection | Research implementation | Disjoint 250/250 holdout, conditional block bootstrap and repeated non-overlapping chronological folds | Factor selection and holdout ratios can vary materially by period; tail-estimation uncertainty remains high | IMA requirements not established |
 | IMCC / NMRF primitives | Formula primitives | Unit examples only | The current book lacks credit-spread factors, and the stress-period / group-level reduced-factor procedures are not implemented | Not a regulatory calculation |
 | Data ingestion | FRED/EIA pipelines and SEC N-PORT accession parser | Live FRED/EIA checks; N-PORT parser unit-tested against three position records transcribed from one official filing | Full quarterly N-PORT archive and complete filing not yet reconciled; no instrument-level return reconstruction | N-PORT holdings are not RFET evidence or bank desk positions |
 | Portfolio / HPL / RTPL | Yes, hypothetical constant-maturity test books | P&L reconciliation; analytic Black–Scholes vanna benchmark; finite-difference bump convergence; diagonal-versus-full-Hessian comparison | No real bank desk positions or APL | `full_hessian` includes mixed derivatives across the declared desk factors; one-day time-market cross derivatives and factors absent from the declared desk basis remain excluded. Regulatory backtest/PLA is incomplete |
@@ -81,10 +81,9 @@ The following is a conservative assessment after the first technical-integrity r
 
 ### Current automated verification
 
-- [Risk-engine CI](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45932173994): successful on Python 3.11 and 3.12.
-- Python 3.11: 309 tests passed; Ruff, deterministic case and all configured Heston experiments passed.
-- Python 3.12: 309 tests passed; Ruff, deterministic case and all configured Heston experiments passed.
-- [Live EIA ingestion workflow](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45932173991): successful.
+- [Risk-engine CI](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45934732549): successful on Python 3.11 and 3.12.
+- Python 3.11 and 3.12: 309 tests, Ruff, deterministic case and all configured Heston experiments passed, including the strengthened QE-M moment tests.
+- [Live EIA ingestion workflow](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45934732668): successful.
 
 This evidence does not change the empirical or regulatory limitations listed above.
 

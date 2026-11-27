@@ -430,6 +430,233 @@ def select_stress_window(
     }
 
 
+def _select_factor_set_from_sample(selection_sample, confidence, target_explained):
+    """Select a descending standalone-ES prefix using only one supplied sample."""
+    full_es = _portfolio_es(selection_sample, list(selection_sample), confidence)
+    if not np.isfinite(full_es) or full_es <= 0.0:
+        raise ValueError("full selection-sample ES must be positive and finite")
+
+    ranking = sorted(
+        selection_sample,
+        key=lambda name: historical_var_es(
+            _ten_day_losses(selection_sample[name]), confidence
+        )["expected_shortfall"],
+        reverse=True,
+    )
+    selected = []
+    selected_es = float("nan")
+    explained_ratio = float("nan")
+    for factor in ranking:
+        selected.append(factor)
+        selected_es = _portfolio_es(selection_sample, selected, confidence)
+        explained_ratio = float(selected_es / full_es)
+        if explained_ratio >= target_explained:
+            break
+    return selected, float(full_es), float(selected_es), float(explained_ratio)
+
+
+def evaluate_reduced_factor_folds(
+    current_factor_losses: dict[str, np.ndarray],
+    observation_dates,
+    confidence: float = 0.975,
+    target_explained: float = 0.75,
+    estimation_window: int = MIN_CURRENT_OBSERVATIONS,
+    holdout_observations: int = REDUCED_SET_HOLDOUT_OBSERVATIONS,
+):
+    """Evaluate factor selection over contiguous, disjoint chronological folds.
+
+    Each fold contains one selection block followed by one holdout block. Folds
+    are constructed backwards from the latest observation so the final fold
+    matches the single latest-window holdout used by select_reduced_factor_set.
+    Daily observations are never reused across folds. Non-overlap does not
+    imply statistical independence across time.
+    """
+    factors = _align_factor_losses(current_factor_losses)
+    c = _confidence_level(confidence)
+    target = _strict_float(target_explained, "target_explained")
+    if not 0.0 < target <= 1.0:
+        raise ValueError("target_explained must be in (0, 1]")
+    estimation_window = _strict_integer(estimation_window, "estimation_window")
+    holdout_observations = _strict_integer(
+        holdout_observations, "holdout_observations"
+    )
+    if estimation_window < MIN_CURRENT_OBSERVATIONS:
+        raise ValueError(
+            f"estimation_window must be at least {MIN_CURRENT_OBSERVATIONS}"
+        )
+    if holdout_observations < REDUCED_SET_HOLDOUT_OBSERVATIONS:
+        raise ValueError(
+            "holdout_observations must be at least "
+            f"{REDUCED_SET_HOLDOUT_OBSERVATIONS}"
+        )
+
+    n = len(next(iter(factors.values())))
+    dates = _validate_observation_dates(observation_dates, n)
+    fold_span = estimation_window + holdout_observations
+    fold_count = n // fold_span
+    first_start = n - fold_count * fold_span
+    if fold_count == 0:
+        return {
+            "status": "insufficient_history",
+            "observations": int(n),
+            "required_observations_per_fold": int(fold_span),
+            "fold_count": 0,
+            "folds": [],
+            "unused_prefix_observations": int(n),
+            "folds_non_overlapping": True,
+            "chronology_verified": True,
+            "holdout_ratio_summary": None,
+            "interpretation": (
+                "At least one complete selection-plus-holdout block is required. "
+                "No temporal-stability conclusion is produced."
+            ),
+        }
+
+    folds = []
+    selection_frequency = {name: 0 for name in factors}
+    selected_sets = []
+    holdout_ratios = []
+    unclassifiable_folds = []
+
+    for fold_index in range(fold_count):
+        fold_start = first_start + fold_index * fold_span
+        selection_start = fold_start
+        selection_end = selection_start + estimation_window - 1
+        holdout_start = selection_end + 1
+        holdout_end = holdout_start + holdout_observations - 1
+
+        selection_sample = {
+            name: values[selection_start : selection_end + 1]
+            for name, values in factors.items()
+        }
+        selected, selection_full_es, selection_reduced_es, selection_ratio = (
+            _select_factor_set_from_sample(selection_sample, c, target)
+        )
+        for name in selected:
+            selection_frequency[name] += 1
+        selected_sets.append(set(selected))
+
+        holdout_sample = {
+            name: values[holdout_start : holdout_end + 1]
+            for name, values in factors.items()
+        }
+        holdout_full_es = _portfolio_es(holdout_sample, list(holdout_sample), c)
+        holdout_reduced_es = _portfolio_es(holdout_sample, selected, c)
+
+        if not np.isfinite(holdout_full_es) or holdout_full_es <= 0.0:
+            fold_status = "unclassifiable_nonpositive_full_holdout_es"
+            holdout_ratio = None
+            unclassifiable_folds.append(int(fold_index + 1))
+        elif not np.isfinite(holdout_reduced_es):
+            fold_status = "unclassifiable_nonfinite_reduced_holdout_es"
+            holdout_ratio = None
+            unclassifiable_folds.append(int(fold_index + 1))
+        else:
+            fold_status = "computed"
+            holdout_ratio = float(holdout_reduced_es / holdout_full_es)
+            holdout_ratios.append(holdout_ratio)
+
+        folds.append({
+            "fold": int(fold_index + 1),
+            "status": fold_status,
+            "selected_factors": selected,
+            "selection_full_es": float(selection_full_es),
+            "selection_reduced_es": float(selection_reduced_es),
+            "selection_ratio": float(selection_ratio),
+            "holdout_full_es": float(holdout_full_es),
+            "holdout_reduced_es": (
+                float(holdout_reduced_es) if np.isfinite(holdout_reduced_es) else None
+            ),
+            "holdout_ratio": holdout_ratio,
+            "target_explained": float(target),
+            "target_met_on_holdout": (
+                bool(holdout_ratio >= target) if holdout_ratio is not None else None
+            ),
+            "selection_window": {
+                "start_index": int(selection_start),
+                "end_index": int(selection_end),
+                "start_date": dates[selection_start].isoformat(),
+                "end_date": dates[selection_end].isoformat(),
+                "observations": int(estimation_window),
+            },
+            "holdout_window": {
+                "start_index": int(holdout_start),
+                "end_index": int(holdout_end),
+                "start_date": dates[holdout_start].isoformat(),
+                "end_date": dates[holdout_end].isoformat(),
+                "observations": int(holdout_observations),
+            },
+            "nominal_tail_observations": float(
+                max(holdout_observations - 9, 0) * (1.0 - c)
+            ),
+        })
+
+    pairwise_jaccard = []
+    for left in range(len(selected_sets)):
+        for right in range(left + 1, len(selected_sets)):
+            union = selected_sets[left] | selected_sets[right]
+            pairwise_jaccard.append(
+                float(len(selected_sets[left] & selected_sets[right]) / len(union))
+                if union else 1.0
+            )
+
+    all_classifiable = not unclassifiable_folds
+    holdout_ratio_summary = None
+    if all_classifiable:
+        ratio_values = np.asarray(holdout_ratios, dtype=float)
+        target_met_count = int(np.count_nonzero(ratio_values >= target))
+        holdout_ratio_summary = {
+            "folds": int(fold_count),
+            "mean": float(np.mean(ratio_values)),
+            "median": float(np.median(ratio_values)),
+            "minimum": float(np.min(ratio_values)),
+            "maximum": float(np.max(ratio_values)),
+            "target_met_folds": target_met_count,
+            "target_met_fraction": float(target_met_count / fold_count),
+            "all_folds_met_target": bool(target_met_count == fold_count),
+            "ratios": ratio_values.tolist(),
+        }
+
+    selection_frequency = {
+        name: {
+            "folds_selected": int(count),
+            "frequency": float(count / fold_count),
+        }
+        for name, count in selection_frequency.items()
+    }
+    return {
+        "status": "computed_all_folds" if all_classifiable else "partially_unclassifiable",
+        "observations": int(n),
+        "fold_count": int(fold_count),
+        "fold_span_observations": int(fold_span),
+        "estimation_window": int(estimation_window),
+        "holdout_observations": int(holdout_observations),
+        "unused_prefix_observations": int(first_start),
+        "folds_non_overlapping": True,
+        "chronology_verified": True,
+        "folds": folds,
+        "unclassifiable_folds": unclassifiable_folds,
+        "holdout_ratio_summary": holdout_ratio_summary,
+        "factor_selection_frequency": selection_frequency,
+        "mean_pairwise_selection_jaccard": (
+            float(np.mean(pairwise_jaccard)) if pairwise_jaccard else None
+        ),
+        "pairwise_selection_jaccard": pairwise_jaccard,
+        "inference_scope": (
+            "Descriptive temporal-stability results. Non-overlapping observation "
+            "blocks do not establish statistical independence. No pooled confidence "
+            "interval is reported because folds may share regime and serial dependence; "
+            "the per-fold 97.5% ES tail is based on only a few observations."
+        ),
+        "interpretation": (
+            "Every fold freezes the factor set using only its selection window and "
+            "evaluates that set on the immediately following disjoint holdout. Folds "
+            "are ordered chronologically and constructed backwards from the latest "
+            "observation. The final fold matches the latest single-holdout design."
+        ),
+    }
+
+
 def select_reduced_factor_set(
     current_factor_losses: dict[str, np.ndarray],
     confidence: float = 0.975,
@@ -477,28 +704,9 @@ def select_reduced_factor_set(
         name: series[selection_start:holdout_start]
         for name, series in factors.items()
     }
-    full_selection_es = _portfolio_es(
-        selection_sample, list(selection_sample), c
+    selected, full_selection_es, selected_es, training_ratio = (
+        _select_factor_set_from_sample(selection_sample, c, target_explained)
     )
-    if not np.isfinite(full_selection_es) or full_selection_es <= 0.0:
-        raise ValueError("full selection-sample ES must be positive and finite")
-
-    ranking = sorted(
-        selection_sample,
-        key=lambda name: historical_var_es(
-            _ten_day_losses(selection_sample[name]), c
-        )["expected_shortfall"],
-        reverse=True,
-    )
-    selected = []
-    training_ratio = float("nan")
-    selected_es = float("nan")
-    for factor in ranking:
-        selected.append(factor)
-        selected_es = _portfolio_es(selection_sample, selected, c)
-        training_ratio = float(selected_es / full_selection_es)
-        if training_ratio >= target_explained:
-            break
 
     holdout = _non_overlapping_reduced_holdout(
         factors,
@@ -706,6 +914,14 @@ def build_ima_capital(
         bootstrap_seed=bootstrap_seed,
     )
     selected = reduced["selected_factors"]
+    reduced_factor_stability = evaluate_reduced_factor_folds(
+        factors,
+        observation_dates=observation_dates,
+        confidence=c,
+        target_explained=0.75,
+        estimation_window=MIN_CURRENT_OBSERVATIONS,
+        holdout_observations=REDUCED_SET_HOLDOUT_OBSERVATIONS,
+    )
 
     full_current = _portfolio_es(current, list(factors), c)
     reduced_current = _portfolio_es(current, selected, c)
@@ -742,6 +958,7 @@ def build_ima_capital(
     )
     return {
         "reduced_set": reduced,
+        "reduced_factor_stability": reduced_factor_stability,
         "es_full_current": full_current,
         "es_reduced_current": reduced_current,
         "es_reduced_stress": reduced_stress,

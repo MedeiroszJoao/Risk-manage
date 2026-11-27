@@ -215,3 +215,15 @@ The 2026-11-27 audit is the current baseline. It does not claim that the remaini
 **Interpretation restrictions:** intervals are conditional on the frozen factor set and observed holdout. They do not include factor-selection, model, data or regime uncertainty. Block-length sensitivity is reported rather than selecting the most favorable result. No regulatory, statistical-significance or model-validation claim follows from the bootstrap alone.
 
 **Acceptance tests:** deterministic seed reproducibility; exact ratio invariance under perfectly proportional factor columns when rows are resampled jointly; block-length and replication-count validation; integrated report exposes the conditional interval and scope.
+
+
+
+## CAP-09 — Measure temporal stability across repeated disjoint factor-selection folds
+
+**Finding:** one disjoint 250-observation selection / 250-observation holdout fixes sample reuse but does not show whether the selected factor set survives changes in the historical regime. A favorable final period can conceal materially weaker earlier holdouts or unstable factor selection.
+
+**Remediation:** construct contiguous chronological folds, each containing 250 selection observations followed by 250 disjoint holdout observations. Build folds backwards from the latest timestamp so the last fold exactly reproduces the existing single-holdout design. Re-select factors independently inside each selection block, freeze them during that fold's holdout, and report each fold separately. Also report factor selection frequencies and pairwise Jaccard similarity; do not emit a pooled interval that assumes folds are independent.
+
+**Interpretation restrictions:** non-overlapping daily observations do not guarantee statistical independence across folds. The repeated-fold output is descriptive stability evidence, not a test of MAR33 group-level compliance or a statistical confidence interval. Each 250-day 97.5% ES estimate has only about six nominal 10-day tail observations. The single latest holdout retains its conditional block-bootstrap sensitivity analysis.
+
+**Acceptance tests:** exact fold boundaries and no-overlap assertions; modification of a fold's holdout must not change that fold's selected set; latest fold must match the single-holdout selection and ratio; insufficient history returns an explicit status.
