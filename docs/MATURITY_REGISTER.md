@@ -81,11 +81,11 @@ The following is a conservative assessment after the first technical-integrity r
 
 ### Current automated verification
 
-- [Risk-engine CI](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45923474678): successful on Python 3.11 and 3.12 before the subsequent pandas-index alignment change.
-- Python 3.11: 287 tests passed; Ruff and all configured Heston experiments passed.
+- [Risk-engine CI](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45924282157): successful on Python 3.11 and 3.12 including the pandas-index alignment change.
+- Python 3.11: 291 tests passed; Ruff and all configured Heston experiments passed.
 - Python 3.12: 287 tests passed; Ruff and all configured Heston experiments passed.
-- The follow-up CI run for the four new index-alignment tests is pending.
-- [Live EIA/FRED integrated workflow](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45923474676): successful.
+- The four new index-alignment tests passed on both Python versions in run 45924282157.
+- [Live EIA ingestion workflow](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45923474676): successful.
 
 This evidence does not change the empirical or regulatory limitations listed above.
 
