@@ -204,3 +204,24 @@ def test_build_ima_capital_validates_rho_even_if_required_class_is_missing():
 def test_capital_rejects_boolean_mixed_with_float_before_numpy_promotion():
     with pytest.raises(ValueError, match="boolean"):
         select_reduced_factor_set({"equity": [True, 0.5, 1.0, 2.0]})
+
+
+def test_imcc_does_not_apply_portfolio_floor_to_individual_risk_classes():
+    result = calculate_imcc(
+        es_full_current=100.0,
+        es_reduced_current=80.0,
+        es_reduced_stress=90.0,
+        class_components={
+            "equity": {"full_current": 40.0, "reduced_current": 80.0, "reduced_stress": 10.0},
+            "rates": {"full_current": 90.0, "reduced_current": 60.0, "reduced_stress": 20.0},
+        },
+    )
+
+    # Unconstrained: 90 * max(100/80, 1) = 112.5.
+    # Constrained: 10 * (40/80) + 20 * (90/60) = 35.
+    # The class-level ratio below one must not be floored independently.
+    assert result["unconstrained"] == pytest.approx(112.5)
+    assert result["class_components"]["equity"] == pytest.approx(5.0)
+    assert result["class_components"]["rates"] == pytest.approx(30.0)
+    assert result["constrained_sum"] == pytest.approx(35.0)
+    assert result["imcc"] == pytest.approx(73.75)
