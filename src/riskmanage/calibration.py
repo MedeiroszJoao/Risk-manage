@@ -24,6 +24,12 @@ class HestonOptionQuote:
 
     def __post_init__(self):
         values = (self.strike, self.maturity, self.mid_price, self.weight)
+        if any(
+            isinstance(value, (bool, np.bool_))
+            or not isinstance(value, (int, float, np.integer, np.floating))
+            for value in values
+        ):
+            raise ValueError("quote fields must be numeric scalars")
         if not all(np.isfinite(value) for value in values):
             raise ValueError("quote fields must be finite")
         if self.strike <= 0.0 or self.maturity <= 0.0:
@@ -35,6 +41,12 @@ class HestonOptionQuote:
         if (self.bid is None) != (self.ask is None):
             raise ValueError("bid and ask must be supplied together")
         if self.bid is not None:
+            if any(
+                isinstance(value, (bool, np.bool_))
+                or not isinstance(value, (int, float, np.integer, np.floating))
+                for value in (self.bid, self.ask)
+            ):
+                raise ValueError("bid and ask must be numeric scalars")
             if not np.isfinite(self.bid) or not np.isfinite(self.ask):
                 raise ValueError("bid and ask must be finite")
             if self.bid < 0.0 or self.ask < self.bid:
