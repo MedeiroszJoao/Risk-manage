@@ -1,4 +1,4 @@
-# Case study — A desk can pass VaR backtesting and still fail P&L attribution
+# Case study — Low HPL exception counts do not establish desk eligibility
 
 ## Executive finding
 
@@ -10,11 +10,11 @@ The equity-options desk intentionally contains short at-the-money calls and puts
 |---|---:|---:|
 | Spearman rank correlation | 0.3754 | 0.9993 |
 | KS empirical-CDF distance | 0.3960 | 0.0240 |
-| PLA zone | **Red** | **Green** |
+| Research PLA-style diagnostic | **Red** | **Green** |
 | Mean absolute HPL − RTPL residual | USD 5.63m | USD 0.58m |
 | Mean absolute residual reduction | — | **89.7%** |
 
-The same delta-only model records **3 HPL exceptions in 250 observations at 99%**, which is inside the numerical green-zone threshold used by this research diagnostic. This is not a Basel regulatory backtest because the case has no Actual P&L. This is the point of the case: a low exception count does not prove that the model explains the desk's economic P&L. Backtesting and PLA answer different questions.
+The same delta-only model records **3 HPL exceptions in 250 observations at 99%**. That is below the Basel desk-level numerical limit of 13 exceptions at the 99th percentile, but it is not a desk approval: actual P&L is missing, and the desk test considers both HPL and APL. The case still demonstrates that a low HPL exception count does not prove that the model explains economic P&L. Backtesting and PLA answer different questions.
 
 ## Desks and model-risk hypotheses
 
@@ -36,9 +36,9 @@ RTPL is generated independently from previous-close sensitivities. The delta-onl
 ## Backtesting and PLA
 
 For the most recent 250 aligned observations:
-- Backtesting compares one-day HPL loss against a rolling VaR forecast built from the previous 250 observations. Actual P&L (APL) is not available.
+- Backtesting compares one-day HPL loss against a rolling VaR forecast built from the previous 250 observations. Any missing HPL or VaR is counted as an exception. APL is not available, so the output only reports the HPL side of the 12 / 30 desk-level thresholds; it cannot establish desk eligibility.
 - PLA compares the HPL and RTPL distributions using Spearman rank correlation and empirical CDF distance / two-sample KS statistic.
-- The implemented PLA zones are Green: Spearman > 0.80 and KS < 0.09; Red: Spearman < 0.70 or KS > 0.12; otherwise Amber.
+- The research PLA-style indicator uses the Basel Spearman / KS thresholds, but this synthetic HPL/RTPL comparison is not a regulatory desk PLA. Indicator zones are Green: Spearman > 0.80 and KS < 0.09; Red: Spearman < 0.70 or KS > 0.12; otherwise Amber.
 
 ## Capital and stress outputs
 

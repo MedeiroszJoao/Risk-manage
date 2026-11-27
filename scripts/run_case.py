@@ -148,7 +148,7 @@ def main():
         zone=metrics["pla_delta_only"]["zone"]
         desk_status[desk]={"delta_only_pla_zone":zone,
           "full_greeks_pla_zone":metrics["pla_full_greeks"]["zone"],
-          "delta_only_passes_pla":zone=="green",
+          "delta_only_research_pla_green":zone=="green",
           "remediation_improves_residual":metrics["residual_reduction_full_greeks"]>0}
     scenario_stress=build_scenario_reports(market)
     scenario_stress.to_csv(out/"scenario_stress.csv",index=False)

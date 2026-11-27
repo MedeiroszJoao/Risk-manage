@@ -44,7 +44,8 @@ The desk report runs both 97.5% and 99%. It is explicitly **HPL-only** because t
 
 ## 3. P&L attribution
 
-For the latest 250 matched observations:
+For the latest 250 aligned observations:
+- The code requires all 250 HPL/RTPL pairs to be present and finite; it does not silently drop missing rows.
 - Spearman rank correlation measures whether RTPL ranks days like HPL.
 - KS distance is \(D=\sup_x|F_{HPL}(x)-F_{RTPL}(x)|\), the maximum absolute difference between empirical CDFs.
 
@@ -209,3 +210,8 @@ The RFET module calculates only a numerical evidence-count screen. A count does 
 The 10/20/40/60/120-day liquidity-horizon scaling shape is implemented as a research primitive. Production FRTB mapping is instrument/risk-factor-specific under MAR33; the generic factor labels and manually supplied horizon values in this project do not implement that mapping.
 
 The Basel desk backtest is not complete without Actual P&L. Public daily closes and hypothetical HPL cannot stand in for the bank's APL. See [MATURITY_REGISTER.md](MATURITY_REGISTER.md).
+
+
+## Desk-level backtesting interpretation
+
+The desk-level numeric limits above are distinct from bank-wide exception zones and multipliers. MAR32.18 requires separate comparisons against APL and HPL, and MAR32.19 sets the desk limits. This repository only has HPL, so it reports an HPL-only threshold result; it never reports a passing/approved desk. Missing HPL or VaR observations are counted as outliers, consistent with MAR32.18(2).

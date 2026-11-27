@@ -72,9 +72,13 @@ def test_backtest_is_explicitly_hpl_only_and_preserves_original_indices():
     result = backtest_var(hpl, var, 0.99, dates)
     assert result["status"] == "computed_hpl_only"
     assert result["regulatory_status"] == "not_assessed_missing_APL"
-    assert result["exceptions"] == 1
-    assert result["exception_indices"] == [4]
-    assert result["exception_dates"] == [str(dates[4])]
+    # Missing VaR is a counted outlier, not a dropped observation.
+    assert result["exceptions"] == 2
+    assert result["unmatched_observations_counted_as_exceptions"] == 1
+    assert result["exception_indices"] == [0, 4]
+    assert result["exception_dates"] == [str(dates[0]), str(dates[4])]
+    assert result["desk_threshold_status"] == "not_classified_insufficient_history"
+    assert "capital_multiplier" not in result
 
 
 def test_backtest_rejects_misaligned_dates():
@@ -124,3 +128,56 @@ def test_rfet_count_threshold_is_only_a_review_candidate_not_a_pass():
     assert factor["classification"] == "candidate_for_independent_RFET_review"
     assert "modellable" not in factor["classification"]
     assert result["regulatory_status"] == "not_assessed"
+
+
+def test_desk_backtest_uses_mar32_19_thresholds_not_bankwide_green_zone():
+    hpl = np.zeros(250)
+    hpl[:13] = -2.0
+    var = np.ones(250)
+    result_99 = backtest_var(hpl, var, 0.99)
+    assert result_99["desk_threshold_exceeded_on_hpl_alone"] is True
+    assert result_99["desk_threshold_limit"] == 12
+    assert result_99["desk_threshold_exceptions"] == 13
+    assert result_99["regulatory_status"] == "hpl_only_exceeds_numeric_desk_limit_apl_unavailable"
+    assert "zone" not in result_99
+    assert "capital_multiplier" not in result_99
+
+    hpl_975 = np.zeros(250)
+    hpl_975[:30] = -2.0
+    result_975 = backtest_var(hpl_975, var, 0.975)
+    assert result_975["desk_threshold_exceeded_on_hpl_alone"] is False
+    assert result_975["desk_threshold_limit"] == 30
+    assert result_975["desk_threshold_status"] == "below_hpl_limit_apl_unknown"
+
+
+def test_backtest_counts_missing_hpl_as_outlier():
+    hpl = np.zeros(25)
+    hpl[3] = np.nan
+    result = backtest_var(hpl, np.ones(25))
+    assert result["missing_hpl_observations"] == 1
+    assert result["exceptions"] == 1
+    assert result["exception_indices"] == [3]
+
+
+def test_backtest_rejects_unordered_or_duplicate_dates():
+    with pytest.raises(ValueError, match="unique and increasing"):
+        backtest_var(
+            np.zeros(25),
+            np.ones(25),
+            observation_dates=pd.date_range("2026-01-01", periods=25, freq="B")[::-1],
+        )
+    dates = list(pd.date_range("2026-01-01", periods=25, freq="B"))
+    dates[-1] = dates[-2]
+    with pytest.raises(ValueError, match="unique and increasing"):
+        backtest_var(np.zeros(25), np.ones(25), observation_dates=dates)
+
+
+def test_pla_does_not_silently_drop_missing_rows():
+    hpl = np.linspace(-5, 5, 250)
+    rtpl = hpl.copy()
+    hpl[7] = np.nan
+    result = pla_test(hpl, rtpl)
+    assert result["status"] == "incomplete_data"
+    assert result["zone"] == "not_classifiable"
+    assert result["missing_hpl_observations"] == 1
+    assert result["spearman"] is None

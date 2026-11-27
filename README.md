@@ -67,7 +67,7 @@ The dependency ranges in pyproject.toml are minimum-version constraints, **not a
 ## Non-negotiable limitations
 
 1. All four desk portfolios are hypothetical. Public closes for SPX, FX, rates or crude oil are not actual desk positions and are not a bank transaction ledger.
-2. Backtesting here is HPL-only. The Basel desk framework requires both Actual P&L and Hypothetical P&L; this repository cannot claim regulatory VaR backtesting or PLA.
+2. Backtesting here is HPL-only. The Basel desk framework requires both Actual P&L and Hypothetical P&L; missing HPL/VaR rows are counted as exceptions. The code applies the desk-level 12-exception (99%) / 30-exception (97.5%) numeric limits without bank-wide multipliers, but cannot establish eligibility without APL.
 3. Public daily closes do not establish RFET. Qualifying real-price evidence, vendor audit controls and defensible factor mapping need independent review.
 4. The integrated history begins in 2016, not 2007. It does not establish the full historical stress span required by the IMA framework.
 5. The current liquidity-horizon mapping is an illustrative research input, not the MAR33 instrument/risk-factor mapping.

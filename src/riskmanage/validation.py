@@ -117,78 +117,113 @@ def christoffersen_independence(exception_sequence):
     }
 
 
-def _backtest_zone(exceptions: int, observations: int, confidence: float):
-    if observations != 250:
-        return "not_classified", None
-    if abs(confidence - 0.99) < 1e-10:
-        if exceptions <= 4:
-            return "green", 1.50
-        multipliers = {5: 1.70, 6: 1.76, 7: 1.83, 8: 1.88, 9: 1.92}
-        if exceptions in multipliers:
-            return "amber", multipliers[exceptions]
-        return "red", 2.00
-    if abs(confidence - 0.975) < 1e-10 and exceptions > 30:
-        return "ineligible", None
-    return "diagnostic_only", None
-
-
 def backtest_var(
     hpl,
     var_forecast,
     confidence: float = 0.99,
     observation_dates: Sequence | None = None,
 ):
-    """Backtest HPL losses against aligned one-day VaR forecasts.
+    """HPL-only daily VaR backtest with desk-level MAR32.19 thresholds.
 
-    This function has no Actual P&L (APL) input. It is an HPL-only research
-    diagnostic, not the Basel regulatory backtest.
+    MAR32.18 counts a missing HPL or VaR as an outlier. This function therefore
+    never drops unmatched dates. It cannot establish desk eligibility because
+    Actual P&L (APL) is absent; a count above the HPL limit is sufficient to
+    fail the numerical desk threshold, but a count below it is not an approval.
     """
     h = _one_dimensional_numeric(hpl, "hpl")
     v = _one_dimensional_numeric(var_forecast, "var_forecast")
     c = _probability(confidence)
     if h.size != v.size:
         raise ValueError("HPL and VaR arrays must have the same length")
-    if observation_dates is not None and len(observation_dates) != h.size:
-        raise ValueError("observation_dates must align with HPL and VaR arrays")
+    n = int(h.size)
+    if n < 20:
+        raise ValueError("at least 20 dated HPL / VaR observations are required")
 
-    valid = np.isfinite(h) & np.isfinite(v)
-    if int(valid.sum()) < 20:
-        raise ValueError("at least 20 matched HPL / VaR observations are required")
-    original_indices = np.flatnonzero(valid)
-    losses = -h[valid]
-    forecasts = v[valid]
-    exceptions = (losses > forecasts).astype(np.int8)
-    count = int(exceptions.sum())
-    n = int(exceptions.size)
-    zone, multiplier = _backtest_zone(count, n, c)
+    dates = None
+    if observation_dates is not None:
+        if len(observation_dates) != n:
+            raise ValueError("observation_dates must align with HPL and VaR arrays")
+        try:
+            dates = pd.DatetimeIndex(pd.to_datetime(observation_dates, errors="raise"))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("observation_dates must contain valid dates") from exc
+        if dates.hasnans or dates.has_duplicates or not dates.is_monotonic_increasing:
+            raise ValueError("observation_dates must be valid, unique and increasing")
+
+    finite_hpl = np.isfinite(h)
+    finite_var = np.isfinite(v)
+    matched = finite_hpl & finite_var
+    missing_hpl = ~finite_hpl
+    missing_var = ~finite_var
+    losses = -h
+    exceptions = (~matched) | (matched & (losses > v))
+    exception_sequence = exceptions.astype(np.int8)
+    count = int(exception_sequence.sum())
+    expected = n * (1.0 - c)
+
+    threshold_count = None
+    threshold_limit = None
+    threshold_exceeded = None
+    if n < 250:
+        threshold_status = "not_classified_insufficient_history"
+    elif abs(c - 0.99) < 1e-10:
+        threshold_count = int(exception_sequence[-250:].sum())
+        threshold_limit = 12
+        threshold_exceeded = threshold_count > threshold_limit
+        threshold_status = (
+            "hpl_only_threshold_exceeded"
+            if threshold_exceeded
+            else "below_hpl_limit_apl_unknown"
+        )
+    elif abs(c - 0.975) < 1e-10:
+        threshold_count = int(exception_sequence[-250:].sum())
+        threshold_limit = 30
+        threshold_exceeded = threshold_count > threshold_limit
+        threshold_status = (
+            "hpl_only_threshold_exceeded"
+            if threshold_exceeded
+            else "below_hpl_limit_apl_unknown"
+        )
+    else:
+        threshold_status = "not_classified_confidence_not_in_mar32_19"
 
     result = {
         "status": "computed_hpl_only",
         "scope": "HPL-only research diagnostic; Actual P&L (APL) is not available",
-        "regulatory_status": "not_assessed_missing_APL",
+        "regulatory_status": (
+            "hpl_only_exceeds_numeric_desk_limit_apl_unavailable"
+            if threshold_exceeded
+            else "not_assessed_missing_APL"
+        ),
         "observations": n,
-        "excluded_unmatched_observations": int(h.size - n),
+        "matched_observations": int(matched.sum()),
+        "missing_hpl_observations": int(missing_hpl.sum()),
+        "missing_var_observations": int(missing_var.sum()),
+        "unmatched_observations_counted_as_exceptions": int((~matched).sum()),
         "exceptions": count,
         "exception_rate": float(count / n),
         "confidence": c,
-        "zone": zone,
-        "zone_scope": "250-observation 99% numerical diagnostic; not a regulatory multiplier",
-        "capital_multiplier": multiplier,
+        "desk_threshold_status": threshold_status,
+        "desk_threshold_basis": "HPL-only numerical screen; MAR32.19; not an eligibility approval",
+        "desk_threshold_observations": 250 if n >= 250 else None,
+        "desk_threshold_exceptions": threshold_count,
+        "desk_threshold_limit": threshold_limit,
+        "desk_threshold_exceeded_on_hpl_alone": threshold_exceeded,
         "kupiec": kupiec_pof(count, n, c),
-        "christoffersen": christoffersen_independence(exceptions),
-        "exception_indices": original_indices[exceptions.astype(bool)].tolist(),
+        "christoffersen": christoffersen_independence(exception_sequence),
+        "exception_indices": np.flatnonzero(exceptions).tolist(),
     }
-    if observation_dates is not None:
-        dates = np.asarray(observation_dates, dtype=object)[original_indices[exceptions.astype(bool)]]
-        result["exception_dates"] = [str(value) for value in dates.tolist()]
+    if dates is not None:
+        result["exception_dates"] = [
+            str(value) for value in dates[np.flatnonzero(exceptions)].tolist()
+        ]
     return result
 
-
 def pla_test(hpl, rtpl, window: int = 250):
-    """HPL-versus-RTPL distribution diagnostic using a 250-pair window.
+    """HPL-versus-RTPL distribution diagnostic using the latest 250 pairs.
 
-    If Spearman correlation is undefined for a constant/degenerate series,
-    no green/amber/red zone is assigned and zero is not substituted.
+    Missing values are not silently removed: the PLA window is unclassifiable
+    unless all 250 HPL/RTPL pairs are present and finite.
     """
     h = _one_dimensional_numeric(hpl, "hpl")
     r = _one_dimensional_numeric(rtpl, "rtpl")
@@ -198,21 +233,30 @@ def pla_test(hpl, rtpl, window: int = 250):
         raise ValueError("window must be an integer")
     if window != 250:
         raise ValueError("this FRTB-inspired PLA diagnostic uses a 250-observation window")
-
-    valid = np.isfinite(h) & np.isfinite(r)
-    h, r = h[valid], r[valid]
-    matched = int(h.size)
-    if matched < window:
+    if h.size < window:
         return {
             "status": "insufficient_sample",
             "zone": "insufficient_sample",
-            "observations": matched,
+            "observations": int(h.size),
             "required_observations": int(window),
             "spearman": None,
             "ks_distance": None,
         }
 
     h, r = h[-window:], r[-window:]
+    finite_h, finite_r = np.isfinite(h), np.isfinite(r)
+    if not finite_h.all() or not finite_r.all():
+        return {
+            "status": "incomplete_data",
+            "zone": "not_classifiable",
+            "observations": int(window),
+            "missing_hpl_observations": int((~finite_h).sum()),
+            "missing_rtpl_observations": int((~finite_r).sum()),
+            "spearman": None,
+            "ks_distance": None,
+            "reason": "PLA requires 250 aligned finite HPL/RTPL pairs; missing rows are not dropped",
+        }
+
     rho = float(spearmanr(h, r).statistic)
     ks = float(ks_2samp(h, r, method="auto").statistic)
     if not np.isfinite(rho):
@@ -220,7 +264,6 @@ def pla_test(hpl, rtpl, window: int = 250):
             "status": "undefined_spearman",
             "zone": "not_classifiable",
             "observations": int(window),
-            "matched_observations_before_window": matched,
             "spearman": None,
             "ks_distance": ks,
             "reason": "Spearman correlation is undefined for a constant/degenerate series",
@@ -233,11 +276,10 @@ def pla_test(hpl, rtpl, window: int = 250):
     else:
         zone = "amber"
     return {
-        "status": "computed",
-        "scope": "HPL-versus-RTPL research diagnostic; not a bank regulatory PLA decision",
+        "status": "computed_research_diagnostic",
+        "scope": "HPL-versus-RTPL research diagnostic; not a regulatory desk PLA decision",
         "zone": zone,
         "observations": int(window),
-        "matched_observations_before_window": matched,
         "spearman": rho,
         "ks_distance": ks,
         "thresholds": {
@@ -247,7 +289,6 @@ def pla_test(hpl, rtpl, window: int = 250):
             "red_ks_gt": 0.12,
         },
     }
-
 
 def _strict_true(values: pd.Series) -> pd.Series:
     """Only actual boolean True values count as verified; strings are rejected."""
