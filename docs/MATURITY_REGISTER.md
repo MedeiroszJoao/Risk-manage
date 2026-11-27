@@ -35,7 +35,7 @@ These states are not interchangeable. A test of a synthetic model is not an empi
 | SSVI | Yes | Static-arbitrage sufficient-region checks and synthetic parameter/price recovery | No real option chain or stale/bid-ask governance | Not assessed |
 | POT-GPD | Yes | Synthetic known-GPD recovery, threshold grid and bootstrap diagnostics | No independent chronological financial loss series | Not assessed |
 | Liquidity-adjusted ES | Research implementation | Formula-shape and unit tests | Factor horizon mapping remains illustrative | MAR33 mapping not implemented |
-| Reduced-factor selection | Research implementation | In-sample overlapping descriptive coverage only | No out-of-sample factor-set validation | IMA requirements not established |
+| Reduced-factor selection | Research implementation | Selection-window ES ratio and rolling-origin holdout checks | 60 forward endpoints, with the factor set frozen before the holdout; still no desk-level supervisory validation | IMA requirements not established |
 | IMCC / NMRF primitives | Formula primitives | Unit examples only | The current book lacks credit-spread factors, and the stress-period / group-level reduced-factor procedures are not implemented | Not a regulatory calculation |
 | Data ingestion | FRED/EIA pipelines and SEC N-PORT accession parser | Live FRED/EIA checks; N-PORT parser unit-tested against three position records transcribed from one official filing | Full quarterly N-PORT archive and complete filing not yet reconciled; no instrument-level return reconstruction | N-PORT holdings are not RFET evidence or bank desk positions |
 | Portfolio / HPL / RTPL | Yes, hypothetical constant-maturity test books | P&L reconciliation and formula/property tests | No real bank desk positions or APL | Regulatory backtest/PLA incomplete; the `full_greeks` RTPL mode is currently a diagonal second-order approximation and omits mixed cross-Greeks |
@@ -93,3 +93,17 @@ This evidence does not change the empirical or regulatory limitations listed abo
 ## Audit baseline update — 2026-11-27
 
 Use [TECHNICAL_AUDIT_REFRESH_2026-11-27.md](TECHNICAL_AUDIT_REFRESH_2026-11-27.md) as the current source-level audit baseline. The older [TECHNICAL_AUDIT_2026-11-27.md](TECHNICAL_AUDIT_2026-11-27.md) is historical and must not be read as the current code state. Its two P0 findings—class-level IMCC scaling and RFET assessment-date anchoring—are resolved in the current branch: class-level ratios are no longer floored, and RFET requires an explicit assessment date. The portfolio-wide IMCC floor remains because MAR33.6 requires it. The latest completed CI has 291 passing tests on Python 3.11 and 291 on Python 3.12; the Series index-alignment guard passed in that run. No maturity state is advanced by test count alone.
+
+
+## Reduced-factor holdout remediation — 2026-11-27
+
+The previous coverage routine evaluated the factor set on rolling windows that overlapped the factor-selection sample. That was in-sample and could not support an independent performance claim.
+
+The current implementation now:
+1. Reserves the final 60 observations as a forward validation interval.
+2. Selects and freezes the reduced factor set using only the immediately preceding 250 observations.
+3. Evaluates the frozen set at the 60 holdout endpoints, recomputing full and reduced ES on trailing 250-observation windows.
+4. Reports an unclassifiable result when any full-set ES denominator is nonpositive; it does not discard those endpoints.
+5. Requires 310 observations for the 250 + 60 design.
+
+This is a rolling-origin research diagnostic for one frozen selection. It is not a supervisory approval, does not implement group-level factor selection across approved desks, and does not by itself establish the Basel MAR33 75% requirement.

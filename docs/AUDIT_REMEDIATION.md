@@ -152,3 +152,20 @@ Two new P0 findings were confirmed against the later code:
 - **RFET-02:** `rfet_diagnostic` anchors its lookback to the latest date found in the ledger, not an explicit assessment date. A stale but historically dense ledger can therefore be evaluated against an obsolete window.
 
 The 2026-11-27 audit is the current baseline. It does not claim that the remaining independent numerical, statistical or empirical validation has been completed. Source-code remediation has not yet begun from this baseline.
+
+
+## CAP-05 — Separate reduced-factor selection from forward validation
+
+**Finding:** the former routine ranked and selected risk factors on the latest 250-observation sample, then evaluated its 12-week coverage on rolling windows that reused that same sample. The result was correctly labelled in-sample, but it could not demonstrate independent performance and the target_met field was too easy to interpret as a pass.
+
+**Remediation:**
+- Freeze factor selection on the 250 observations immediately preceding the holdout.
+- Reserve the final 60 endpoints as a forward validation interval.
+- Evaluate the frozen set at each of the 60 endpoints using trailing 250-observation current ES windows.
+- Require 310 observations so all 60 holdout endpoints occur after selection.
+- Preserve every holdout endpoint. A nonpositive full-portfolio ES makes the coverage ratio unclassifiable; the endpoint is not silently removed.
+- target_met now refers to the forward-holdout mean ratio; target_met_in_sample is retained only as a selection-sample diagnostic for compatibility.
+
+**Scope:** this is a rolling-origin research holdout for one fixed reduced set. It is not a complete implementation of MAR33.5–33.7. In particular, it does not supply supervisory approval, the group-level aggregate across all IMA desks, or IMCC-maximising stress-period governance.
+
+**Regression evidence required:** tests must prove the split boundary, the 310-observation minimum, all 60 holdout endpoints, no factor-selection dependence on holdout data, and explicit handling of undefined denominators.

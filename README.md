@@ -81,7 +81,7 @@ The parser requires an exact accession, preserves reported percentages as percen
 3. Public daily closes do not establish RFET. Qualifying real-price evidence, vendor audit controls and defensible factor mapping need independent review.
 4. The integrated history begins in 2016, not 2007. It does not establish the full historical stress span required by the IMA framework.
 5. The current liquidity-horizon mapping is an illustrative research input, not the MAR33 instrument/risk-factor mapping. Stress-period selection currently maximizes portfolio ES rather than aggregate IMCC.
-6. Reduced-factor coverage currently uses overlapping windows that reuse the factor-selection sample. It is descriptive in-sample coverage, not out-of-sample validation.
+6. Reduced-factor selection freezes the selected factor set on a 250-observation selection sample and evaluates it on the subsequent 60 endpoints using rolling 250-observation ES windows. This is a rolling-origin research holdout, not a supervisory reduced-factor approval; the selected set is not re-tuned on the holdout.
 7. IMCC and NMRF functions are formula primitives. Their output is never a regulatory capital number; complete MAR33 mapping, IMCC-based stress-period selection, group-level 75% test, all five broad classes (including credit spread), stress scenarios and governance are absent.
 8. Heston / SSVI calibration tests use synthetic quotes or analytic limits; there is no live timestamped option chain, curve bootstrap or market-quality filter.
 9. No DRC, Standardised Approach, CVA/XVA, bank valuation adjustments, intraday risk, desk approval process or supervisory sign-off is implemented.

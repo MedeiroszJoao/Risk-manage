@@ -97,9 +97,15 @@ def _rolling_reduced_coverage(
     estimation_window=MIN_CURRENT_OBSERVATIONS,
     validation_days=REDUCED_SET_VALIDATION_DAYS,
 ):
-    """Descriptive overlapping rolling coverage; deliberately not OOS validation."""
+    """Evaluate a frozen reduced set on a forward, rolling-origin holdout.
+
+    The final validation_days observations are never used to choose selected.
+    At each holdout endpoint, current full/reduced ES is recomputed on the
+    trailing estimation_window observations. This is an independent research
+    diagnostic, not a supervisory approval test.
+    """
     n = len(next(iter(factors.values())))
-    required = estimation_window + validation_days - 1
+    required = estimation_window + validation_days
     if n < required:
         return {
             "status": "insufficient_history",
@@ -110,43 +116,89 @@ def _rolling_reduced_coverage(
             "maximum_ratio": None,
             "ratios": [],
             "out_of_sample": False,
+            "selection_overlap": None,
         }
+    if not selected or not set(selected).issubset(factors):
+        raise ValueError("selected must contain known risk factors")
 
+    validation_start = n - validation_days
+    selection_start = validation_start - estimation_window
+    selection_end = validation_start - 1
     ratios = []
-    for end in range(n - validation_days, n):
+    undefined_endpoints = []
+    first_window_start = None
+
+    for end in range(validation_start, n):
         start = end - estimation_window + 1
+        if first_window_start is None:
+            first_window_start = start
         window = {name: series[start : end + 1] for name, series in factors.items()}
         full = _portfolio_es(window, list(window), confidence)
         reduced = _portfolio_es(window, selected, confidence)
-        ratios.append(float(reduced / full) if full > 0.0 else float("nan"))
+        if not np.isfinite(full) or full <= 0.0:
+            ratios.append(None)
+            undefined_endpoints.append(int(end))
+        else:
+            ratios.append(float(reduced / full))
 
-    finite = [value for value in ratios if np.isfinite(value)]
-    if not finite:
+    if undefined_endpoints:
         return {
-            "status": "undefined_full_es",
+            "status": "unclassifiable_nonpositive_full_es",
             "observations": len(ratios),
-            "required_observations": required,
+            "expected_observations": int(validation_days),
+            "undefined_full_es_endpoints": undefined_endpoints,
+            "ratios": ratios,
             "mean_ratio": None,
             "minimum_ratio": None,
             "maximum_ratio": None,
-            "ratios": ratios,
-            "out_of_sample": False,
+            "out_of_sample": True,
+            "selection_overlap": False,
+            "selection_window": {
+                "start_index": int(selection_start),
+                "end_index": int(selection_end),
+                "observations": int(estimation_window),
+            },
+            "validation_window": {
+                "start_index": int(validation_start),
+                "end_index": int(n - 1),
+                "observations": int(validation_days),
+            },
         }
+
+    numeric_ratios = np.asarray(ratios, dtype=float)
     return {
-        "status": "descriptive_in_sample",
-        "observations": len(finite),
+        "status": "computed_out_of_sample",
+        "observations": int(len(numeric_ratios)),
+        "expected_observations": int(validation_days),
         "estimation_window": int(estimation_window),
         "validation_days": int(validation_days),
-        "mean_ratio": float(np.mean(finite)),
-        "minimum_ratio": float(np.min(finite)),
-        "maximum_ratio": float(np.max(finite)),
-        "ratios": finite,
-        "out_of_sample": False,
-        "selection_overlap": True,
+        "mean_ratio": float(np.mean(numeric_ratios)),
+        "minimum_ratio": float(np.min(numeric_ratios)),
+        "maximum_ratio": float(np.max(numeric_ratios)),
+        "ratios": numeric_ratios.tolist(),
+        "out_of_sample": True,
+        "selection_overlap": False,
+        "selection_window": {
+            "start_index": int(selection_start),
+            "end_index": int(selection_end),
+            "observations": int(estimation_window),
+        },
+        "validation_window": {
+            "start_index": int(validation_start),
+            "end_index": int(n - 1),
+            "observations": int(validation_days),
+        },
+        "first_validation_estimation_window": {
+            "start_index": int(first_window_start),
+            "end_index": int(validation_start),
+            "observations": int(estimation_window),
+        },
         "interpretation": (
-            "Overlapping windows reuse observations that also participated in "
-            "factor selection; this is descriptive in-sample coverage, not a "
-            "holdout, rolling-origin or regulatory reduced-factor validation."
+            "The factor set was frozen using the immediately preceding "
+            "estimation window. The following validation_days endpoints were "
+            "not used for factor selection. Each endpoint recomputes full and "
+            "reduced current ES on a trailing estimation_window. This is a "
+            "rolling-origin research holdout, not a supervisory IMA approval."
         ),
     }
 
@@ -192,6 +244,12 @@ def select_reduced_factor_set(
     estimation_window: int = MIN_CURRENT_OBSERVATIONS,
     validation_days: int = REDUCED_SET_VALIDATION_DAYS,
 ):
+    """Select on a past window, then assess the frozen set on a forward holdout.
+
+    Factor ranking and selection use only the estimation_window observations
+    immediately preceding the final validation_days observations. The final
+    holdout is not consulted until the selected set is frozen.
+    """
     factors = _align_factor_losses(current_factor_losses)
     c = _confidence_level(confidence)
     target_explained = _strict_float(target_explained, "target_explained")
@@ -203,65 +261,78 @@ def select_reduced_factor_set(
         raise ValueError("estimation_window must be an integer of at least 20")
     if validation_days < 1:
         raise ValueError("validation_days must be a positive integer")
+
     n = len(next(iter(factors.values())))
-    if n < estimation_window:
+    required = estimation_window + validation_days
+    if n < required:
         raise ValueError(
-            f"insufficient history: {n} observations; {estimation_window} required"
+            f"insufficient history: {n} observations; at least {required} "
+            "are required for a non-overlapping selection/validation split"
         )
 
-    selection_start = n - estimation_window
-    current = {name: series[selection_start:] for name, series in factors.items()}
-    full_es = _portfolio_es(current, list(current), c)
-    if not np.isfinite(full_es) or full_es <= 0.0:
-        raise ValueError("full portfolio ES must be positive and finite")
+    validation_start = n - validation_days
+    selection_start = validation_start - estimation_window
+    selection_end = validation_start - 1
+    selection_sample = {
+        name: series[selection_start:validation_start]
+        for name, series in factors.items()
+    }
+    full_selection_es = _portfolio_es(selection_sample, list(selection_sample), c)
+    if not np.isfinite(full_selection_es) or full_selection_es <= 0.0:
+        raise ValueError("full selection-sample ES must be positive and finite")
 
     ranking = sorted(
-        current,
+        selection_sample,
         key=lambda name: historical_var_es(
-            _ten_day_losses(current[name]), c
+            _ten_day_losses(selection_sample[name]), c
         )["expected_shortfall"],
         reverse=True,
     )
     selected = []
+    training_ratio = float("nan")
+    selected_es = float("nan")
     for factor in ranking:
         selected.append(factor)
-        coverage = _rolling_reduced_coverage(
-            factors, selected, c, estimation_window, validation_days
-        )
-        if coverage["status"] == "descriptive_in_sample" and (
-            coverage["mean_ratio"] >= target_explained
-        ):
+        selected_es = _portfolio_es(selection_sample, selected, c)
+        training_ratio = float(selected_es / full_selection_es)
+        if training_ratio >= target_explained:
             break
 
-    reduced_es = _portfolio_es(current, selected, c)
-    ratio = float(reduced_es / full_es)
     coverage = _rolling_reduced_coverage(
         factors, selected, c, estimation_window, validation_days
     )
-    target_met = bool(
-        coverage["status"] == "descriptive_in_sample"
+    oos_target_met = bool(
+        coverage["status"] == "computed_out_of_sample"
         and coverage["mean_ratio"] >= target_explained
     )
+    training_target_met = bool(training_ratio >= target_explained)
     return {
         "selected_factors": selected,
-        "full_current_es": float(full_es),
-        "reduced_current_es": float(reduced_es),
-        "explained_ratio": ratio,
+        "selection_sample_full_es": float(full_selection_es),
+        "selection_sample_reduced_es": float(selected_es),
+        "selection_sample_explained_ratio": float(training_ratio),
         "target_explained": float(target_explained),
-        "target_met_in_sample": target_met,
-        "target_met": target_met,
+        "target_met_on_selection_sample": training_target_met,
+        "target_met_in_sample": training_target_met,
+        "target_met": oos_target_met,
         "coverage_12w": coverage,
-        "coverage_label": "descriptive_overlapping_in_sample_not_OOS",
-        "coverage_is_out_of_sample": False,
+        "coverage_label": "rolling_origin_out_of_sample_research_diagnostic",
+        "coverage_is_out_of_sample": bool(coverage.get("out_of_sample", False)),
+        "factor_set_frozen_during_validation": True,
         "selection_window": {
-            "start_index": selection_start,
-            "end_index": n - 1,
+            "start_index": int(selection_start),
+            "end_index": int(selection_end),
             "observations": int(estimation_window),
         },
+        "validation_window": {
+            "start_index": int(validation_start),
+            "end_index": int(n - 1),
+            "observations": int(validation_days),
+        },
         "coverage_method": (
-            f"mean reduced/full 10-day ES ratio over latest {validation_days} "
-            f"overlapping endpoints, each using {estimation_window} observations; "
-            "these windows overlap the factor-selection sample"
+            f"fixed factor set selected on {estimation_window} observations; "
+            f"evaluated on the subsequent {validation_days} endpoints using "
+            f"trailing {estimation_window}-observation full/reduced ES windows"
         ),
     }
 
@@ -371,10 +442,10 @@ def build_ima_capital(
         for factor, risk_class in class_mapping.items()
     }
     n = len(next(iter(factors.values())))
-    required = MIN_CURRENT_OBSERVATIONS + REDUCED_SET_VALIDATION_DAYS - 1
+    required = MIN_CURRENT_OBSERVATIONS + REDUCED_SET_VALIDATION_DAYS
     if n < required:
         raise ValueError(
-            f"insufficient history for 250-day estimation plus 60 endpoints: "
+            f"insufficient history for 250-day selection sample plus 60 forward validation endpoints: "
             f"{n} supplied; at least {required} required"
         )
 

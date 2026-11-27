@@ -51,7 +51,7 @@ def test_nmrf_aggregation_separates_special_groups():
     assert result["status"] == "formula_primitive_only"
 
 
-def test_reduced_factor_coverage_is_explicitly_in_sample_not_oos():
+def test_reduced_factor_coverage_uses_a_forward_untouched_holdout():
     rng = np.random.default_rng(77)
     common = rng.normal(0, 1, 700)
     factors = {
@@ -61,30 +61,62 @@ def test_reduced_factor_coverage_is_explicitly_in_sample_not_oos():
     }
     result = select_reduced_factor_set(factors, 0.975, 0.75)
     coverage = result["coverage_12w"]
-    assert coverage["status"] == "descriptive_in_sample"
-    assert coverage["observations"] == 60
-    assert result["coverage_is_out_of_sample"] is False
-    assert result["target_met_in_sample"]
 
+    assert coverage["status"] == "computed_out_of_sample"
+    assert coverage["observations"] == 60
+    assert coverage["out_of_sample"] is True
+    assert coverage["selection_overlap"] is False
+    assert result["coverage_is_out_of_sample"] is True
+    assert result["factor_set_frozen_during_validation"] is True
+    assert result["selection_window"]["end_index"] < result["validation_window"]["start_index"]
+    assert coverage["validation_window"]["observations"] == 60
+    assert result["target_met"] == (coverage["mean_ratio"] >= 0.75)
+
+
+def test_holdout_observations_cannot_change_factor_selection():
+    rng = np.random.default_rng(20261126)
+    common = rng.normal(0.0, 1.0, 500)
+    factors = {
+        "equity": common,
+        "rates": 0.65 * common + rng.normal(0.0, 0.35, 500),
+        "fx": rng.normal(0.0, 0.20, 500),
+    }
+    altered = {name: values.copy() for name, values in factors.items()}
+    altered["fx"][-60:] *= 25.0
+
+    baseline = select_reduced_factor_set(factors)
+    changed_holdout = select_reduced_factor_set(altered)
+
+    assert baseline["selected_factors"] == changed_holdout["selected_factors"]
+    assert baseline["selection_sample_explained_ratio"] == pytest.approx(
+        changed_holdout["selection_sample_explained_ratio"]
+    )
+    assert baseline["selection_window"] == changed_holdout["selection_window"]
+    assert baseline["coverage_12w"]["mean_ratio"] != pytest.approx(
+        changed_holdout["coverage_12w"]["mean_ratio"]
+    )
 
 def test_reduced_factor_selection_requires_full_estimation_window():
     with pytest.raises(ValueError, match="insufficient history"):
         select_reduced_factor_set({"equity": np.ones(249)})
 
 
-def test_reduced_factor_coverage_does_not_claim_validation_without_309_rows():
+def test_reduced_factor_selection_requires_full_310_observation_holdout_design():
     rng = np.random.default_rng(20)
-    common = rng.normal(0, 1, 300)
-    result = select_reduced_factor_set({"equity": common}, estimation_window=250, validation_days=60)
-    assert result["coverage_12w"]["status"] == "insufficient_history"
-    assert result["coverage_is_out_of_sample"] is False
+    factors_309 = {"equity": rng.normal(size=309)}
+    with pytest.raises(ValueError, match="at least 310"):
+        select_reduced_factor_set(factors_309)
 
+    factors_310 = {"equity": rng.normal(size=310)}
+    result = select_reduced_factor_set(factors_310)
+    assert result["coverage_12w"]["status"] == "computed_out_of_sample"
+    assert result["coverage_12w"]["observations"] == 60
 
 def test_ima_research_aggregation_fails_closed_on_short_history():
     rng = np.random.default_rng(21)
     factors = {"equity": rng.normal(0, 1, 250)}
     stress = {"start_index": 0, "end_index": 249, "window_days": 250}
-    with pytest.raises(ValueError, match="at least 309"):
+    with pytest.raises(ValueError, match="at least 310"):
         build_ima_capital(factors, stress, {"equity": "equity"})
 
 
