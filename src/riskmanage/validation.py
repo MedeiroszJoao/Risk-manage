@@ -348,7 +348,12 @@ def _strict_true(values: pd.Series) -> pd.Series:
     return values.map(lambda value: isinstance(value, (bool, np.bool_)) and bool(value))
 
 
-def rfet_diagnostic(\n    evidence_ledger: pd.DataFrame,\n    *,\n    as_of_date: str | pd.Timestamp,\n    lookback_days: int = 365,\n):
+def rfet_diagnostic(
+    evidence_ledger: pd.DataFrame,
+    *,
+    as_of_date: str | pd.Timestamp,
+    lookback_days: int = 365,
+):
     """Compute an RFET count screen, never a regulatory modellability pass.
 
     The ledger schema cannot prove valid real-price observations, vendor audit,
