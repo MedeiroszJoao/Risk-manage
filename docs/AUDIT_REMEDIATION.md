@@ -140,3 +140,15 @@ These results verify the tested software paths and reproducibility of the config
 - [Live EIA/FRED integrated workflow](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45921183227) succeeded.
 
 The tests validate the code paths and configured experiments, not a claim of real-market model validity or regulatory approval.
+
+
+## Second baseline audit — 2026-11-27
+
+The earlier remediation review was based on commit `fcdb03b48ba23d1dde374703521ba29fbdc0f91f`. The branch subsequently advanced. The current static audit baseline is `a2f534325d8ec79a3a26921a8d0d8e04e51b079e`; its full inventory, source-level findings, Materials crosswalk and prioritized remediation gates are recorded in [TECHNICAL_AUDIT_2026-11-27.md](TECHNICAL_AUDIT_2026-11-27.md).
+
+Two new P0 findings were confirmed against the later code:
+
+- **CAP-04:** `calculate_imcc` applies `max(fc / rc, 1)` to each risk-class component. MAR33.15 applies the floor to the unconstrained portfolio ratio; the constrained class components use their own ratios without this individual floor. A test case with a class ratio below 1 is missing.
+- **RFET-02:** `rfet_diagnostic` anchors its lookback to the latest date found in the ledger, not an explicit assessment date. A stale but historically dense ledger can therefore be evaluated against an obsolete window.
+
+The 2026-11-27 audit is the current baseline. It does not claim that the remaining independent numerical, statistical or empirical validation has been completed. Source-code remediation has not yet begun from this baseline.
