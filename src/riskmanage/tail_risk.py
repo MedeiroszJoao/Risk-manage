@@ -8,6 +8,9 @@ from scipy.stats import genpareto, kstest
 
 
 def _strict_numeric_vector(values, name: str, minimum_size: int = 1) -> np.ndarray:
+    objects = np.asarray(values, dtype=object)
+    if any(isinstance(value, (bool, np.bool_)) for value in objects.flat):
+        raise ValueError(f"{name} must not contain boolean observations")
     raw = np.asarray(values)
     if raw.ndim != 1 or raw.dtype.kind not in "iuf":
         raise ValueError(
@@ -32,6 +35,9 @@ def _strict_integer(value, name: str, minimum: int = 0) -> int:
 
 
 def _strict_probability_tuple(values, name: str, lower: float, upper: float) -> tuple[float, ...]:
+    objects = np.asarray(values, dtype=object)
+    if any(isinstance(value, (bool, np.bool_)) for value in objects.flat):
+        raise ValueError(f"{name} must not contain boolean values")
     raw = np.asarray(values)
     if raw.ndim != 1 or raw.dtype.kind not in "iuf":
         raise ValueError(f"{name} must be a one-dimensional numeric sequence")
