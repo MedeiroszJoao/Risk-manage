@@ -8,14 +8,14 @@
 
 The deterministic reference run uses 1,800 **synthetic** business-day observations (2016-01-04 to 2022-11-25), not market observations or a real trading book.
 
-| Equity-options desk diagnostic | Delta-only RTPL | Diagonal second-order RTPL | Full market-factor Hessian RTPL |
+| Equity-options desk diagnostic | Delta-only RTPL | Diagonal second-order RTPL |
 |---|---:|---:|
 | Spearman rank correlation | 0.375 | 0.999 |
 | Empirical CDF / KS distance | 0.396 | 0.024 |
 | Research PLA diagnostic | Red | Green |
-| Mean absolute HPL − RTPL residual | USD 5.63m | USD 0.58m | Generated per deterministic run; not hard-coded |
+| Mean absolute HPL − RTPL residual | USD 5.63m | USD 0.58m |
 
-The expanded sensitivity model reduces mean absolute residual by 89.7% in this deliberately constructed synthetic case. The delta-only model also has 3 HPL exceptions in 250 observations at 99%, below the HPL-only numeric threshold of 12; this is not desk approval because APL is unavailable. These numbers illustrate that exception counts and P&L explain answer different questions; they do not estimate real trading performance.
+The diagonal second-order sensitivity model reduces mean absolute residual by 89.7% in this deliberately constructed synthetic case. The full market-factor Hessian RTPL was added later and is evaluated by the deterministic pipeline; the figures in the table above do not quantify its incremental effect. The delta-only model also has 3 HPL exceptions in 250 observations at 99%, below the HPL-only numeric threshold of 12; this is not desk approval because APL is unavailable. These numbers illustrate that exception counts and P&L explain answer different questions; they do not estimate real trading performance.
 
 ## Implemented scope
 

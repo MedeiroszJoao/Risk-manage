@@ -238,10 +238,10 @@ def main():
       f"**Data classification:** {data_kind}  ",
       f"**Observations:** {len(market):,}  ",
       f"**Period:** {market.date.min().date()} to {market.date.max().date()}","",
-      "## Desk outcomes","","| Desk | PLA delta-only | PLA with gamma / vega | Mean abs residual reduction |",
-      "|---|---:|---:|---:|"]
+      "## Desk outcomes","","| Desk | Delta-only PLA diagnostic | Diagonal second-order PLA diagnostic | Full-Hessian PLA diagnostic | Full-Hessian residual reduction vs delta-only |",
+      "|---|---:|---:|---:|---:|"]
     for desk,m in validation.items():
-        md.append(f"| {desk} | {m['pla_delta_only']['zone']} | {m['pla_full_hessian']['zone']} | {m['residual_reduction_full_hessian']:.1%} |")
+        md.append(f"| {desk} | {m['pla_delta_only']['zone']} | {m['pla_diagonal_second_order']['zone']} | {m['pla_full_hessian']['zone']} | {m['residual_reduction_full_hessian']:.1%} |")
     imcc_report_line = (
       f"- Research IMCC formula primitive (non-regulatory): USD {capital['imcc']['imcc']:,.2f}."
       if capital["imcc"] is not None
@@ -252,8 +252,9 @@ def main():
       f"- Descriptive 250-observation high-tail window: {stress['start_date']} to {stress['end_date']}.",
       f"- Historical span starts on/before 2007: {stress_history_assessment['starts_on_or_before_2007']} (not a regulatory back-history claim).",
       imcc_report_line,
-      f"- Current selected/full ES ratio (in-sample): {capital['reduced_set']['explained_ratio']:.1%}.",
-      f"- Mean ratio over 60 overlapping endpoints (in-sample; not OOS): {capital['reduced_set']['coverage_12w'].get('mean_ratio')}.",
+      f"- Selection-sample reduced/full ES ratio (factor-selection diagnostic only): {capital['reduced_set']['explained_ratio']:.1%}.",
+      f"- Mean ratio over 60 forward holdout endpoints (rolling-origin OOS research diagnostic): {capital['reduced_set']['coverage_12w'].get('mean_ratio')}.",
+      f"- Holdout chronology verified from explicit dates: {capital['reduced_set']['coverage_12w'].get('chronology_verified', False)}.",
       "- RFET: public-close-only evidence is not used to certify modellability.",
       "","## Interpretation guardrails","",
       "- HPL backtesting is not APL backtesting.",

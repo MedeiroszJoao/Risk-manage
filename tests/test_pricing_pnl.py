@@ -1,6 +1,5 @@
 import numpy as np
 import pytest
-import pytest
 from riskmanage.pricing import black_scholes_call, garman_kohlhagen_call
 from riskmanage.fixtures import build_synthetic_market_data
 from riskmanage.portfolio import Position
@@ -37,14 +36,14 @@ def test_linear_commodity_desk_has_exact_delta_explain():
 def test_delta_only_option_model_misses_non_linear_risk_vs_diagonal_second_order():
     data = build_synthetic_market_data(800, seed=88)
     delta = build_desk_pnl(data, "Equity Options", model="delta_only")
-    full = build_desk_pnl(data, "Equity Options", model="full_greeks")
+    full = build_desk_pnl(data, "Equity Options", model="diagonal_second_order")
     assert delta.residual.abs().mean() > full.residual.abs().mean()
 
 def test_equity_options_delta_only_fails_pla_and_diagonal_second_order_repairs_it():
     from riskmanage.validation import pla_test
     data=build_synthetic_market_data(1800,seed=20261124)
     delta=build_desk_pnl(data,"Equity Options",model="delta_only")
-    full=build_desk_pnl(data,"Equity Options",model="full_greeks")
+    full=build_desk_pnl(data,"Equity Options",model="diagonal_second_order")
     assert pla_test(delta.hpl,delta.rtpl)["zone"]=="red"
     assert pla_test(full.hpl,full.rtpl)["zone"]=="green"
     assert full.residual.abs().mean() < .2*delta.residual.abs().mean()
