@@ -363,7 +363,7 @@ def test_rfet_assessment_date_includes_all_observations_on_that_calendar_day():
 def test_rfet_rejects_explicit_none_assessment_date():
     with pytest.raises(ValueError, match="explicit assessment date"):
         rfet_diagnostic(
-            pd.DataFrame(),
+            pd.DataFrame(columns=["date", "factor_id", "evidence_type", "verified"]),
             as_of_date=None,
             calibration_period_start="2025-01-02",
             calibration_period_end="2026-01-01",
@@ -374,7 +374,7 @@ def test_rfet_rejects_explicit_none_assessment_date():
 def test_rfet_rejects_implicit_numeric_or_boolean_assessment_dates(bad_date):
     with pytest.raises(ValueError, match="as_of_date"):
         rfet_diagnostic(
-            pd.DataFrame(),
+            pd.DataFrame(columns=["date", "factor_id", "evidence_type", "verified"]),
             as_of_date=bad_date,
             calibration_period_start="2025-01-02",
             calibration_period_end="2026-01-01",
