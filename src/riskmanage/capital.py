@@ -300,7 +300,7 @@ def calculate_imcc(
         if any(not np.isfinite(value) or value <= 0.0 for value in class_values):
             raise ValueError(f"invalid ES component for class {name}")
         fc, rc, rs = class_values
-        components[name] = float(rs * max(fc / rc, 1.0))
+        components[name] = float(rs * (fc / rc))
 
     constrained = float(sum(components.values()))
     return {
