@@ -311,6 +311,8 @@ def select_reduced_factor_set(
         "selection_sample_full_es": float(full_selection_es),
         "selection_sample_reduced_es": float(selected_es),
         "selection_sample_explained_ratio": float(training_ratio),
+        # Legacy report key: this is selection-sample coverage, not OOS validation.
+        "explained_ratio": float(training_ratio),
         "target_explained": float(target_explained),
         "target_met_on_selection_sample": training_target_met,
         "target_met_in_sample": training_target_met,

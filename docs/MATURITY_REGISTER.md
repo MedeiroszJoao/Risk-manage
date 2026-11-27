@@ -95,7 +95,7 @@ This evidence does not change the empirical or regulatory limitations listed abo
 Use [TECHNICAL_AUDIT_REFRESH_2026-11-27.md](TECHNICAL_AUDIT_REFRESH_2026-11-27.md) as the current source-level audit baseline. The older [TECHNICAL_AUDIT_2026-11-27.md](TECHNICAL_AUDIT_2026-11-27.md) is historical and must not be read as the current code state. Its two P0 findings—class-level IMCC scaling and RFET assessment-date anchoring—are resolved in the current branch: class-level ratios are no longer floored, and RFET requires an explicit assessment date. The portfolio-wide IMCC floor remains because MAR33.6 requires it. The latest completed CI has 291 passing tests on Python 3.11 and 291 on Python 3.12; the Series index-alignment guard passed in that run. No maturity state is advanced by test count alone.
 
 
-## Reduced-factor holdout remediation — 2026-11-27
+## Reduced-factor holdout remediation — 2026-11-26
 
 The previous coverage routine evaluated the factor set on rolling windows that overlapped the factor-selection sample. That was in-sample and could not support an independent performance claim.
 

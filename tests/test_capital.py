@@ -71,6 +71,9 @@ def test_reduced_factor_coverage_uses_a_forward_untouched_holdout():
     assert result["selection_window"]["end_index"] < result["validation_window"]["start_index"]
     assert coverage["validation_window"]["observations"] == 60
     assert result["target_met"] == (coverage["mean_ratio"] >= 0.75)
+    assert result["explained_ratio"] == pytest.approx(
+        result["selection_sample_explained_ratio"]
+    )
 
 
 def test_holdout_observations_cannot_change_factor_selection():

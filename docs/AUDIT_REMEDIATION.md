@@ -154,7 +154,7 @@ Two new P0 findings were confirmed against the later code:
 The 2026-11-27 audit is the current baseline. It does not claim that the remaining independent numerical, statistical or empirical validation has been completed. Source-code remediation has not yet begun from this baseline.
 
 
-## CAP-05 — Separate reduced-factor selection from forward validation
+## CAP-05 — Separate reduced-factor selection from forward validation — 2026-11-26
 
 **Finding:** the former routine ranked and selected risk factors on the latest 250-observation sample, then evaluated its 12-week coverage on rolling windows that reused that same sample. The result was correctly labelled in-sample, but it could not demonstrate independent performance and the target_met field was too easy to interpret as a pass.
 
@@ -169,3 +169,6 @@ The 2026-11-27 audit is the current baseline. It does not claim that the remaini
 **Scope:** this is a rolling-origin research holdout for one fixed reduced set. It is not a complete implementation of MAR33.5–33.7. In particular, it does not supply supervisory approval, the group-level aggregate across all IMA desks, or IMCC-maximising stress-period governance.
 
 **Regression evidence required:** tests must prove the split boundary, the 310-observation minimum, all 60 holdout endpoints, no factor-selection dependence on holdout data, and explicit handling of undefined denominators.
+
+
+**Compatibility follow-up:** the legacy `explained_ratio` output key is retained as an alias for `selection_sample_explained_ratio`, because existing reports consume it. It is explicitly a selection-sample statistic and is not the forward holdout result; `target_met` remains based only on the OOS holdout.
