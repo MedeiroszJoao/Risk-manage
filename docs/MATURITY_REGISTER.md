@@ -1,6 +1,6 @@
 # Maturity, scope and evidence register
 
-**Last reviewed:** 2026-11-26  
+**Last reviewed:** 2026-11-27  
 **Purpose:** prevent implemented code, synthetic reproduction, empirical evidence and regulatory validation from being conflated.
 
 ## Project identity
@@ -62,3 +62,28 @@ These states are not interchangeable. A test of a synthetic model is not an empi
 ## Explicit conclusion
 
 The codebase is a useful research implementation with tested numerical components and public-data ingestion. It is **not** yet an empirically validated trading-risk engine and does **not** implement a complete FRTB IMA capital process. No current result supports a claim of bank-level performance, model approval or regulatory capital readiness.
+
+
+## Independent maturity vector — 2026-11-27
+
+The following is a conservative assessment after the first technical-integrity remediation pass. `CI reproducible` means the configured automated suite and experiments ran successfully; it is not independent scientific validation.
+
+| Component | Implementation | Mathematical | Numerical | Statistical | Empirical | Independent evidence | Reproducibility | Research |
+|---|---|---|---|---|---|---|---|---|
+| Validation / backtesting | Implemented | Partially verified; sample semantics corrected | Tested | Tested with asymptotic/low-power limitations | HPL-only hypothetical diagnostics | No independent implementation benchmark yet | CI reproducible | Exploratory |
+| Historical VaR / ES | Implemented | Convention and fractional boundary mass specified | Property/edge tests | No OOS forecast validation | No real desk book | Independent fractional-tail calculation in tests; external benchmark pending | CI reproducible | Comparative method work pending |
+| Capital / IMCC | Implemented research primitives | Formula primitives tested; full process unverified | Unit-tested | Factor coverage remains in-sample | Synthetic books | Basel MAR33 source traceability; worked-example comparison pending | CI reproducible | Exploratory |
+| Heston Fourier / QE-M | Implemented | Analytic identities and limiting cases tested | Benchmarked across configured methods; full error budget pending | Synthetic recovery / MC uncertainty only | No market quote validation | Analytic special cases and Fourier-vs-QE-M cross-check; independent external pricer pending | CI reproducible | Comparative |
+| SSVI surface | Implemented | Sufficient static-arbitrage conditions implemented; broader proof scope limited | Synthetic recovery and dense checks | Calibration uncertainty not fully established | No real option chain | Published SSVI conditions documented; independent market benchmark pending | CI reproducible | Exploratory |
+| Parameter / hedge uncertainty | Implemented | Conditional on selected model/noise assumptions | Simulation and bootstrap experiments | Conditional bootstrap diagnostics | Synthetic quotes and hypothetical hedge | Independent method comparison pending | CI reproducible | Comparative |
+| POT-GPD tail risk | Implemented | GPD tail formulas implemented; dependence assumptions remain limiting | Synthetic recovery and threshold diagnostics | IID bootstrap only; temporal inference incomplete | No chronological OOS financial loss validation | Known-GPD synthetic benchmark; external empirical benchmark pending | CI reproducible | Exploratory |
+| Data ingestion | Implemented | Not a model dimension | Schema/hash and ingestion checks | Not applicable | Public FRED/EIA ingestion verified; N-PORT full archive incomplete | Official public-source provenance | CI reproducible | Research infrastructure |
+
+### Current automated verification
+
+- [Risk-engine CI #477](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45920629074): successful on Python 3.11 and 3.12.
+- Python 3.11: 245 tests passed; Ruff, deterministic case and configured Heston experiments passed.
+- Python 3.12: tests, Ruff, deterministic case and configured Heston experiments passed.
+- [Live EIA/FRED integrated workflow](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45920629066): successful.
+
+This evidence does not change the empirical or regulatory limitations listed above.
