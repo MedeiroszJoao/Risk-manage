@@ -92,3 +92,8 @@ The parser requires an exact accession, preserves reported percentages as percen
 - Basel Framework MAR31 — risk-factor modellability and RFET.
 - Basel Framework MAR33 — liquidity horizons, IMA capital and NMRF.
 - The applicable Basel text controls where an educational approximation differs from regulation.
+
+
+## Technical governance
+
+The project follows a research-first evidence policy. Confirmed defects, open methodological questions and remediation gates are tracked in [the technical audit register](docs/AUDIT_REMEDIATION.md). Component maturity is evidence-specific: implementation, unit tests, analytic/numerical benchmarks, empirical validation and regulatory assessment are not interchangeable.
