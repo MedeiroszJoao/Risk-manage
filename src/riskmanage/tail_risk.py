@@ -10,7 +10,7 @@ from scipy.stats import genpareto, kstest
 def _strict_numeric_vector(values, name: str, minimum_size: int = 1) -> np.ndarray:
     objects = np.asarray(values, dtype=object)
     if any(isinstance(value, (bool, np.bool_)) for value in objects.flat):
-        raise ValueError(f"{name} must not contain boolean observations")
+        raise ValueError(f"{name} must be a numeric vector without boolean observations")
     raw = np.asarray(values)
     if raw.ndim != 1 or raw.dtype.kind not in "iuf":
         raise ValueError(
