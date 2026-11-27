@@ -1,3 +1,5 @@
+> **Historical audit — superseded.** This document records an earlier code state and is retained for audit history. The current source-level baseline is [TECHNICAL_AUDIT_REFRESH_2026-11-27.md](TECHNICAL_AUDIT_REFRESH_2026-11-27.md). In the current branch, the class-level IMCC ratio is no longer floored (the portfolio-wide floor remains required by Basel MAR33.6), and RFET requires an explicit assessment date. Do not treat the P0 findings recorded below as open defects in the current branch.
+
 # RISK-MANAGE — Technical Audit Baseline
 
 **Audit date:** 2026-11-27  
