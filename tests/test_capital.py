@@ -107,4 +107,6 @@ def test_ima_aggregation_is_never_labelled_as_regulatory_capital():
     result = build_ima_capital(factors, stress, {"equity": "equity", "fx": "fx"})
     assert result["capital_label"] == "research_only_non_regulatory"
     assert result["regulatory_status"] == "not_assessed"
+    assert result["imcc"] is None
+    assert "credit_spread" in result["missing_regulatory_risk_classes"]
     assert result["regulatory_requirements_not_evidenced"]

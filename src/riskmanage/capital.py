@@ -360,7 +360,31 @@ def build_ima_capital(
             "reduced_stress": _portfolio_es(stressed, selected_names, c),
         }
 
-    imcc_complete = not missing_selected_classes
+    # Basel MAR33.14 names five broad regulatory classes. The current research
+    # factor map uses aliases for four of them and has no credit-spread class.
+    class_aliases = {
+        "rates": "interest_rate",
+        "interest_rate": "interest_rate",
+        "interest_rates": "interest_rate",
+        "equity": "equity",
+        "fx": "foreign_exchange",
+        "foreign_exchange": "foreign_exchange",
+        "commodities": "commodity",
+        "commodity": "commodity",
+        "credit": "credit_spread",
+        "credit_spread": "credit_spread",
+    }
+    mapped_regulatory_classes = {
+        class_aliases.get(str(value).lower(), str(value).lower())
+        for value in class_mapping.values()
+    }
+    required_regulatory_classes = {
+        "interest_rate", "equity", "foreign_exchange", "commodity", "credit_spread"
+    }
+    missing_regulatory_classes = sorted(
+        required_regulatory_classes - mapped_regulatory_classes
+    )
+    imcc_complete = not missing_selected_classes and not missing_regulatory_classes
     imcc = (
         calculate_imcc(full_current, reduced_current, reduced_stress, classes, rho)
         if imcc_complete
@@ -382,11 +406,14 @@ def build_ima_capital(
             "modellable/non-modellable factor evidence and NMRF stress scenarios",
             "bank-specific policies, controls, independent validation and supervisory approval",
         ],
-        "class_aggregation_complete": bool(imcc_complete),
+        "class_aggregation_complete_within_supplied_mapping": not missing_selected_classes,
         "missing_selected_risk_classes": missing_selected_classes,
+        "required_regulatory_risk_classes": sorted(required_regulatory_classes),
+        "mapped_regulatory_risk_classes": sorted(mapped_regulatory_classes),
+        "missing_regulatory_risk_classes": missing_regulatory_classes,
         "imcc_status": (
-            "illustrative_formula_primitive_only"
+            "formula_primitive_only_incomplete_regulatory_coverage"
             if imcc_complete
-            else "not_computed_missing_selected_risk_class"
+            else "not_computed_incomplete_risk_class_coverage"
         ),
     }

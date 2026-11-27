@@ -213,7 +213,7 @@ def main():
     imcc_report_line = (
       f"- Research IMCC formula primitive (non-regulatory): USD {capital['imcc']['imcc']:,.2f}."
       if capital["imcc"] is not None
-      else f"- Research IMCC formula primitive: not computed; selected set omits risk classes {capital['missing_selected_risk_classes']}."
+      else f"- Research IMCC formula primitive: not computed; the supplied factor map omits regulatory classes {capital['missing_regulatory_risk_classes']} and/or selected factors omit mapped classes {capital['missing_selected_risk_classes']}."
     )
     md += ["","## Capital and stress outputs","",
       f"- Liquidity-adjusted ES research diagnostic: USD {liquidity['liquidity_adjusted_es']:,.2f} (10-day base, 97.5%).",
