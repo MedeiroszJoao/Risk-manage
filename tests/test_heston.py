@@ -309,3 +309,20 @@ def test_full_path_simulation_supports_deterministic_variance_limit():
     assert paths["variances"][:, -1] == pytest.approx(
         expected_variance, abs=1e-12
     )
+
+
+@pytest.mark.parametrize("value", [True, False, "100.0"])
+def test_heston_parameters_reject_boolean_and_string_scalars(value):
+    with pytest.raises(ValueError, match="numeric scalars"):
+        baseline(spot=value)
+
+
+@pytest.mark.parametrize("value", [True, False, "0.5"])
+def test_heston_fourier_rejects_boolean_and_string_scalars(value):
+    with pytest.raises(ValueError, match="numeric scalar"):
+        heston_price_fourier(value, 1.0, baseline())
+
+
+def test_heston_batch_rejects_mixed_boolean_and_numeric_strikes():
+    with pytest.raises(ValueError, match="boolean"):
+        heston_prices_fourier_batch([True, 100.0], 1.0, baseline())
