@@ -87,19 +87,11 @@ The exploratory selector chooses a contiguous 250-observation window by maximizi
 
 The Basel stress calibration framework requires a sufficiently long historical stress data span (including the 2007 period). The synthetic reference sample begins in 2016; the public FRED SP500 daily series used here also does not supply a complete daily record back to 2007. Therefore the report explicitly marks stress-history sufficiency as **not met**.
 
-## 7. Illustrative IMCC
+## 7. IMCC and NMRF formula primitives
 
-The implementation follows the IMA aggregation shape with \(\rho=0.5\):
+The IMCC helper encodes the aggregation expression with the fixed \(\\rho=0.5\) weight and computes class components from supplied full-current, reduced-current and reduced-stress ES values. The NMRF helper uses the fixed \(\\rho=0.6\) aggregation weight. These functions are **formula primitives**, not a capital process: they do not implement instrument-level liquidity-horizon mapping, class-specific stress calibration, the group-level reduced-factor test, IMCC-based stress-period selection, complete NMRF stress scenarios or supervisory controls.
 
-\[
-IMCC=\rho\,IMCC(C)+(1-\rho)\sum_iIMCC(C_i)
-\]
-
-\[
-IMCC(C)=ES_{R,S}\max\left(\frac{ES_{F,C}}{ES_{R,C}},1\right).
-\]
-
-Each partial risk class is calculated separately using its full-current, reduced-current and reduced-stress ES. The current case has no credit-spread risk factors, so the build function suppresses the IMCC output rather than silently aggregating only four of the five required broad classes. No capital value is computed. Even with all five classes supplied, the implementation would remain a research primitive, not a regulatory capital process. The code now fails closed unless the current 250-observation sample plus the 60-endpoint descriptive window is available, and it refuses to emit an IMCC aggregate if a mapped risk class has no selected factor. Even when computed, the result is a formula primitive only: it does not implement the complete MAR33 factor mapping, stress calibration, risk-class aggregation, factor-specific liquidity horizons, NMRF stress scenarios or governance.
+The reference book has no credit-spread risk factors. The build function therefore suppresses the IMCC output instead of calculating a partial four-class number. A populated five-class input would still not make the overall calculation regulatory or empirically validated.
 
 ## 8. RFET and NMRF
 

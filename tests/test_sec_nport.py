@@ -152,3 +152,13 @@ def test_nport_snapshot_writes_hash_linked_manifest(nport_dataset: Path, tmp_pat
 def test_nport_rejects_wrong_accession(nport_dataset: Path):
     with pytest.raises(ValueError, match="expected exactly one SUBMISSION"):
         parse_nport_dataset(nport_dataset, "000000000000000001")
+
+
+def test_nport_short_payoff_is_signed_negative(nport_dataset: Path):
+    holding_path = nport_dataset / "FUND_REPORTED_HOLDING.tsv"
+    content = holding_path.read_text(encoding="utf-8")
+    content = content.replace("\\tLong\\tEC\\t", "\\tShort\\tEC\\t", 1)
+    holding_path.write_text(content, encoding="utf-8")
+    positions, _ = parse_nport_dataset(nport_dataset, ACCESSION)
+    assert positions[0]["position_direction"] == "short"
+    assert positions[0]["signed_currency_value"] == "-542466803.49000000"

@@ -37,10 +37,10 @@ These states are not interchangeable. A test of a synthetic model is not an empi
 | Liquidity-adjusted ES | Research implementation | Formula-shape and unit tests | Factor horizon mapping remains illustrative | MAR33 mapping not implemented |
 | Reduced-factor selection | Research implementation | In-sample overlapping descriptive coverage only | No out-of-sample factor-set validation | IMA requirements not established |
 | IMCC / NMRF primitives | Formula primitives | Unit examples only | The current book lacks credit-spread factors, and the stress-period / group-level reduced-factor procedures are not implemented | Not a regulatory calculation |
-| Data ingestion | FRED/EIA pipelines | Live source/parse checks recorded in CI | Public prices do not constitute portfolio/transaction history | Not RFET evidence |
+| Data ingestion | FRED/EIA pipelines and SEC N-PORT accession parser | Live FRED/EIA checks; N-PORT parser unit-tested against three position records transcribed from one official filing | Full quarterly N-PORT archive and complete filing not yet reconciled; no instrument-level return reconstruction | N-PORT holdings are not RFET evidence or bank desk positions |
 | Portfolio / HPL / RTPL | Yes, hypothetical constant-maturity test books | P&L reconciliation and formula/property tests | No real bank desk positions or APL | Regulatory backtest/PLA incomplete |
 
-## Critical omissions for a real desk-level validation
+## Publicly disclosed fund-holdings track\n\nA first SEC N-PORT parsing path is implemented. Its test data contains three selected positions from one iShares Core S&P 500 ETF filing, not the complete holding set. The parser is not yet validated against an entire quarterly bulk archive or reconciled to every position in the original filing. The output is a point-in-time fund disclosure, not bank desk history, transactions or APL.\n\n## Critical omissions for a real desk-level validation
 
 1. Actual P&L (APL), including the bank's treatment of fees, reserves, valuation adjustments, intraday P&L and other supervisory exclusions.
 2. Actual historical positions and frozen forecasts / model versions with point-in-time market data and timestamps.

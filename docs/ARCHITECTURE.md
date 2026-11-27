@@ -1,7 +1,8 @@
 # Architecture
 
 ```text
-SEC N-PORT (fund holdings) ─────┐\nFRED CSV (equity / FX / rates) ─┼
+SEC N-PORT (fund holdings) ─────┐
+FRED CSV (equity / FX / rates) ─┼
                                ├─> aligned panel + provenance ─> market states
 EIA PET.zip (WTI / Brent) ──────┤
 Synthetic fixture ─────────────┘
@@ -29,14 +30,14 @@ Synthetic fixture ─────────────┘
 
 | Module | Responsibility |
 |---|---|
-| sec_nport.py | Parse one selected SEC N-PORT accession into disclosed fund-holdings positions, identifiers, and input/output hash manifest; no bank-book inference |\n| data.py / eia.py / fixtures.py | FRED equity/FX/rates and EIA WTI/Brent bulk ingestion, unified data contract, provenance and seeded synthetic factor fixture |
+| sec_nport.py | Parse one selected SEC N-PORT accession into disclosed fund-holdings positions, identifiers, and input/output hash manifest; no bank-book inference |\n| sec_nport.py | Parse one selected SEC N-PORT accession into disclosed fund-holdings positions, linked identifiers and input/output hash manifest |\n| data.py / eia.py / fixtures.py | FRED equity/FX/rates and EIA WTI/Brent bulk ingestion, unified data contract, provenance and seeded synthetic factor fixture |
 | pricing.py | Black–Scholes, Garman–Kohlhagen and zero-coupon proxy pricing |
 | portfolio.py | Hypothetical constant-maturity desk positions |
 | pnl.py | Full HPL, sensitivity-based RTPL and factor-level HPL attribution |
 | risk.py | Historical VaR / ES and liquidity-adjusted ES |
 | capital.py | Descriptive historical stress-window selector, in-sample reduced-factor diagnostic and non-regulatory IMCC/NMRF formula primitives |
 | validation.py | HPL-only VaR diagnostics, Kupiec/Christoffersen, HPL-vs-RTPL PLA diagnostic and RFET evidence-count screen |
-| scripts/parse_sec_nport.py | Parse an extracted SEC N-PORT quarter for a specific accession and series |\n| scripts/download_market_data.py | FRED + EIA bulk acquisition, alignment and combined source manifest |
+| scripts/parse_sec_nport.py | Parse an extracted SEC N-PORT quarter for a specific accession and series |\n| scripts/parse_sec_nport.py | Parse an extracted SEC N-PORT quarter for one accession and series |\n| scripts/download_market_data.py | FRED + EIA bulk acquisition, alignment and combined source manifest |
 | scripts/download_eia_petroleum_spot.py | Standalone EIA PET archive collector |
 | scripts/run_case.py | End-to-end reproducible run, scenarios, reports and figures |
 

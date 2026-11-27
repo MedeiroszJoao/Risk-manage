@@ -16,7 +16,7 @@
 | In-sample reduced-factor statistic presented as validation | Label overlapping ratio as descriptive in-sample | No holdout or group-level 75% criterion |
 | Incomplete capital-class mapping could create IMCC output | Suppress IMCC when any of the five broad classes or a selected class component is missing | Stress period still not selected by aggregate IMCC; complete MAR33 not implemented |
 | Correlation weights could be tuned as though regulatory | Enforce fixed IMCC and NMRF weights | Formula primitives only |
-| RFET screen could look like approval | Only candidate-for-review state; public closes not treated as trade/quote evidence | No complete real-price validation, vendor audit or representative mapping |
+| RFET screen could look like approval | Only candidate-for-review state; public closes not treated as trade/quote evidence | No complete real-price validation, vendor audit or representative mapping |\n| Hypothetical books are the only portfolio examples | Added a parser for exact-accession SEC N-PORT public fund-holdings disclosures, with identifier linking and SHA-256 manifests | Test subset is three holdings from one filing; full quarterly archive and full filing reconciliation remain outstanding; this is not a bank book |
 
 ## Open blockers — no professional or regulatory claim
 
@@ -34,6 +34,6 @@
 - CI passes on Python 3.11 and 3.12; tests, lint and deterministic reports complete.
 - Report includes configuration, source hashes, package versions and artifact provenance.
 - Independent analytic references and declared error tolerances for numerical methods.
-- Publicly disclosed real fund holdings snapshots, with dated filings and instrument identifiers, explicitly labelled as fund holdings rather than bank trading-book positions.
+- Run the parser against a complete official SEC N-PORT quarterly archive; reconcile all rows, identifiers, shares/units and net assets to the original filing; archive the input hashes and amend/supersede snapshots explicitly. Keep this as a disclosed fund-holdings dataset, not a bank trading book.
 - Untouched out-of-sample evaluation period.
 - No FRTB compliance claim before APL, actual desk positions, complete RFET evidence, MAR33 stress-period selection, liquidity mapping, NMRF scenarios and independent governance.
