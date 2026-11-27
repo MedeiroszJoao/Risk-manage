@@ -229,7 +229,7 @@ def main():
       "- Capital numbers are illustrative, not bank capital requirements.",
       "- Passing a test is not proof of economic validity or regulatory approval.","",
       "See the JSON / CSV outputs for the detailed audit trail."]
-    (out/"EXECUTIVE_REPORT.md").write_text("\\n".join(md),encoding="utf-8")
+    (out/"EXECUTIVE_REPORT.md").write_text("\n".join(md),encoding="utf-8")
     print(json.dumps(json_safe({
       "summary_path":str(out/"executive_summary.json"),"date_range":summary["date_range"],
       "desk_status":desk_status,"liquidity_adjusted_es":liquidity["liquidity_adjusted_es"],

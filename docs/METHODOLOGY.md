@@ -79,7 +79,7 @@ ES_{LH}=\sqrt{ES_{10}(P)^2+
 
 ## 6. Stress and reduced-factor coverage
 
-The engine selects the 250-day window with the highest 97.5% ES from available historical / synthetic factor P&L. A reduced factor set is selected in descending individual factor ES contribution. Its coverage is then checked at the latest 60 business-day endpoints, each using a 250-day estimation window; the average ratio \(ES_{reduced}/ES_{full}\) must be at least 75%.
+The engine selects the 250-day window with the highest 97.5% ES from available historical / synthetic factor P&L. A reduced factor set is selected by descending individual-factor ES contribution using the current 250-observation sample. The reported ratio over the latest 60 endpoints, each using a 250-observation window, reuses observations from the factor-selection sample. It is therefore only a descriptive, overlapping **in-sample** diagnostic. The 75% threshold is a research heuristic, not out-of-sample validation or regulatory reduced-factor approval.
 
 The Basel stress calibration framework requires a sufficiently long historical stress data span (including the 2007 period). The synthetic reference sample begins in 2016; the public FRED SP500 daily series used here also does not supply a complete daily record back to 2007. Therefore the report explicitly marks stress-history sufficiency as **not met**.
 

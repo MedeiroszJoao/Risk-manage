@@ -8,3 +8,7 @@ Generated report files are not source-of-truth and are overwritten by the case r
 ## Standalone commodity spot diagnostic
 
 After downloading the EIA Petroleum archive with `python scripts/download_eia_petroleum_spot.py --start 2007-01-01`, run `python scripts/run_commodity_spot_case.py`. This produces the independent WTI/Brent spot-proxy HPL/RTPL history, daily and ten-observation historical VaR/ES, and a 250-observation stress-window diagnostic. It uses actual common EIA dates only and is not an aggregated multi-desk IMA result.
+
+## Interpretation
+
+The reduced-factor coverage and capital-shaped output are research diagnostics only. They are not a validation result or regulatory capital calculation. See ../docs/MATURITY_REGISTER.md.
