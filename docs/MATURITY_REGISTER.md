@@ -83,7 +83,7 @@ The following is a conservative assessment after the first technical-integrity r
 
 - [Risk-engine CI](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45924282157): successful on Python 3.11 and 3.12 including the pandas-index alignment change.
 - Python 3.11: 291 tests passed; Ruff and all configured Heston experiments passed.
-- Python 3.12: 287 tests passed; Ruff and all configured Heston experiments passed.
+- Python 3.12: 291 tests passed; Ruff and all configured Heston experiments passed.
 - The four new index-alignment tests passed on both Python versions in run 45924282157.
 - [Live EIA ingestion workflow](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45923474676): successful.
 
@@ -92,4 +92,4 @@ This evidence does not change the empirical or regulatory limitations listed abo
 
 ## Audit baseline update — 2026-11-27
 
-Use [TECHNICAL_AUDIT_REFRESH_2026-11-27.md](TECHNICAL_AUDIT_REFRESH_2026-11-27.md) as the current source-level audit baseline. The older [TECHNICAL_AUDIT_2026-11-27.md](TECHNICAL_AUDIT_2026-11-27.md) is historical and must not be read as the current code state. Its two P0 findings—class-level IMCC scaling and RFET assessment-date anchoring—are resolved in the current branch: class-level ratios are no longer floored, and RFET requires an explicit assessment date. The portfolio-wide IMCC floor remains because MAR33.6 requires it. The latest completed CI has 287 passing tests on Python 3.11 and 287 on Python 3.12; a new run is pending for the Series index-alignment guard. No maturity state is advanced by test count alone.
+Use [TECHNICAL_AUDIT_REFRESH_2026-11-27.md](TECHNICAL_AUDIT_REFRESH_2026-11-27.md) as the current source-level audit baseline. The older [TECHNICAL_AUDIT_2026-11-27.md](TECHNICAL_AUDIT_2026-11-27.md) is historical and must not be read as the current code state. Its two P0 findings—class-level IMCC scaling and RFET assessment-date anchoring—are resolved in the current branch: class-level ratios are no longer floored, and RFET requires an explicit assessment date. The portfolio-wide IMCC floor remains because MAR33.6 requires it. The latest completed CI has 291 passing tests on Python 3.11 and 291 on Python 3.12; the Series index-alignment guard passed in that run. No maturity state is advanced by test count alone.
