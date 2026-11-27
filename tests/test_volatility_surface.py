@@ -230,3 +230,9 @@ def test_price_calibration_rejects_decreasing_atm_variance_by_expiry():
             [0.08]*3+[0.04]*3, ["put", "call", "call"]*2,
             [10, 5, 2, 12, 6, 3],
         )
+
+
+@pytest.mark.parametrize("values", [[True, 0.1, 0.2], ["0.1", "0.2", "0.3"]])
+def test_ssvi_numeric_inputs_reject_boolean_and_string_coercion(values):
+    with pytest.raises(ValueError, match="numeric|boolean"):
+        ssvi_total_variance(values, 0.1, rho=-0.3, eta=0.8, gamma=0.4)
