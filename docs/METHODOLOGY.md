@@ -209,11 +209,3 @@ The desk-level numeric limits above are distinct from bank-wide exception zones 
 - [Basel MAR33 — IMA capital calculation](https://www.bis.org/basel_framework/chapter/MAR/33.htm): ES liquidity horizons, reduced-factor requirement, stress-period selection, five broad risk classes, IMCC and NMRF.
 
 The code applies selected formulas and control principles as research primitives. It does not implement all requirements, data governance, model validation or supervisory approvals across MAR31–MAR33.
-
-
-## Standards applied and scope
-
-- [Basel MAR32 — backtesting and PLA](https://www.bis.org/basel_framework/chapter/MAR/32.htm): desk-level HPL/APL backtesting, missing-data outlier treatment and PLA.
-- [Basel MAR33 — IMA capital calculation](https://www.bis.org/basel_framework/chapter/MAR/33.htm): liquidity horizons, reduced-factor criterion, stress-period selection, broad risk classes, IMCC and NMRF.
-
-The code implements selected mathematical controls and research primitives. It does not implement all requirements, data controls, model validation or supervisory approvals across MAR31–MAR33.

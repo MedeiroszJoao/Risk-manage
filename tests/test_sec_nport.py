@@ -116,12 +116,12 @@ def test_nport_parser_requires_explicit_series_if_filing_has_multiple(
 
     holding_path = nport_dataset / "FUND_REPORTED_HOLDING.tsv"
     with holding_path.open("r", encoding="utf-8", newline="") as handle:
-        rows = list(csv.reader(handle, delimiter="\\t"))
+        rows = list(csv.reader(handle, delimiter="\t"))
     rows[0].append("SERIES_ID")
     for row in rows[1:]:
         row.append("S000004310")
     with holding_path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.writer(handle, delimiter="\\t", lineterminator="\\n")
+        writer = csv.writer(handle, delimiter="\t", lineterminator="\n")
         writer.writerows(rows)
     positions, manifest = parse_nport_dataset(
         nport_dataset, ACCESSION, series_id="S000004310"
