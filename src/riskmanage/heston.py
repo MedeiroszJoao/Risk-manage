@@ -10,6 +10,41 @@ from scipy.special import ndtr
 from scipy.stats import t as student_t
 
 
+def _strict_real_scalar(value, name: str) -> float:
+    if isinstance(value, (bool, np.bool_)) or not isinstance(
+        value, (int, float, np.integer, np.floating)
+    ):
+        raise ValueError(f"{name} must be a numeric scalar")
+    result = float(value)
+    if not np.isfinite(result):
+        raise ValueError(f"{name} must be finite")
+    return result
+
+
+def _strict_integer(value, name: str, minimum: int = 0) -> int:
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
+        raise ValueError(f"{name} must be an integer")
+    result = int(value)
+    if result < minimum:
+        raise ValueError(f"{name} must be at least {minimum}")
+    return result
+
+
+def _strict_real_vector(values, name: str) -> np.ndarray:
+    if isinstance(values, np.ndarray):
+        raw = values
+        if raw.dtype.kind not in "iuf":
+            raise ValueError(f"{name} must be a numeric vector without booleans or strings")
+    else:
+        objects = np.asarray(values, dtype=object)
+        if any(isinstance(value, (bool, np.bool_)) for value in objects.flat):
+            raise ValueError(f"{name} must not contain boolean observations")
+        raw = np.asarray(values)
+        if raw.dtype.kind not in "iuf":
+            raise ValueError(f"{name} must be a numeric vector without booleans or strings")
+    return raw.astype(float, copy=False)
+
+
 @dataclass(frozen=True)
 class HestonParameters:
     """Risk-neutral Heston parameters in annualized units.
@@ -39,6 +74,12 @@ class HestonParameters:
             self.risk_free_rate,
             self.dividend_yield,
         )
+        if any(
+            isinstance(value, (bool, np.bool_))
+            or not isinstance(value, (int, float, np.integer, np.floating))
+            for value in values
+        ):
+            raise ValueError("all Heston parameters must be numeric scalars")
         if not all(np.isfinite(value) for value in values):
             raise ValueError("all Heston parameters must be finite")
         if self.spot <= 0.0 or self.variance0 < 0.0:
@@ -67,9 +108,13 @@ def heston_characteristic_function(frequency, maturity: float, params: HestonPar
     Uses the stable g representation of the affine Heston solution. The
     deterministic-variance limit (vol_of_variance=0) is handled analytically.
     """
-    if not np.isfinite(maturity) or maturity < 0.0:
-        raise ValueError("maturity must be finite and non-negative")
-    u = np.asarray(frequency, dtype=np.complex128)
+    maturity = _strict_real_scalar(maturity, "maturity")
+    if maturity < 0.0:
+        raise ValueError("maturity must be non-negative")
+    raw_frequency = np.asarray(frequency)
+    if raw_frequency.dtype.kind not in "iufc":
+        raise ValueError("frequency must be a numeric real or complex array")
+    u = raw_frequency.astype(np.complex128, copy=False)
     if not np.isfinite(u.real).all() or not np.isfinite(u.imag).all():
         raise ValueError("frequency must be finite")
     if maturity == 0.0:
@@ -139,15 +184,17 @@ def heston_price_fourier(
     The adaptive quadrature error estimate is returned with the price. It is a
     numerical integration diagnostic, not a model or parameter uncertainty band.
     """
-    values = (strike, maturity, epsabs, epsrel)
-    if not all(np.isfinite(value) for value in values):
-        raise ValueError("strike, maturity and quadrature tolerances must be finite")
+    strike = _strict_real_scalar(strike, "strike")
+    maturity = _strict_real_scalar(maturity, "maturity")
+    epsabs = _strict_real_scalar(epsabs, "epsabs")
+    epsrel = _strict_real_scalar(epsrel, "epsrel")
+    limit = _strict_integer(limit, "limit", minimum=50)
     if strike <= 0.0 or maturity <= 0.0:
         raise ValueError("strike and maturity must be strictly positive")
     if option_type not in {"call", "put"}:
         raise ValueError("option_type must be 'call' or 'put'")
-    if epsabs <= 0.0 or epsrel <= 0.0 or limit < 50:
-        raise ValueError("quadrature tolerances must be positive and limit at least 50")
+    if epsabs <= 0.0 or epsrel <= 0.0:
+        raise ValueError("quadrature tolerances must be positive")
 
     s0 = params.spot
     r = params.risk_free_rate
@@ -220,22 +267,19 @@ def heston_prices_fourier_batch(
     while strike-dependent phases are vectorized. The error is the adaptive
     quadrature's L2 norm estimate for the vector integral, not a per-option CI.
     """
-    strikes = np.asarray(strikes, dtype=float)
+    strikes = _strict_real_vector(strikes, "strikes")
+    maturity = _strict_real_scalar(maturity, "maturity")
+    epsabs = _strict_real_scalar(epsabs, "epsabs")
+    epsrel = _strict_real_scalar(epsrel, "epsrel")
+    limit = _strict_integer(limit, "limit", minimum=50)
     if strikes.ndim != 1 or strikes.size == 0:
         raise ValueError("strikes must be a non-empty one-dimensional array")
     if not np.isfinite(strikes).all() or np.any(strikes <= 0.0):
         raise ValueError("strikes must be finite and positive")
-    if not np.isfinite(maturity) or maturity <= 0.0:
+    if maturity <= 0.0:
         raise ValueError("maturity must be finite and positive")
-    if (
-        not np.isfinite(epsabs)
-        or not np.isfinite(epsrel)
-        or epsabs <= 0.0
-        or epsrel <= 0.0
-    ):
+    if epsabs <= 0.0 or epsrel <= 0.0:
         raise ValueError("quadrature tolerances must be finite and positive")
-    if limit < 50:
-        raise ValueError("quadrature limit must be at least 50")
     option_types = ["call"] * strikes.size if option_types is None else list(option_types)
     if len(option_types) != strikes.size or any(
         kind not in {"call", "put"} for kind in option_types
