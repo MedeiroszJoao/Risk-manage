@@ -57,7 +57,7 @@ def _align_factor_losses(factor_losses):
         objects = np.asarray(series, dtype=object)
         if any(isinstance(value, (bool, np.bool_)) for value in objects.flat):
             raise ValueError(
-                f"factor losses for {name} must not contain boolean observations"
+                f"factor losses for {name} must be a numeric vector without boolean observations"
             )
         raw = np.asarray(series)
         if raw.ndim != 1 or raw.dtype.kind not in "iuf":
