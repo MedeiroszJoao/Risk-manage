@@ -135,7 +135,16 @@ def main():
 
     evidence=[{"date":market.date.max(),"factor_id":factor,"evidence_type":"public_close","verified":True}
               for factor in factor_names]
-    rfet=rfet_diagnostic(pd.DataFrame(evidence), as_of_date=market.date.max())
+    rfet_as_of = pd.Timestamp(market.date.max()).normalize()
+    rfet_calibration_start = (
+        rfet_as_of - pd.DateOffset(years=1) + pd.Timedelta(days=1)
+    )
+    rfet=rfet_diagnostic(
+        pd.DataFrame(evidence),
+        as_of_date=rfet_as_of,
+        calibration_period_start=rfet_calibration_start,
+        calibration_period_end=rfet_as_of,
+    )
     desk_hpl_sum=sum(factor_pnl.attrs["desk_hpl"].values())
     factor_reconciliation={
       "max_abs_reconciliation_error":float(np.max(np.abs(factor_pnl.drop(columns=["date"]).sum(axis=1).to_numpy()-desk_hpl_sum))),
