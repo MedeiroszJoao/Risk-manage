@@ -38,7 +38,7 @@ These states are not interchangeable. A test of a synthetic model is not an empi
 | Reduced-factor selection | Research implementation | In-sample overlapping descriptive coverage only | No out-of-sample factor-set validation | IMA requirements not established |
 | IMCC / NMRF primitives | Formula primitives | Unit examples only | The current book lacks credit-spread factors, and the stress-period / group-level reduced-factor procedures are not implemented | Not a regulatory calculation |
 | Data ingestion | FRED/EIA pipelines and SEC N-PORT accession parser | Live FRED/EIA checks; N-PORT parser unit-tested against three position records transcribed from one official filing | Full quarterly N-PORT archive and complete filing not yet reconciled; no instrument-level return reconstruction | N-PORT holdings are not RFET evidence or bank desk positions |
-| Portfolio / HPL / RTPL | Yes, hypothetical constant-maturity test books | P&L reconciliation and formula/property tests | No real bank desk positions or APL | Regulatory backtest/PLA incomplete |
+| Portfolio / HPL / RTPL | Yes, hypothetical constant-maturity test books | P&L reconciliation and formula/property tests | No real bank desk positions or APL | Regulatory backtest/PLA incomplete; the `full_greeks` RTPL mode is currently a diagonal second-order approximation and omits mixed cross-Greeks |
 
 ## Publicly disclosed fund-holdings track\n\nA first SEC N-PORT parsing path is implemented. Its test data contains three selected positions from one iShares Core S&P 500 ETF filing, not the complete holding set. The parser is not yet validated against an entire quarterly bulk archive or reconciled to every position in the original filing. The output is a point-in-time fund disclosure, not bank desk history, transactions or APL.\n\n## Critical omissions for a real desk-level validation
 
@@ -61,7 +61,7 @@ These states are not interchangeable. A test of a synthetic model is not an empi
 
 ## Explicit conclusion
 
-The codebase is a useful research implementation with tested numerical components and public-data ingestion. It is **not** yet an empirically validated trading-risk engine and does **not** implement a complete FRTB IMA capital process. No current result supports a claim of bank-level performance, model approval or regulatory capital readiness.
+The codebase is a useful research implementation with tested numerical components and public-data ingestion. The latest validation hardening also rejects mismatched pandas Series indexes in HPL/VaR and HPL/RTPL comparisons; its follow-up CI run is pending. It is **not** yet an empirically validated trading-risk engine and does **not** implement a complete FRTB IMA capital process. No current result supports a claim of bank-level performance, model approval or regulatory capital readiness.
 
 
 ## Independent maturity vector — 2026-11-27
@@ -81,14 +81,15 @@ The following is a conservative assessment after the first technical-integrity r
 
 ### Current automated verification
 
-- [Risk-engine CI](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45921183208): successful on Python 3.11 and 3.12.
-- Python 3.11: 255 tests passed in 69.51 seconds; Ruff and all configured Heston experiments passed.
-- Python 3.12: 255 tests passed in 50.80 seconds; Ruff and all configured Heston experiments passed.
-- [Live EIA/FRED integrated workflow](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45921183227): successful.
+- [Risk-engine CI](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45923474678): successful on Python 3.11 and 3.12 before the subsequent pandas-index alignment change.
+- Python 3.11: 287 tests passed; Ruff and all configured Heston experiments passed.
+- Python 3.12: 287 tests passed; Ruff and all configured Heston experiments passed.
+- The follow-up CI run for the four new index-alignment tests is pending.
+- [Live EIA/FRED integrated workflow](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45923474679): successful.
 
 This evidence does not change the empirical or regulatory limitations listed above.
 
 
 ## Audit baseline update — 2026-11-27
 
-Use [TECHNICAL_AUDIT_2026-11-27.md](TECHNICAL_AUDIT_2026-11-27.md) as the current source-level audit baseline. It supersedes earlier code-state observations where the branch has changed. The current CI result is 255 passing tests on Python 3.11 and 255 on Python 3.12; this is software-path evidence only. The audit identifies two confirmed P0 findings in IMCC class aggregation and RFET assessment-date handling. No maturity state is advanced by this CI result.
+Use [TECHNICAL_AUDIT_REFRESH_2026-11-27.md](TECHNICAL_AUDIT_REFRESH_2026-11-27.md) as the current source-level audit baseline. The older [TECHNICAL_AUDIT_2026-11-27.md](TECHNICAL_AUDIT_2026-11-27.md) is historical and must not be read as the current code state. Its two P0 findings—class-level IMCC scaling and RFET assessment-date anchoring—are resolved in the current branch: class-level ratios are no longer floored, and RFET requires an explicit assessment date. The portfolio-wide IMCC floor remains because MAR33.6 requires it. The latest completed CI has 287 passing tests on Python 3.11 and 287 on Python 3.12; a new run is pending for the Series index-alignment guard. No maturity state is advanced by test count alone.
