@@ -28,6 +28,7 @@
 | VOL-01 | `volatility_surface.py` | Synthetic SSVI parameter/price recovery and sufficient-region checks exist. | Add identifiability, noisy/bid-ask, stale/incomplete quote and temporal OOS studies using independently sourced option data. |
 | UNC-01 | `uncertainty.py` | Current bootstrap uncertainty is conditional on its chosen noise and resampling assumptions. | Quantify failed fits, compare noise models and separate parameter, model and numerical uncertainty. |
 | EVT-01 | `tail_risk.py` | Threshold grids and bootstrap diagnostics exist, but the financial-loss validation is not a chronological independent test with dependence-aware inference. | Add block/stationary bootstrap or declustering where justified, regime sensitivity and untouched OOS evaluation. |
+| EVT-02 | `tail_risk.fit_pot_gpd_tail_risk` | Coerced losses, confidence levels, thresholds and control parameters implicitly; booleans, strings and fractional replicate counts could enter the API or fail later inconsistently. | Reject invalid types at the boundary and validate integer controls explicitly. |
 | DATA-01 | `sec_nport.py` | Parser tests use a small selected subset from one filing. | Run against a complete official quarterly archive and reconcile all positions, identifiers, totals, amendments and source hashes. |
 | ENG-01 | `pyproject.toml` | Runtime and development dependencies are ranged; no lockfile fixes the full tested environment. | Establish a reproducible dependency lock and verify clean installs on supported Python versions. |
 
@@ -46,6 +47,13 @@
 - Christoffersen now uses only adjacent finite, matched pairs. A missing observation breaks the transition chain; the implementation does not bridge across it.
 - Outputs identify the population used by each statistical test.
 - New regression tests cover missing-data accounting, transition breaks, boolean/string inputs and confidence validation.
+
+### EVT-02 — strict POT-GPD contracts
+
+- Loss samples must be one-dimensional finite numeric arrays; booleans, strings and object coercion are rejected.
+- Confidence levels and threshold quantiles must be numeric vectors with values strictly inside (0.5, 1).
+- Minimum exceedance count, bootstrap counts and seed must be strict integers; booleans and fractional values are rejected.
+- Added regression tests for invalid data and scalar types.
 
 **Important limitation:** the asymptotic chi-square reference distributions still require a power/sample-size study and careful interpretation for rare exceptions. These changes correct population construction; they do not establish forecast adequacy or regulatory backtesting.
 
