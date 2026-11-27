@@ -253,8 +253,8 @@ def main():
       f"- Historical span starts on/before 2007: {stress_history_assessment['starts_on_or_before_2007']} (not a regulatory back-history claim).",
       imcc_report_line,
       f"- Selection-sample reduced/full ES ratio (factor-selection diagnostic only): {capital['reduced_set']['explained_ratio']:.1%}.",
-      f"- Mean ratio over 60 forward holdout endpoints (rolling-origin OOS research diagnostic): {capital['reduced_set']['coverage_12w'].get('mean_ratio')}.",
-      f"- Holdout chronology verified from explicit dates: {capital['reduced_set']['coverage_12w'].get('chronology_verified', False)}.",
+      f"- Reduced/full ES ratio on the non-overlapping 250-observation holdout (research diagnostic): {capital['reduced_set']['holdout'].get('ratio')}.",
+      f"- Holdout chronology verified from explicit dates: {capital['reduced_set']['holdout'].get('chronology_verified', False)}.",
       "- RFET: public-close-only evidence is not used to certify modellability.",
       "","## Interpretation guardrails","",
       "- HPL backtesting is not APL backtesting.",
@@ -271,7 +271,7 @@ def main():
       "imcc_status":capital["imcc_status"],
       "capital_label":capital["capital_label"],
       "regulatory_status":capital["regulatory_status"],
-      "reduced_factor_coverage_is_out_of_sample":capital["reduced_set"]["coverage_is_out_of_sample"],
+      "reduced_factor_holdout_is_independent":capital["reduced_set"]["holdout_is_independent"],
       "rfet_status":rfet["status"],
       "max_factor_reconciliation_error":factor_reconciliation["max_abs_reconciliation_error"]
     }),indent=2))

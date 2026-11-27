@@ -56,7 +56,7 @@ def test_nmrf_aggregation_separates_special_groups():
     assert result["status"] == "formula_primitive_only"
 
 
-def test_reduced_factor_coverage_uses_a_forward_untouched_holdout():
+def test_reduced_factor_coverage_uses_a_disjoint_250_observation_holdout():
     rng = np.random.default_rng(77)
     common = rng.normal(0, 1, 700)
     factors = {
@@ -65,17 +65,22 @@ def test_reduced_factor_coverage_uses_a_forward_untouched_holdout():
         "fx": rng.normal(0, 0.25, 700),
     }
     result = select_reduced_factor_set(factors, 0.975, 0.75, observation_dates=_dates(700))
-    coverage = result["coverage_12w"]
+    holdout = result["holdout"]
 
-    assert coverage["status"] == "computed_out_of_sample"
-    assert coverage["observations"] == 60
-    assert coverage["out_of_sample"] is True
-    assert coverage["selection_overlap"] is False
+    assert holdout["status"] == "computed_non_overlapping_holdout"
+    assert holdout["observations"] == 250
+    assert holdout["ten_day_es_observations"] == 241
+    assert holdout["out_of_sample"] is True
+    assert holdout["independent_holdout"] is True
+    assert holdout["selection_overlap"] is False
+    assert holdout["estimation_window_overlap"] is False
+    assert result["holdout_is_independent"] is True
     assert result["coverage_is_out_of_sample"] is True
     assert result["factor_set_frozen_during_validation"] is True
-    assert result["selection_window"]["end_index"] < result["validation_window"]["start_index"]
-    assert coverage["validation_window"]["observations"] == 60
-    assert result["target_met"] == (coverage["mean_ratio"] >= 0.75)
+    assert result["selection_window"]["end_index"] < result["holdout_window"]["start_index"]
+    assert result["selection_window"]["end_index"] + 1 == result["holdout_window"]["start_index"]
+    assert result["holdout_window"]["observations"] == 250
+    assert result["target_met"] == (holdout["ratio"] >= 0.75)
     assert result["explained_ratio"] == pytest.approx(
         result["selection_sample_explained_ratio"]
     )
@@ -90,7 +95,7 @@ def test_holdout_observations_cannot_change_factor_selection():
         "fx": rng.normal(0.0, 0.20, 500),
     }
     altered = {name: values.copy() for name, values in factors.items()}
-    altered["fx"][-60:] *= 25.0
+    altered["fx"][-250:] *= 25.0
 
     baseline = select_reduced_factor_set(factors, observation_dates=_dates(500))
     changed_holdout = select_reduced_factor_set(altered, observation_dates=_dates(500))
@@ -100,8 +105,8 @@ def test_holdout_observations_cannot_change_factor_selection():
         changed_holdout["selection_sample_explained_ratio"]
     )
     assert baseline["selection_window"] == changed_holdout["selection_window"]
-    assert baseline["coverage_12w"]["mean_ratio"] != pytest.approx(
-        changed_holdout["coverage_12w"]["mean_ratio"]
+    assert baseline["holdout"]["ratio"] != pytest.approx(
+        changed_holdout["holdout"]["ratio"]
     )
 
 def test_reduced_factor_selection_requires_full_estimation_window():
@@ -109,22 +114,22 @@ def test_reduced_factor_selection_requires_full_estimation_window():
         select_reduced_factor_set({"equity": np.ones(249)})
 
 
-def test_reduced_factor_selection_requires_full_310_observation_holdout_design():
+def test_reduced_factor_selection_requires_full_500_observation_disjoint_holdout_design():
     rng = np.random.default_rng(20)
-    factors_309 = {"equity": rng.normal(size=309)}
-    with pytest.raises(ValueError, match="at least 310"):
-        select_reduced_factor_set(factors_309)
+    factors_499 = {"equity": rng.normal(size=499)}
+    with pytest.raises(ValueError, match="at least 500"):
+        select_reduced_factor_set(factors_499)
 
-    factors_310 = {"equity": rng.normal(size=310)}
-    result = select_reduced_factor_set(factors_310, observation_dates=_dates(310))
-    assert result["coverage_12w"]["status"] == "computed_out_of_sample"
-    assert result["coverage_12w"]["observations"] == 60
+    factors_500 = {"equity": rng.normal(size=500)}
+    result = select_reduced_factor_set(factors_500, observation_dates=_dates(500))
+    assert result["holdout"]["status"] == "computed_non_overlapping_holdout"
+    assert result["holdout"]["observations"] == 250
 
 def test_ima_research_aggregation_fails_closed_on_short_history():
     rng = np.random.default_rng(21)
     factors = {"equity": rng.normal(0, 1, 250)}
     stress = {"start_index": 0, "end_index": 249, "window_days": 250}
-    with pytest.raises(ValueError, match="at least 310"):
+    with pytest.raises(ValueError, match="at least 500"):
         build_ima_capital(factors, stress, {"equity": "equity"}, observation_dates=_dates(len(next(iter(factors.values())))))
 
 
@@ -173,8 +178,8 @@ def test_reduced_factor_selection_rejects_boolean_window_values():
     factors = {"equity": rng.normal(0, 1, 400)}
     with pytest.raises(ValueError, match="estimation_window must be an integer"):
         select_reduced_factor_set(factors, estimation_window=True, observation_dates=_dates(400))
-    with pytest.raises(ValueError, match="validation_days must be an integer"):
-        select_reduced_factor_set(factors, validation_days=True, observation_dates=_dates(400))
+    with pytest.raises(ValueError, match="holdout_observations must be an integer"):
+        select_reduced_factor_set(factors, holdout_observations=True, observation_dates=_dates(400))
 
 
 def test_imcc_uses_fixed_basel_weight():
@@ -366,8 +371,8 @@ def test_imcc_applies_floor_to_portfolio_ratio_but_not_class_ratios():
 
 def test_reduced_factor_selection_requires_valid_chronological_dates():
     rng = np.random.default_rng(811)
-    factors = {"equity": rng.normal(size=310)}
-    dates = _dates(310)
+    factors = {"equity": rng.normal(size=500)}
+    dates = _dates(500)
 
     duplicate_dates = dates.to_series().reset_index(drop=True)
     duplicate_dates.iloc[200] = duplicate_dates.iloc[199]
@@ -378,7 +383,7 @@ def test_reduced_factor_selection_requires_valid_chronological_dates():
         select_reduced_factor_set(factors, observation_dates=dates[::-1])
 
     with pytest.raises(ValueError, match="length"):
-        select_reduced_factor_set(factors, observation_dates=_dates(309))
+        select_reduced_factor_set(factors, observation_dates=_dates(499))
 
     with pytest.raises(ValueError, match="observation_dates are required"):
         select_reduced_factor_set(factors)
@@ -389,9 +394,10 @@ def test_reduced_factor_holdout_records_real_selection_and_validation_dates():
     factors = {"equity": rng.normal(size=500)}
     dates = _dates(500)
     result = select_reduced_factor_set(factors, observation_dates=dates)
-    coverage = result["coverage_12w"]
+    holdout = result["holdout"]
 
-    assert coverage["chronology_verified"] is True
-    assert coverage["selection_window"]["end_date"] == dates[439].tz_localize("UTC").isoformat()
-    assert coverage["validation_window"]["start_date"] == dates[440].tz_localize("UTC").isoformat()
-    assert coverage["validation_window"]["end_date"] == dates[-1].tz_localize("UTC").isoformat()
+    assert holdout["chronology_verified"] is True
+    assert holdout["selection_window"]["end_date"] == dates[249].tz_localize("UTC").isoformat()
+    assert holdout["holdout_window"]["start_date"] == dates[250].tz_localize("UTC").isoformat()
+    assert holdout["holdout_window"]["end_date"] == dates[-1].tz_localize("UTC").isoformat()
+    assert holdout["selection_window"]["end_index"] + 1 == holdout["holdout_window"]["start_index"]

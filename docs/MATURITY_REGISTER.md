@@ -35,7 +35,7 @@ These states are not interchangeable. A test of a synthetic model is not an empi
 | SSVI | Yes | Static-arbitrage sufficient-region checks and synthetic parameter/price recovery | No real option chain or stale/bid-ask governance | Not assessed |
 | POT-GPD | Yes | Synthetic known-GPD recovery, threshold grid and bootstrap diagnostics | No independent chronological financial loss series | Not assessed |
 | Liquidity-adjusted ES | Research implementation | Formula-shape and unit tests | Factor horizon mapping remains illustrative | MAR33 mapping not implemented |
-| Reduced-factor selection | Research implementation | Selection-window ES ratio and rolling-origin holdout checks | 60 forward endpoints, with the factor set frozen before the holdout; still no desk-level supervisory validation | IMA requirements not established |
+| Reduced-factor selection | Research implementation | Selection-window ES ratio and disjoint 250-observation holdout | No shared daily observations between selection and holdout; tail-estimation uncertainty still material | IMA requirements not established |
 | IMCC / NMRF primitives | Formula primitives | Unit examples only | The current book lacks credit-spread factors, and the stress-period / group-level reduced-factor procedures are not implemented | Not a regulatory calculation |
 | Data ingestion | FRED/EIA pipelines and SEC N-PORT accession parser | Live FRED/EIA checks; N-PORT parser unit-tested against three position records transcribed from one official filing | Full quarterly N-PORT archive and complete filing not yet reconciled; no instrument-level return reconstruction | N-PORT holdings are not RFET evidence or bank desk positions |
 | Portfolio / HPL / RTPL | Yes, hypothetical constant-maturity test books | P&L reconciliation and formula/property tests | No real bank desk positions or APL | Regulatory backtest/PLA incomplete; the `full_greeks` RTPL mode is currently a diagonal second-order approximation and omits mixed cross-Greeks |
@@ -99,14 +99,16 @@ Use [TECHNICAL_AUDIT_REFRESH_2026-11-27.md](TECHNICAL_AUDIT_REFRESH_2026-11-27.m
 
 The previous coverage routine evaluated the factor set on rolling windows that overlapped the factor-selection sample. That was in-sample and could not support an independent performance claim.
 
-The current implementation now:
-1. Reserves the final 60 observations as a forward validation interval.
-2. Selects and freezes the reduced factor set using only the immediately preceding 250 observations.
-3. Evaluates the frozen set at the 60 holdout endpoints, recomputing full and reduced ES on trailing 250-observation windows.
-4. Reports an unclassifiable result when any full-set ES denominator is nonpositive; it does not discard those endpoints.
-5. Requires 310 observations for the 250 + 60 design.
+The earlier 60-endpoint rolling diagnostic was superseded: each trailing 250-observation ES window reused 190–249 observations from the selection sample, so it was not an independent holdout.
 
-This is a rolling-origin research diagnostic for one frozen selection. It is not a supervisory approval, does not implement group-level factor selection across approved desks, and does not by itself establish the Basel MAR33 75% requirement.
+The current implementation now:
+1. Selects and freezes the factor set on 250 daily observations.
+2. Evaluates the frozen set once on the next 250 daily observations, with no shared daily observations between samples.
+3. Builds overlapping ten-day loss aggregates separately inside each sample, yielding 241 ten-day observations in each sample.
+4. Reports an unclassifiable result when full holdout ES is nonpositive or non-finite; it does not discard or replace the holdout.
+5. Requires 500 observations for the 250 + 250 disjoint design.
+
+This is an independent research holdout for one frozen selection, not supervisory approval. At 97.5%, the holdout ES tail has only about six nominal observations, and dependence-adjusted uncertainty analysis is still required. The test does not implement group-level factor selection across approved desks or by itself establish the Basel MAR33 75% requirement.
 
 
 ## Chronology control for reduced-factor holdout — 2026-11-26
@@ -119,3 +121,12 @@ Out-of-sample evaluation requires an explicit observation-date vector aligned on
 The P&L layer now exposes three distinct model levels: first-order delta, diagonal second-order, and full market-factor Hessian. The legacy full_greeks label is a deprecated alias for diagonal_second_order and no longer misstates its mathematical scope.
 
 The full_hessian mode adds mixed second derivatives by a central four-point stencil. A separate numerical benchmark compares the mixed spot/volatility derivative with the analytic Black-Scholes call vanna and verifies finite-difference convergence as bumps are reduced. The method revalues one-day aging separately and does not claim to include market-time mixed derivatives.
+
+
+## Disjoint reduced-factor holdout — 2026-11-27
+
+A second audit found that the former 60-endpoint rolling ES windows reused 190–249 observations from the factor-selection window. The endpoint dates were later, but the ES estimation samples overlapped the selection sample. That was a forward rolling stability diagnostic, not an independent holdout.
+
+The current method requires 250 daily observations for selection and a separate 250 daily observations for evaluation. The factor set is frozen before the holdout begins. Ten-day overlapping losses are constructed separately inside each sample (241 observations per sample), so neither ten-day aggregate crosses the sample boundary.
+
+This is still a descriptive holdout ratio. At 97.5%, its tail is based on roughly six ten-day observations; block-bootstrap confidence intervals and stability over multiple non-overlapping periods remain necessary before drawing inferential conclusions.

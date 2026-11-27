@@ -156,19 +156,19 @@ The 2026-11-27 audit is the current baseline. It does not claim that the remaini
 
 ## CAP-05 — Separate reduced-factor selection from forward validation — 2026-11-26
 
-**Finding:** the former routine ranked and selected risk factors on the latest 250-observation sample, then evaluated its 12-week coverage on rolling windows that reused that same sample. The result was correctly labelled in-sample, but it could not demonstrate independent performance and the target_met field was too easy to interpret as a pass.
+**Finding:** the first remediation split the selection dates from 60 later endpoints, but its trailing 250-observation ES estimation windows reused 190–249 observations from the selection sample. The dates were forward, but the evaluation samples themselves were not disjoint. That was a rolling stability diagnostic, not an independent holdout.
 
 **Remediation:**
-- Freeze factor selection on the 250 observations immediately preceding the holdout.
-- Reserve the final 60 endpoints as a forward validation interval.
-- Evaluate the frozen set at each of the 60 endpoints using trailing 250-observation current ES windows.
-- Require 310 observations so all 60 holdout endpoints occur after selection.
-- Preserve every holdout endpoint. A nonpositive full-portfolio ES makes the coverage ratio unclassifiable; the endpoint is not silently removed.
-- target_met now refers to the forward-holdout mean ratio; target_met_in_sample is retained only as a selection-sample diagnostic for compatibility.
+- Freeze factor selection on 250 daily observations.
+- Reserve the following 250 daily observations as a fully disjoint holdout.
+- Calculate full-set and reduced-set ten-day ES separately within each sample; each sample contains 241 overlapping ten-day loss aggregates.
+- Require 500 daily observations for the 250 + 250 split.
+- Preserve the complete holdout. A nonpositive or non-finite full-set holdout ES makes the ratio unclassifiable; no endpoint is silently dropped.
+- target_met refers only to the single disjoint holdout ratio; target_met_in_sample is retained as a selection-sample diagnostic.
 
-**Scope:** this is a rolling-origin research holdout for one fixed reduced set. It is not a complete implementation of MAR33.5–33.7. In particular, it does not supply supervisory approval, the group-level aggregate across all IMA desks, or IMCC-maximising stress-period governance.
+**Scope:** this is a single non-overlapping chronological research holdout for one fixed reduced set. It is not a complete implementation of MAR33.5–33.7. In particular, it does not supply supervisory approval, the group-level aggregate across all IMA desks, or IMCC-maximising stress-period governance.
 
-**Regression evidence required:** tests must prove the split boundary, the 310-observation minimum, all 60 holdout endpoints, no factor-selection dependence on holdout data, and explicit handling of undefined denominators.
+**Regression evidence required:** tests prove the 250/250 split boundary, the 500-observation minimum, no overlap of daily or ten-day samples, no factor-selection dependence on holdout data, and explicit handling of undefined denominators.
 
 
 **Compatibility follow-up:** the legacy `explained_ratio` output key is retained as an alias for `selection_sample_explained_ratio`, because existing reports consume it. It is explicitly a selection-sample statistic and is not the forward holdout result; `target_met` remains based only on the OOS holdout.
@@ -195,3 +195,12 @@ The 2026-11-27 audit is the current baseline. It does not claim that the remaini
 - Keep one-day theta as a separate exact aging revaluation; explicitly exclude market-time cross derivatives.
 
 **Independent numerical evidence:** test mixed spot/volatility second derivative against the analytic Black-Scholes call vanna, and test convergence under successively smaller bumps. A bivariate full-revaluation case checks that adding the mixed term improves the second-order Taylor approximation.
+
+
+## CAP-07 — Eliminate estimation-window overlap in reduced-factor holdout — 2026-11-27
+
+**Finding:** the prior 60-endpoint rolling calculation selected factors on 250 observations, then estimated full/reduced ES on trailing 250-observation windows. For those 60 endpoints, every estimation window reused 190–249 observations from the selection sample. The prior selection_overlap=False flag described only the endpoint-date interval, not the ES estimation samples, and was therefore misleading.
+
+**Remediation:** replace the rolling diagnostic as the primary holdout by one disjoint chronological design: 250 selection observations followed by 250 holdout observations. The selected factor set is frozen before the holdout. Ten-day overlapping loss aggregates are built separately within each sample, yielding 241 aggregates per sample and no cross-boundary overlap.
+
+**Limitations:** with 241 overlapping ten-day observations and a 97.5% confidence level, the empirical tail is based on roughly six observations. The ratio is descriptive; dependence-adjusted block-bootstrap uncertainty and additional non-overlapping periods are still required. This is not a supervisory reduced-factor test or a group-level MAR33 approval.
