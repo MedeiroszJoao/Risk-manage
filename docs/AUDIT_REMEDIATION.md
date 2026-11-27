@@ -27,7 +27,7 @@
 5. RFET is only an evidence-count screen; no regulatory modellability decision.
 6. No independent NMRF inventory or stress-scenario dataset.
 7. Dependencies remain ranged rather than locked; no lockfile.
-8. QE-M time-grid sensitivity exists, but no accepted numerical-bias tolerance is defined. EVT has no independent chronological portfolio validation.
+8. QE-M time-grid sensitivity exists, but no accepted numerical-bias tolerance is defined. EVT has no independent chronological portfolio validation.\n9. SEC N-PORT ingestion currently has unit coverage against three positions from one public filing; it still needs a full-quarter archive run and reconciliation to the complete filing.
 
 ## Acceptance gate for the next release
 

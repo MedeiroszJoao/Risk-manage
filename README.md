@@ -64,7 +64,17 @@ The dependency ranges in pyproject.toml are minimum-version constraints, **not a
 - POT-GPD reports a threshold grid and bootstrap diagnostics; the bootstrap does not account for serial dependence or structural breaks.
 - FRED/EIA public-data ingestion has been run in GitHub Actions. That does not create a real portfolio or qualifying transaction history.
 
-## SEC N-PORT disclosed holdings parser\n\nThe repository includes a parser for the SEC quarterly flat-file data sets. First select/download and extract a quarterly data set from the [SEC N-PORT data page](https://www.sec.gov/data-research/sec-markets-data/form-n-port-data-sets), then run:\n\n```bash\npython scripts/parse_sec_nport.py --dataset-dir path/to/extracted_nport_quarter --accession 0002071691-26-019760 --series-id S000004310 --output-dir data/processed/sec_nport/ivv_2026-06-30\n```\n\nThe parser requires an exact accession, preserves reported percentages as percentage points, joins identifiers, and writes a SHA-256 manifest. The test sample covers only three selected positions from the named filing; it is not the full portfolio. See [data provenance](docs/DATA_PROVENANCE.md).\n\n## Non-negotiable limitations
+## SEC N-PORT disclosed holdings parser
+
+The repository includes a parser for the SEC quarterly flat-file data sets. First select/download and extract a quarterly data set from the [SEC N-PORT data page](https://www.sec.gov/data-research/sec-markets-data/form-n-port-data-sets), then run:
+
+```bash
+python scripts/parse_sec_nport.py --dataset-dir path/to/extracted_nport_quarter --accession 0002071691-26-019760 --series-id S000004310 --output-dir data/processed/sec_nport/ivv_2026-06-30
+```
+
+The parser requires an exact accession, preserves reported percentages as percentage points, joins identifiers, and writes a SHA-256 manifest. The test sample covers only three selected positions from the named filing; it is not the full portfolio. See [data provenance](docs/DATA_PROVENANCE.md).
+
+## Non-negotiable limitations
 
 1. All four desk portfolios are hypothetical. Public closes for SPX, FX, rates or crude oil are not actual desk positions and are not a bank transaction ledger.
 2. Backtesting here is HPL-only. The Basel desk framework requires both Actual P&L and Hypothetical P&L; missing HPL/VaR rows are counted as exceptions. The code applies the desk-level 12-exception (99%) / 30-exception (97.5%) numeric limits without bank-wide multipliers, but cannot establish eligibility without APL.
