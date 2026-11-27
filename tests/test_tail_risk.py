@@ -155,6 +155,6 @@ def test_pot_gpd_rejects_string_and_boolean_loss_coercion(losses):
 def test_pot_gpd_rejects_implicit_scalar_coercion(kwargs):
     losses = np.random.default_rng(901).standard_normal(500)
     with pytest.raises(ValueError):
-        fit_pot_gpd_tail_risk(
-            losses, n_bootstrap=0, n_full_sample_bootstrap=0, **kwargs
-        )
+        options = {"n_bootstrap": 0, "n_full_sample_bootstrap": 0}
+        options.update(kwargs)
+        fit_pot_gpd_tail_risk(losses, **options)
