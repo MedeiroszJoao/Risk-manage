@@ -18,7 +18,7 @@
 | ID | Area | Confirmed observation | Required treatment |
 |---|---|---|---|
 | VAL-01 | `validation._probability` | Converts strings and booleans with `float()`; e.g. `"0.99"` and `True` are accepted as confidence levels. | Reject booleans and non-numeric types before conversion. |
-| VAL-02 | `validation._one_dimensional_numeric` | Accepts NumPy boolean dtype as numeric because dtype kind `b` is allowed. | Reject boolean arrays; preserve NaN/inf as explicit missing/non-finite observations for caller-specific handling. |
+| VAL-02 | Numeric input boundaries | NumPy can promote mixed `[True, 0.5]` lists to floating dtype before dtype validation, silently turning a boolean into a measurement. Similar coercion existed in risk, capital, EVT and SSVI boundaries. | Detect booleans before numeric promotion; reject strings and object coercion. Preserve NaN/inf for explicit caller-specific handling. |
 | VAL-03 | `validation.backtest_var` | Missing HPL/VaR observations are correctly counted as operational outliers, but the same fabricated hit sequence is passed to Kupiec and Christoffersen. | Separate operational exception accounting from statistical inference. Inferential populations must contain observed, matched HPL/VaR pairs only; Christoffersen transitions must not bridge missing observations. |
 | VAL-04 | `validation.rfet_diagnostic` | Invalid dates and missing factor identifiers are dropped without reporting the number or proportion excluded. | Retain exclusion counts and data-quality diagnostics; never let invalid rows disappear silently. |
 | CAP-01 | `capital.select_reduced_factor_set` | Factor selection and the reported 60-day coverage window overlap the same input sample. | Keep the current statistic explicitly descriptive/in-sample; build a chronologically separated selection/evaluation design before calling it OOS. |
@@ -37,7 +37,7 @@
 ### VAL-01 / VAL-02 — strict input contracts
 
 - `_probability` now accepts numeric scalar types only and explicitly rejects booleans and strings.
-- `_one_dimensional_numeric` now rejects boolean arrays rather than treating booleans as measurements.
+- `_one_dimensional_numeric` now rejects boolean arrays and mixed boolean/numeric lists before NumPy can promote booleans to floats.
 - `_binary_sequence` now rejects boolean sequences; exception indicators must be numeric exact 0/1 values.
 
 ### VAL-03 — separate operational counts from inferential samples
@@ -47,13 +47,14 @@
 - Christoffersen now uses only adjacent finite, matched pairs. A missing observation breaks the transition chain; the implementation does not bridge across it.
 - Outputs identify the population used by each statistical test.
 - New regression tests cover missing-data accounting, transition breaks, boolean/string inputs and confidence validation.
+- The same pre-promotion boolean guard was added to risk, capital, EVT and SSVI numeric-array boundaries.
 
 ### EVT-02 — strict POT-GPD contracts
 
 - Loss samples must be one-dimensional finite numeric arrays; booleans, strings and object coercion are rejected.
 - Confidence levels and threshold quantiles must be numeric vectors with values strictly inside (0.5, 1).
 - Minimum exceedance count, bootstrap counts and seed must be strict integers; booleans and fractional values are rejected.
-- Added regression tests for invalid data and scalar types.
+- Added regression tests for invalid data and scalar types, including mixed boolean/numeric inputs.
 
 **Important limitation:** the asymptotic chi-square reference distributions still require a power/sample-size study and careful interpretation for rare exceptions. These changes correct population construction; they do not establish forecast adequacy or regulatory backtesting.
 
@@ -101,3 +102,16 @@
 ## Current non-claims
 
 Risk-manage is a quantitative market-risk research laboratory. It is not a bank trading-risk system, production pricing library, approved internal model or complete FRTB IMA capital implementation. There is no bank APL, actual bank desk history, full regulatory RFET evidence or complete MAR33 validation in this repository.
+
+
+## Verification after first remediation pass
+
+**Commit tested:** `64d7dd2c7058487a8f94bd5b837282ab4f0d08a3`  
+**GitHub Actions run:** [risk-engine-ci #477](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45920629074)  
+**Result:** successful on Python 3.11 and 3.12.
+
+- Python 3.11: 245 tests passed in 35.67 seconds; Ruff passed; deterministic case passed; all configured Heston benchmark, calibration, Greeks, delta-hedging, randomized-QMC, uncertainty and EVT experiment steps completed successfully.
+- Python 3.12: test suite and Ruff passed; deterministic case and configured Heston experiment steps completed successfully.
+- Live EIA ingestion and integrated FRED/EIA four-desk workflow also completed successfully on the same source revision: [EIA run](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45920629066).
+
+These results verify the tested software paths and reproducibility of the configured runs. They do not establish market calibration, empirical validation of real trading positions, APL/PLA eligibility or regulatory approval.
