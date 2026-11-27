@@ -359,14 +359,27 @@ def rfet_diagnostic(evidence_ledger: pd.DataFrame, lookback_days: int = 365):
         raise ValueError("lookback_days must be a positive integer")
 
     data = evidence_ledger.copy()
+    input_rows = int(len(data))
     data["date"] = pd.to_datetime(data["date"], errors="coerce", utc=True)
-    data = data.dropna(subset=["date", "factor_id"])
+    invalid_date = data["date"].isna()
+    missing_factor = (
+        data["factor_id"].isna()
+        | data["factor_id"].astype("string").str.strip().eq("").fillna(True)
+    )
+    invalid_date_rows = int(invalid_date.sum())
+    missing_factor_id_rows = int(missing_factor.sum())
+    excluded_rows = int((invalid_date | missing_factor).sum())
+    data = data.loc[~(invalid_date | missing_factor)].copy()
     if data.empty:
         return {
             "status": "not_evidenced",
-            "reason": "no rows with valid dates and factor identifiers",
+            "reason": "no rows with valid dates and non-empty factor identifiers",
             "factors": {},
             "regulatory_status": "not_assessed",
+            "input_rows": input_rows,
+            "invalid_date_rows": invalid_date_rows,
+            "missing_factor_id_rows": missing_factor_id_rows,
+            "excluded_rows": excluded_rows,
         }
 
     latest = data["date"].max()
@@ -433,6 +446,10 @@ def rfet_diagnostic(evidence_ledger: pd.DataFrame, lookback_days: int = 365):
     return {
         "status": "independent_review_required",
         "regulatory_status": "not_assessed",
+        "input_rows": input_rows,
+        "invalid_date_rows": invalid_date_rows,
+        "missing_factor_id_rows": missing_factor_id_rows,
+        "excluded_rows": excluded_rows,
         "lookback_days": int(lookback_days),
         "eligible_evidence_types": sorted(direct_types | {third_party_type}),
         "factors": results,
