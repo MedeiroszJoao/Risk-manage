@@ -181,3 +181,10 @@ def test_pla_does_not_silently_drop_missing_rows():
     assert result["zone"] == "not_classifiable"
     assert result["missing_hpl_observations"] == 1
     assert result["spearman"] is None
+
+
+def test_pla_constant_input_is_not_classified_without_scipy_warning():
+    result = pla_test(np.ones(250), np.arange(250))
+    assert result["status"] == "undefined_spearman"
+    assert result["zone"] == "not_classifiable"
+    assert result["spearman"] is None

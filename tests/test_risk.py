@@ -126,3 +126,18 @@ def test_stress_window_rejects_window_shorter_than_es_horizon():
     with pytest.raises(ValueError, match="at least 11"):
         select_stress_window({"desk": np.arange(20, dtype=float)}, window_days=10)
 
+
+
+def test_ten_day_loss_horizon_rejects_fractional_and_boolean_inputs():
+    from riskmanage.risk import _ten_day_losses
+
+    with pytest.raises(ValueError, match="horizon must be an integer"):
+        _ten_day_losses(np.arange(1.0, 25.0), horizon=10.5)
+    with pytest.raises(ValueError, match="horizon must be an integer"):
+        _ten_day_losses(np.arange(1.0, 25.0), horizon=True)
+
+
+def test_liquidity_adjusted_es_requires_ten_day_base_horizon():
+    factors = {"equity": np.random.default_rng(91).normal(size=300)}
+    with pytest.raises(ValueError, match="fixed 10-day base horizon"):
+        liquidity_adjusted_es(factors, {"equity": 10}, base_horizon=5)

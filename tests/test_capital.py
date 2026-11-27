@@ -110,3 +110,55 @@ def test_ima_aggregation_is_never_labelled_as_regulatory_capital():
     assert result["imcc"] is None
     assert "credit_spread" in result["missing_regulatory_risk_classes"]
     assert result["regulatory_requirements_not_evidenced"]
+
+
+@pytest.mark.parametrize(
+    "stress",
+    [
+        {"start_index": 0.9, "end_index": 249, "window_days": 250},
+        {"start_index": 0, "end_index": 249.9, "window_days": 250},
+        {"start_index": 0, "end_index": 249, "window_days": 250.9},
+        {"start_index": True, "end_index": 249, "window_days": 250},
+    ],
+)
+def test_ima_research_aggregation_rejects_non_integer_stress_metadata(stress):
+    rng = np.random.default_rng(31)
+    factors = {"equity": rng.normal(0, 1, 500)}
+    with pytest.raises(ValueError, match="integer"):
+        build_ima_capital(factors, stress, {"equity": "equity"})
+
+
+def test_reduced_factor_selection_rejects_boolean_window_values():
+    rng = np.random.default_rng(32)
+    factors = {"equity": rng.normal(0, 1, 400)}
+    with pytest.raises(ValueError, match="estimation_window must be an integer"):
+        select_reduced_factor_set(factors, estimation_window=True)
+    with pytest.raises(ValueError, match="validation_days must be an integer"):
+        select_reduced_factor_set(factors, validation_days=True)
+
+
+def test_imcc_uses_fixed_basel_weight():
+    with pytest.raises(ValueError, match="fixed rho = 0.5"):
+        calculate_imcc(
+            120, 80, 100,
+            {
+                "equity": {"full_current": 60, "reduced_current": 40, "reduced_stress": 50},
+                "rates": {"full_current": 60, "reduced_current": 40, "reduced_stress": 50},
+            },
+            rho=0.6,
+        )
+
+
+def test_nmrf_uses_fixed_basel_weight():
+    with pytest.raises(ValueError, match="fixed rho = 0.6"):
+        aggregate_nmrf_ses(
+            {"credit": 3.0}, {"credit": "credit_idio"}, rho=0.5
+        )
+
+
+def test_ima_rejects_unknown_risk_class_mapping():
+    rng = np.random.default_rng(33)
+    factors = {"equity": rng.normal(0, 1, 500)}
+    stress = select_stress_window(factors, window_days=250)
+    with pytest.raises(ValueError, match="unsupported regulatory risk class"):
+        build_ima_capital(factors, stress, {"equity": "misc"})

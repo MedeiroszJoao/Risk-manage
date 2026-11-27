@@ -7,6 +7,35 @@ from .risk import _ten_day_losses, historical_var_es
 
 MIN_CURRENT_OBSERVATIONS = 250
 REDUCED_SET_VALIDATION_DAYS = 60
+BASEL_IMCC_RHO = 0.5
+BASEL_NMRF_RHO = 0.6
+
+
+def _strict_integer(value, name: str) -> int:
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
+        raise ValueError(f"{name} must be an integer")
+    return int(value)
+
+
+def _normalize_risk_class(value: str) -> str:
+    aliases = {
+        "rates": "interest_rate",
+        "interest_rate": "interest_rate",
+        "interest_rates": "interest_rate",
+        "equity": "equity",
+        "fx": "foreign_exchange",
+        "foreign_exchange": "foreign_exchange",
+        "commodities": "commodity",
+        "commodity": "commodity",
+        "credit": "credit_spread",
+        "credit_spread": "credit_spread",
+    }
+    if not isinstance(value, str):
+        raise ValueError("risk-class mapping values must be strings")
+    key = value.strip().lower()
+    if key not in aliases:
+        raise ValueError(f"unsupported regulatory risk class: {value!r}")
+    return aliases[key]
 
 
 def _align_factor_losses(factor_losses):
@@ -149,9 +178,11 @@ def select_reduced_factor_set(
     c = _confidence_level(confidence)
     if not 0.0 < target_explained <= 1.0:
         raise ValueError("target_explained must be in (0, 1]")
-    if not isinstance(estimation_window, (int, np.integer)) or estimation_window < 20:
+    estimation_window = _strict_integer(estimation_window, "estimation_window")
+    validation_days = _strict_integer(validation_days, "validation_days")
+    if estimation_window < 20:
         raise ValueError("estimation_window must be an integer of at least 20")
-    if not isinstance(validation_days, (int, np.integer)) or validation_days < 1:
+    if validation_days < 1:
         raise ValueError("validation_days must be a positive integer")
     n = len(next(iter(factors.values())))
     if n < estimation_window:
@@ -227,8 +258,8 @@ def calculate_imcc(
     if any(not np.isfinite(value) or value <= 0.0 for value in values):
         raise ValueError("ES inputs must be positive and finite")
     rho_value = float(rho)
-    if not np.isfinite(rho_value) or not 0.0 <= rho_value <= 1.0:
-        raise ValueError("rho must be finite and in [0, 1]")
+    if not np.isfinite(rho_value) or not np.isclose(rho_value, BASEL_IMCC_RHO, rtol=0.0, atol=1e-12):
+        raise ValueError("Basel IMCC aggregation uses fixed rho = 0.5")
     if not class_components:
         raise ValueError("class_components cannot be empty")
 
@@ -267,8 +298,8 @@ def aggregate_nmrf_ses(
     if set(charges_by_factor) != set(factor_groups):
         raise ValueError("every NMRF charge needs a group")
     rho_value = float(rho)
-    if not np.isfinite(rho_value) or not 0.0 <= rho_value <= 1.0:
-        raise ValueError("rho must be finite and in [0, 1]")
+    if not np.isfinite(rho_value) or not np.isclose(rho_value, BASEL_NMRF_RHO, rtol=0.0, atol=1e-12):
+        raise ValueError("Basel NMRF aggregation uses fixed rho = 0.6")
     try:
         charges = {key: float(value) for key, value in charges_by_factor.items()}
     except (TypeError, ValueError) as exc:
@@ -309,6 +340,10 @@ def build_ima_capital(
     c = _confidence_level(confidence)
     if set(class_mapping) != set(factors):
         raise ValueError("each factor must map to one risk class")
+    normalized_class_mapping = {
+        factor: _normalize_risk_class(risk_class)
+        for factor, risk_class in class_mapping.items()
+    }
     n = len(next(iter(factors.values())))
     required = MIN_CURRENT_OBSERVATIONS + REDUCED_SET_VALIDATION_DAYS - 1
     if n < required:
@@ -318,10 +353,10 @@ def build_ima_capital(
         )
 
     try:
-        start = int(stress_window["start_index"])
-        end_inclusive = int(stress_window["end_index"])
-        declared_window = int(stress_window["window_days"])
-    except (KeyError, TypeError, ValueError) as exc:
+        start = _strict_integer(stress_window["start_index"], "stress_window.start_index")
+        end_inclusive = _strict_integer(stress_window["end_index"], "stress_window.end_index")
+        declared_window = _strict_integer(stress_window["window_days"], "stress_window.window_days")
+    except KeyError as exc:
         raise ValueError("stress_window must include start_index, end_index and window_days") from exc
     if declared_window != MIN_CURRENT_OBSERVATIONS:
         raise ValueError("research stress window must contain exactly 250 observations")
@@ -346,10 +381,10 @@ def build_ima_capital(
     reduced_stress = _portfolio_es(stressed, selected, c)
 
     classes = {}
-    all_classes = sorted(set(class_mapping.values()))
+    all_classes = sorted(set(normalized_class_mapping.values()))
     missing_selected_classes = []
     for risk_class in all_classes:
-        all_names = [name for name, mapped_class in class_mapping.items() if mapped_class == risk_class]
+        all_names = [name for name, mapped_class in normalized_class_mapping.items() if mapped_class == risk_class]
         selected_names = [name for name in all_names if name in selected]
         if not selected_names:
             missing_selected_classes.append(risk_class)
@@ -360,24 +395,8 @@ def build_ima_capital(
             "reduced_stress": _portfolio_es(stressed, selected_names, c),
         }
 
-    # Basel MAR33.14 names five broad regulatory classes. The current research
-    # factor map uses aliases for four of them and has no credit-spread class.
-    class_aliases = {
-        "rates": "interest_rate",
-        "interest_rate": "interest_rate",
-        "interest_rates": "interest_rate",
-        "equity": "equity",
-        "fx": "foreign_exchange",
-        "foreign_exchange": "foreign_exchange",
-        "commodities": "commodity",
-        "commodity": "commodity",
-        "credit": "credit_spread",
-        "credit_spread": "credit_spread",
-    }
-    mapped_regulatory_classes = {
-        class_aliases.get(str(value).lower(), str(value).lower())
-        for value in class_mapping.values()
-    }
+    # MAR33.14 requires all five broad regulatory risk classes.
+    mapped_regulatory_classes = set(normalized_class_mapping.values())
     required_regulatory_classes = {
         "interest_rate", "equity", "foreign_exchange", "commodity", "credit_spread"
     }

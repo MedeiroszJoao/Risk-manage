@@ -159,7 +159,6 @@ def backtest_var(
     exceptions = (~matched) | (matched & (losses > v))
     exception_sequence = exceptions.astype(np.int8)
     count = int(exception_sequence.sum())
-    expected = n * (1.0 - c)
 
     threshold_count = None
     threshold_limit = None
@@ -257,8 +256,18 @@ def pla_test(hpl, rtpl, window: int = 250):
             "reason": "PLA requires 250 aligned finite HPL/RTPL pairs; missing rows are not dropped",
         }
 
-    rho = float(spearmanr(h, r).statistic)
     ks = float(ks_2samp(h, r, method="auto").statistic)
+    if np.ptp(h) == 0.0 or np.ptp(r) == 0.0:
+        return {
+            "status": "undefined_spearman",
+            "zone": "not_classifiable",
+            "observations": int(window),
+            "spearman": None,
+            "ks_distance": ks,
+            "reason": "Spearman correlation is undefined for a constant/degenerate series",
+        }
+
+    rho = float(spearmanr(h, r).statistic)
     if not np.isfinite(rho):
         return {
             "status": "undefined_spearman",

@@ -89,6 +89,8 @@ def rolling_historical_var(losses, window=250, confidence=0.99):
 
 def _ten_day_losses(daily_losses, horizon=10):
     x = _finite_vector(daily_losses, "daily losses")
+    if not isinstance(horizon, (int, np.integer)) or isinstance(horizon, (bool, np.bool_)):
+        raise ValueError("horizon must be an integer")
     if horizon < 1 or len(x) < horizon:
         raise ValueError("insufficient observations for requested horizon")
     return np.convolve(x, np.ones(horizon), mode="valid")
@@ -102,6 +104,8 @@ def liquidity_adjusted_es(
 ):
     if not factor_losses:
         raise ValueError("factor loss mapping cannot be empty")
+    if base_horizon != 10 or isinstance(base_horizon, (bool, np.bool_)):
+        raise ValueError("the Basel-style liquidity adjustment uses a fixed 10-day base horizon")
     if set(factor_losses) != set(liquidity_horizons):
         raise ValueError("each factor must have one liquidity horizon")
     invalid = {
