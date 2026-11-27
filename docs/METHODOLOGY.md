@@ -40,7 +40,7 @@ An exception occurs when one-day HPL loss exceeds the forecast VaR. The report i
 - Christoffersen first-order independence likelihood-ratio test.
 - 99% exception zones and multipliers for a 250-observation window: Green 0–4; Amber 5–9; Red 10 or more. Multipliers: 1.50 for 0–4, then 1.70 / 1.76 / 1.83 / 1.88 / 1.92 for 5–9, and 2.00 for 10 or more.
 
-The desk report runs both 97.5% and 99%. It is explicitly **HPL-only** because the project has no Actual P&L or bank valuation adjustments. It is not a complete regulatory backtest.
+The desk report runs both 97.5% and 99%. It is explicitly **HPL-only** because the project has no Actual P&L (APL), desk-level valuation adjustments or bank data. Basel MAR32 requires backtesting against both actual and hypothetical P&L. This output is a research diagnostic, not a regulatory backtest.
 
 ## 3. P&L attribution
 
@@ -53,7 +53,7 @@ The implemented Basel-style PLA zones are:
 - Red: Spearman < 0.70 or KS > 0.12.
 - Amber: all intermediate cases.
 
-The code reports an insufficient-sample state unless 250 paired observations exist.
+The code reports an insufficient-sample state unless 250 paired observations exist. If Spearman is undefined (for example, because HPL or RTPL is constant), it returns not_classifiable and no PLA zone; it does not replace an undefined correlation with zero.
 
 ## 4. Instrument valuation and RTPL
 
@@ -95,7 +95,7 @@ IMCC=\rho\,IMCC(C)+(1-\rho)\sum_iIMCC(C_i)
 IMCC(C)=ES_{R,S}\max\left(\frac{ES_{F,C}}{ES_{R,C}},1\right).
 \]
 
-Each partial risk class is calculated separately using its full-current, reduced-current and reduced-stress ES. All figures are research outputs with synthetic / public proxy inputs, not regulatory capital.
+Each partial risk class is calculated separately using its full-current, reduced-current and reduced-stress ES. All figures are research outputs with synthetic / public proxy inputs, not regulatory capital. The code now fails closed unless the current 250-observation sample plus the 60-endpoint descriptive window is available, and it refuses to emit an IMCC aggregate if a mapped risk class has no selected factor. Even when computed, the result is a formula primitive only: it does not implement the complete MAR33 factor mapping, stress calibration, risk-class aggregation, factor-specific liquidity horizons, NMRF stress scenarios or governance.
 
 ## 8. RFET and NMRF
 
@@ -191,3 +191,12 @@ In addition to empirical inverse-CDF VaR and fractional-boundary ES, the hedge P
 Thresholds are presented as a stability grid; no automatic choice is made. The usual KS p-value is omitted because parameters are estimated from the same exceedances. If fitted shape \(\xi\geq1\), the fitted GPD has no finite mean and ES is reported as undefined/infinite. The bootstrap is conditional on the observed threshold and exceedance count and does not cover threshold selection, serial clustering, structural breaks or model risk.
 
 See [TAIL_RISK_EVT.md](TAIL_RISK_EVT.md) for the derivation and reproducible Heston hedge tail-risk benchmark.
+
+
+## Regulatory boundary: RFET, liquidity horizons and APL
+
+The RFET module calculates only a numerical evidence-count screen. A count does not establish that a row is a valid real-price observation or that the factor mapping is representative. Third-party observations require vendor audit information and documented counts/dates and identifier mapping. The output is therefore a candidate for independent review or not evidenced; it never issues a regulatory modellability pass.
+
+The 10/20/40/60/120-day liquidity-horizon scaling shape is implemented as a research primitive. Production FRTB mapping is instrument/risk-factor-specific under MAR33; the generic factor labels and manually supplied horizon values in this project do not implement that mapping.
+
+The Basel desk backtest is not complete without Actual P&L. Public daily closes and hypothetical HPL cannot stand in for the bank's APL. See [MATURITY_REGISTER.md](MATURITY_REGISTER.md).

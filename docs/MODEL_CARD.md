@@ -31,3 +31,12 @@ HPL / RTPL, VaR, ES, backtesting diagnostics, PLA zones, liquidity-adjusted ES, 
 - Rates valuation is a simple Treasury-yield proxy, not production multi-curve swap pricing.
 - No DRC, SA, CVA, XVA, intraday risk, valuation adjustments, bank-specific mapping or supervisor approval.
 - Passing automated tests does not establish predictive performance or regulatory compliance.
+
+
+## Evidence state
+
+This is implemented research software with unit and numerical tests. Selected numerical components have analytic-limit or controlled-simulation evidence. Empirical market validation on independent option quote panels or real desk portfolios has not been completed. The HPL / RTPL books are hypothetical; there is no APL.
+
+The reduced-factor coverage currently reported is overlapping in-sample description, not holdout validation. RFET returns only an evidence-count screen for independent review, never a modellability pass. IMCC / NMRF outputs are research formula primitives, not regulatory capital.
+
+See [MATURITY_REGISTER.md](MATURITY_REGISTER.md) for the component-by-component state and acceptance gaps.

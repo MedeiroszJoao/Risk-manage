@@ -14,7 +14,7 @@ The equity-options desk intentionally contains short at-the-money calls and puts
 | Mean absolute HPL − RTPL residual | USD 5.63m | USD 0.58m |
 | Mean absolute residual reduction | — | **89.7%** |
 
-The same delta-only model records **3 VaR exceptions in 250 observations at 99%**, which is in the green backtesting zone. This is the point of the case: a low exception count does not prove that the model explains the desk's economic P&L. Backtesting and PLA answer different questions.
+The same delta-only model records **3 HPL exceptions in 250 observations at 99%**, which is inside the numerical green-zone threshold used by this research diagnostic. This is not a Basel regulatory backtest because the case has no Actual P&L. This is the point of the case: a low exception count does not prove that the model explains the desk's economic P&L. Backtesting and PLA answer different questions.
 
 ## Desks and model-risk hypotheses
 
@@ -45,9 +45,9 @@ For the most recent 250 aligned observations:
 The reference synthetic run also produces:
 - 97.5% historical ES and 10-day liquidity-adjusted ES across 10/20/40/60/120-day liquidity horizons.
 - A selected 250-day high-tail stress window.
-- Reduced-factor selection tested against the latest 60 business-day endpoints using a 250-day estimation window, with average reduced/full ES coverage required to be at least 75%.
+- Reduced-factor selection accompanied by a latest-60-endpoint, 250-observation overlapping in-sample ES ratio diagnostic. It is not a holdout or out-of-sample validation; the 75% threshold is a research heuristic.
 - Constrained / unconstrained IMCC aggregation with rho = 0.5.
-- RFET evidence status, deliberately not certified from closing-price-only evidence.
+- RFET evidence-count screen, deliberately not classified as regulatory modellability.
 
 The generated JSON / CSV files contain the exact run outputs. The stress and capital figures remain illustrative because the source history is synthetic and does not extend back to 2007.
 
@@ -57,3 +57,8 @@ The generated JSON / CSV files contain the exact run outputs. The stress and cap
 - Public close series are not automatically qualifying RFET observations.
 - The public S&P 500 daily series and synthetic reference history do not provide the full Basel stress history back to 2007.
 - This is not a complete IMA implementation, regulatory capital number, or production valuation system.
+
+
+## Evidence status
+
+All results in this case study are generated from a synthetic fixture and hypothetical books. They are useful for checking implementation behavior and demonstrating a falsifiable research setup, not for claiming observed trading performance. No independent market option chain, actual desk positions or APL are present. The reduced-factor ratio is in-sample; the capital aggregation is non-regulatory.
