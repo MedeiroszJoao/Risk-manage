@@ -10,19 +10,23 @@ from scipy.stats import chi2, ks_2samp, spearmanr
 
 
 def _probability(confidence: float) -> float:
-    try:
-        value = float(confidence)
-    except (TypeError, ValueError) as exc:
-        raise ValueError("confidence must be a finite number in (0.5, 1)") from exc
+    """Validate a probability without accepting strings or boolean coercion."""
+    if isinstance(confidence, (bool, np.bool_)) or not isinstance(
+        confidence, (int, float, np.integer, np.floating)
+    ):
+        raise ValueError("confidence must be a finite numeric value in (0.5, 1)")
+    value = float(confidence)
     if not np.isfinite(value) or not 0.5 < value < 1.0:
-        raise ValueError("confidence must be a finite number in (0.5, 1)")
+        raise ValueError("confidence must be a finite numeric value in (0.5, 1)")
     return value
 
 
 def _one_dimensional_numeric(values, name: str) -> np.ndarray:
     raw = np.asarray(values)
-    if raw.ndim != 1 or raw.dtype.kind not in "biuf":
-        raise ValueError(f"{name} must be a one-dimensional numeric array")
+    if raw.ndim != 1 or raw.dtype.kind not in "iuf":
+        raise ValueError(
+            f"{name} must be a one-dimensional numeric array; booleans and coercion are not allowed"
+        )
     return raw.astype(float, copy=False)
 
 
@@ -30,8 +34,10 @@ def _binary_sequence(values) -> np.ndarray:
     raw = np.asarray(values)
     if raw.ndim != 1 or raw.size < 3:
         raise ValueError("exceptions must be a 0/1 vector with at least 3 observations")
-    if raw.dtype.kind not in "biuf":
-        raise ValueError("exceptions must contain numeric 0/1 values; coercion is not allowed")
+    if raw.dtype.kind not in "iuf":
+        raise ValueError(
+            "exceptions must contain numeric 0/1 values; booleans and coercion are not allowed"
+        )
     numeric = raw.astype(float, copy=False)
     if not np.isfinite(numeric).all() or not np.isin(numeric, (0.0, 1.0)).all():
         raise ValueError("exceptions must contain only exact 0/1 values")
@@ -71,28 +77,24 @@ def kupiec_pof(exceptions: int, observations: int, confidence: float = 0.99):
     }
 
 
-def christoffersen_independence(exception_sequence):
-    """Christoffersen first-order Markov independence diagnostic.
-
-    If either previous-state transition row is absent, the test is not
-    estimable from the sample and no likelihood-ratio statistic is returned.
-    """
-    x = _binary_sequence(exception_sequence)
-    previous, following = x[:-1], x[1:]
+def _christoffersen_from_pairs(previous, following):
+    """Estimate first-order independence from explicitly valid adjacent pairs."""
+    previous = np.asarray(previous, dtype=np.int8)
+    following = np.asarray(following, dtype=np.int8)
     n00 = int(np.sum((previous == 0) & (following == 0)))
     n01 = int(np.sum((previous == 0) & (following == 1)))
     n10 = int(np.sum((previous == 1) & (following == 0)))
     n11 = int(np.sum((previous == 1) & (following == 1)))
     den0, den1 = n00 + n01, n10 + n11
     transitions = {"n00": n00, "n01": n01, "n10": n10, "n11": n11}
-
-    if den0 == 0 or den1 == 0:
+    if len(previous) < 2 or den0 == 0 or den1 == 0:
         return {
             "status": "not_estimable",
-            "reason": "both previous-state rows (0 and 1) must be observed",
+            "reason": "at least two valid transitions and both previous-state rows are required",
             "lr_statistic": None,
             "p_value": None,
             "transitions": transitions,
+            "valid_transitions": int(len(previous)),
             "test": "christoffersen_first_order_independence",
         }
 
@@ -112,9 +114,16 @@ def christoffersen_independence(exception_sequence):
         "lr_statistic": float(lr),
         "p_value": float(chi2.sf(lr, 1)),
         "transitions": transitions,
+        "valid_transitions": int(len(previous)),
         "test": "christoffersen_first_order_independence",
         "reference_distribution": "chi_square_1_asymptotic",
     }
+
+
+def christoffersen_independence(exception_sequence):
+    """Christoffersen first-order Markov independence diagnostic."""
+    x = _binary_sequence(exception_sequence)
+    return _christoffersen_from_pairs(x[:-1], x[1:])
 
 
 def backtest_var(
@@ -159,6 +168,26 @@ def backtest_var(
     exceptions = (~matched) | (matched & (losses > v))
     exception_sequence = exceptions.astype(np.int8)
     count = int(exception_sequence.sum())
+    matched_count = int(matched.sum())
+    matched_exception_count = int((matched & (losses > v)).sum())
+
+    # Inferential tests use only observed, matched HPL/VaR pairs. Missing data
+    # remain exceptions for the operational desk count above, but are not
+    # fabricated as realised tail events in Kupiec/Christoffersen likelihoods.
+    if matched_count >= 20:
+        kupiec = kupiec_pof(matched_exception_count, matched_count, c)
+    else:
+        kupiec = {
+            "status": "not_estimable",
+            "reason": "fewer than 20 finite, matched HPL/VaR observations",
+            "exceptions": matched_exception_count,
+            "observations": matched_count,
+            "test": "kupiec_unconditional_coverage",
+        }
+    adjacent_matched = matched[:-1] & matched[1:]
+    valid_previous = exception_sequence[:-1][adjacent_matched]
+    valid_following = exception_sequence[1:][adjacent_matched]
+    christoffersen = _christoffersen_from_pairs(valid_previous, valid_following)
 
     threshold_count = None
     threshold_limit = None
@@ -208,8 +237,11 @@ def backtest_var(
         "desk_threshold_exceptions": threshold_count,
         "desk_threshold_limit": threshold_limit,
         "desk_threshold_exceeded_on_hpl_alone": threshold_exceeded,
-        "kupiec": kupiec_pof(count, n, c),
-        "christoffersen": christoffersen_independence(exception_sequence),
+        "kupiec": kupiec,
+        "kupiec_inference_population": "finite_matched_HPL_VaR_pairs_only",
+        "kupiec_matched_exceptions": matched_exception_count,
+        "christoffersen": christoffersen,
+        "christoffersen_inference_population": "adjacent_finite_matched_HPL_VaR_pairs_only",
         "exception_indices": np.flatnonzero(exceptions).tolist(),
     }
     if dates is not None:
