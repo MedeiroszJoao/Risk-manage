@@ -3,7 +3,9 @@
 **Audit date:** 2026-11-27  
 **Repository:** `MedeiroszJoao/Risk-manage`  
 **Branch audited:** `portfolio/frtb-ima-risk-engine`  
-**Audited code revision:** `876662f71195f8d047635ff8619eb8c03647fe43`  
+**Source review revision:** `876662f71195f8d047635ff8619eb8c03647fe43`  
+**Test follow-up revision:** `840a9f91badb8a2501cdfc1936a800934480cac5`  
+**Latest validation alignment revision:** `e09877c3cac1816b21f2c74ccd30a27e1ffe0646` (CI pending)  
 **Pull request:** [#1](https://github.com/MedeiroszJoao/Risk-manage/pull/1)  
 **Purpose:** establish a current, evidence-based remediation baseline under the Project Excellence Directive.  
 **Change policy:** this audit is documentation only. No quantitative implementation was changed in this audit pass.
@@ -46,7 +48,7 @@ This is a structured technical audit pass, not a claim that every line of every 
 
 ### 2.1 Evidence from CI
 
-Latest inspected run: [GitHub Actions run 45922623187](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45922623187).
+Latest completed run before the pandas-index alignment change: [GitHub Actions run 45923474678](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45923474678). The follow-up alignment change is on the branch; its CI result has not yet been observed.
 
 | Check | Python 3.11 | Python 3.12 |
 |---|---:|---:|
@@ -105,7 +107,7 @@ Status labels:
 | `__init__.py` | Minimal package initializer | No material issue identified. Keep the public API intentional; avoid turning the package root into an uncontrolled export surface. |
 | `black76.py` | Black-76 price, vega and implied volatility | Analytic identities and finite-difference vega tests exist. Add independent library/reference-price comparisons, near-intrinsic and short-expiry conditioning tests, solver residual and convergence reporting. |
 | `calibration.py` | Heston quote representation and nonlinear calibration | Current recovery evidence is synthetic. Add identifiability/profile studies, multi-start stability, optimizer-failure accounting and a real dated option-chain experiment before calling it market-calibrated. |
-| `capital.py` | Reduced-factor selection, stress-window selection, IMCC and NMRF primitives | **The unconstrained IMCC floor is consistent with MAR33.6; add a regression case below 1 to cover the floor branch.** Factor ranking uses standalone ES rather than marginal contribution or dependence-aware selection; this is a research baseline, not an optimal selection method. The rolling reduced-set coverage explicitly overlaps the selection sample and is in-sample descriptive only. Stress-window selection is exploratory, not supervisory. |
+| `capital.py` | Reduced-factor selection, stress-window selection, IMCC and NMRF primitives | The global IMCC floor is consistent with MAR33.6; the class-level ratio is intentionally not floored under the separate partial-ES calculation. Follow-up tests now cover these distinctions. Factor ranking uses standalone ES rather than marginal contribution or dependence-aware selection; this is a research baseline, not an optimal selection method. The rolling reduced-set coverage overlaps the selection sample and is in-sample descriptive only. Stress-window selection is exploratory, not supervisory. |
 | `commodity.py` | WTI/Brent spot-proxy P&L and risk case | Good handling of negative WTI values and exact-date inner joins. Portfolio quantities remain hypothetical; spot proxies are not futures settlements. No curve, roll, basis, storage or convenience-yield risk. |
 | `data.py` | FRED/EIA panel validation, ingestion and merging | The panel uses business-day reindexing and forward-fill up to four rows. This requires per-series staleness and publication-calendar diagnostics; a common date index does not prove simultaneous information availability. No complete point-in-time/vintage reconstruction. |
 | `eia.py` | Official EIA petroleum bulk ZIP ingestion, parser and manifest | Strong raw snapshot/hash/provenance foundation. Archive hash identifies the downloaded snapshot, not historical vintages available at each past date. Spot observations must not be represented as futures settlement history. |
@@ -115,15 +117,15 @@ Status labels:
 | `hedging_uncertainty.py` | Propagates Heston calibration draws into hedge-risk distributions | Conditional on the bootstrap parameter generator, model form and scenario generator. Current defaults are exploratory; report MC error and failed fit counts, and compare alternative parameter/noise specifications. |
 | `heston.py` | Affine characteristic function, Lewis Fourier inversion, QE-M, full paths | Strong internal identities: normalization, conjugate symmetry, deterministic-variance limit, parity, bounds, martingale checks and Fourier/MC comparison. Those are valuable but mostly internal consistency checks. No independent Heston implementation is currently used as a formal oracle. Build branch-continuity diagnostics, quadrature truncation/tolerance convergence, time-step bias maps and independent reference comparisons. |
 | `nested_hedge_risk.py` | Two-way random-effects decomposition of calibration/scenario risk | Balanced-design recovery tests exist. Negative raw variance components are retained and truncation is reported, which is preferable to hiding them. Add unbalanced-design alternatives, finite-sample bias studies and sensitivity to dependence between calibration and scenario draws. |
-| `pnl.py` | Factor-based HPL/RTPL and desk P&L | These are modelled research P&Ls, not a bank's reported HPL/APL. The factor proxy and valuation approximations need independent repricing and reconciliation evidence. Do not present the outputs as actual desk P&L. |
+| `pnl.py` | Factor-based HPL/RTPL and desk P&L | These are modelled research P&Ls, not a bank's reported HPL/APL. The `full_greeks` label currently describes a diagonal second-order Taylor approximation: it omits mixed cross-gamma terms such as vanna. Rename the mode or implement and test the mixed derivatives before describing it as full Greeks. The factor proxy and valuation approximations need independent repricing and reconciliation evidence. |
 | `portfolio.py` | Position data class and default illustrative book | Default positions are hypothetical. The SEC N-PORT parser is not yet an end-to-end holdings-to-risk pipeline. Keep disclosed fund holdings, synthetic positions and hypothetical desk books explicitly distinct. |
 | `pricing.py` | Black–Scholes, Garman–Kohlhagen and zero-coupon bond helpers | Basic property tests exist. Document rate compounding, day-count, carry and dividend conventions; compare to an independent pricing implementation and add extreme moneyness/maturity cases. |
 | `qmc.py` | Randomized Sobol Heston simulation with Brownian bridge | Reproducibility and Fourier comparison exist. Eight scrambles and default (2^{10}) Sobol power are exploratory. Add RMSE-versus-cost curves over independent scramble counts and dimensions; report uncertainty across scrambles. |
-| `risk.py` | Historical VaR/ES, rolling VaR, 10-observation losses, liquidity adjustment and stress window | Fractional boundary-mass ES and tie handling are explicit and tested. The module operates on arrays, not dated observations: it cannot itself enforce calendars, holidays, stale data or overlapping-return policy. Liquidity adjustment and stress-window selection require exact formula/source reconciliation and sensitivity tests. |
+| `risk.py` | Historical VaR/ES, rolling VaR, 10-observation losses, liquidity adjustment and stress window | Fractional boundary-mass ES and tie handling are explicit and tested. The module operates on arrays, not dated observations: it cannot itself enforce calendars, holidays, stale data or overlapping-return policy. Liquidity horizons are mapped to factors rather than individual positions/instruments, so maturity caps and position-level liquidity buckets are not represented. Liquidity adjustment and stress-window selection require exact formula/source reconciliation and sensitivity tests. |
 | `sec_nport.py` | Parser for selected SEC N-PORT dataset filings and hash-linked snapshots | Useful provenance work. Parser output is a disclosed fund-holdings snapshot, not transaction history or a bank trading book. No end-to-end instrument valuation, point-in-time market-data join or reconstructed daily portfolio P&L yet. |
 | `tail_risk.py` | POT-GPD MLE, threshold sensitivity, conditional and full-sample IID bootstrap | Threshold grid and IID bootstrap are useful. Both bootstrap routes assume independent observations; neither handles volatility clustering or block dependence. The full-sample bootstrap reselects the numerical threshold quantile, but does not resolve the choice of threshold quantile itself. Add block/stationary bootstrap, regime-conditioned diagnostics and chronological OOS tail scoring. |
 | `uncertainty.py` | Gaussian spread-derived quote bootstrap, profile likelihood and propagation | The model clearly records important conditionality and failed replicates. Main noise model assumes independent Gaussian quote errors; positive-price failures are rejected and reported. Profile likelihood uses an asymptotic (chi^2_1) cutoff. Compare uniform, Gaussian, dependent and heteroskedastic quote errors; study coverage and boundary effects. |
-| `validation.py` | Kupiec, Christoffersen, HPL backtest, PLA diagnostics and RFET ledger diagnostic | Input coercion, missing-row handling, date alignment and RFET assessment-date issues have been materially strengthened. Backtesting is explicitly HPL-only; APL remains absent. RFET counts supplied evidence metadata and cannot authenticate a real transaction/committed quote or grant eligibility. PLA diagnostics are not supervisory acceptance. |
+| `validation.py` | Kupiec, Christoffersen, HPL backtest, PLA diagnostics and RFET ledger diagnostic | RFET now requires an explicit assessment date and anchors eligibility windows to it. A new guard rejects pandas Series with mismatched, duplicate or non-increasing indexes (and rejects mixing indexed Series with unindexed arrays); CI for this follow-up is pending. Plain arrays still have a positional-alignment contract, and the module does not validate a venue-specific trading calendar. Backtesting is explicitly HPL-only; APL remains absent. RFET counts supplied evidence metadata and cannot authenticate a real transaction/committed quote or grant eligibility. PLA diagnostics are not supervisory acceptance. |
 | `volatility_surface.py` | SSVI power-law surface, sufficient-condition certificate and synthetic calibration | Tests correctly distinguish the sufficient parameter region from a universal arbitrage-free guarantee. Calibration evidence is synthetic. Need parameter identifiability, objective/weight sensitivity, contaminated/missing quotes, calendar/butterfly stress tests and real dated bid/ask chains. |
 
 ---
@@ -145,7 +147,7 @@ The suite has useful deterministic, edge-case, property-like and cross-method ch
 
 ### 5.2 Test gaps that materially affect claims
 
-1. **IMCC ratio below one:** absent; it misses the confirmed formula defect.
+1. **IMCC floor branch:** now covered by follow-up tests for portfolio ratio below one, equality, and class-level ratios below one; the earlier suspected global-floor defect was a false positive.
 2. **Independent Heston oracle:** Fourier and QE-M are different methods, but both are implemented in this repository. This is cross-method evidence, not an external reference.
 3. **Calibration identifiability:** synthetic parameter recovery is not proof that parameters are uniquely identified.
 4. **Empirical option quotes:** no dated real bid/ask option chain is present.
@@ -300,6 +302,8 @@ This is not a single overall grade. Maturity is dimension-specific.
 | SEC N-PORT | Parser implemented | Schema/units partially checked | Parsing tests | N/A | Public filed snapshots | SEC source fixture | Hash-linked snapshot |
 | Portfolio P&L | Implemented | Approximate factor mapping | Basic reconciliation | No statistical validation | Hypothetical positions | No independent repricing | Partial |
 
+The previous audit's class-level IMCC-floor and RFET-assessment-date P0 findings are resolved in the current branch. The global portfolio IMCC floor is required by MAR33.6 and is not a defect. The new pandas-index alignment guard is committed, but its CI result is pending.
+
 The above table intentionally avoids a 9/10 claim. A component may be mathematically useful without empirical evidence; empirical data presence does not by itself establish a valid model.
 
 ---
@@ -377,4 +381,4 @@ A correction is not complete until all applicable items below are satisfied:
 
 ---
 
-**Audit conclusion:** Risk-manage should be preserved and deepened. The current test suite is a real software-quality asset, but not a substitute for independent quantitative validation. The IMCC floor is consistent with MAR33.6; the next task is to test that branch explicitly, not to remove it. Beyond that, the largest gaps are external numerical benchmarks, dependence-aware statistical validation, point-in-time empirical data and a transparent distinction between simulated books, disclosed fund holdings and actual trading-desk evidence.
+**Audit conclusion:** Risk-manage should be preserved and deepened. The current test suite is a real software-quality asset, but not a substitute for independent quantitative validation. The global IMCC floor is consistent with MAR33.6; the next task is to finish validating the new time-index alignment guard and then deepen the position-level liquidity-horizon implementation. Beyond that, the largest gaps are external numerical benchmarks, dependence-aware statistical validation, point-in-time empirical data and a transparent distinction between simulated books, disclosed fund holdings and actual trading-desk evidence.
