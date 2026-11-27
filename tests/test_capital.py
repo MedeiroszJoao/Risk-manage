@@ -294,3 +294,31 @@ def test_imcc_portfolio_scaling_ratio_equal_to_one_is_unchanged():
     assert result["unconstrained"] == pytest.approx(120.0)
     assert result["class_components"]["equity"] == pytest.approx(20.0)
     assert result["imcc"] == pytest.approx(70.0)
+
+
+def test_imcc_applies_floor_to_portfolio_ratio_but_not_class_ratios():
+    result = calculate_imcc(
+        es_full_current=80.0,
+        es_reduced_current=100.0,
+        es_reduced_stress=120.0,
+        class_components={
+            "rates": {
+                "full_current": 30.0,
+                "reduced_current": 60.0,
+                "reduced_stress": 40.0,
+            },
+            "equity": {
+                "full_current": 50.0,
+                "reduced_current": 40.0,
+                "reduced_stress": 20.0,
+            },
+        },
+    )
+
+    # MAR33.6 floors the portfolio-wide ratio at one. MAR33.15's
+    # constrained partial risk-class terms retain their own ratios.
+    assert result["unconstrained"] == pytest.approx(120.0)
+    assert result["class_components"]["rates"] == pytest.approx(20.0)
+    assert result["class_components"]["equity"] == pytest.approx(25.0)
+    assert result["constrained_sum"] == pytest.approx(45.0)
+    assert result["imcc"] == pytest.approx(82.5)
