@@ -375,15 +375,6 @@ def rfet_diagnostic(
         raise ValueError("as_of_date must be a valid explicit assessment date")
     assessment_date = assessment_date.normalize()
 
-    required = {"date", "factor_id", "evidence_type", "verified"}
-    if not required.issubset(evidence_ledger.columns):
-        missing = sorted(required - set(evidence_ledger.columns))
-        return {
-            "status": "not_evidenced",
-            "reason": f"missing fields: {missing}",
-            "factors": {},
-            "regulatory_status": "not_assessed",
-        }
     if (
         not isinstance(lookback_days, (int, np.integer))
         or isinstance(lookback_days, (bool, np.bool_))
@@ -391,6 +382,17 @@ def rfet_diagnostic(
     ):
         raise ValueError("lookback_days must be a positive integer")
 
+    required = {"date", "factor_id", "evidence_type", "verified"}
+    if not required.issubset(evidence_ledger.columns):
+        missing = sorted(required - set(evidence_ledger.columns))
+        return {
+            "status": "not_evidenced",
+            "reason": f"missing fields: {missing}",
+            "factors": {},
+            "as_of_date": assessment_date.date().isoformat(),
+            "lookback_days": int(lookback_days),
+            "regulatory_status": "not_assessed",
+        }
     data = evidence_ledger.copy()
     input_rows = int(len(data))
     data["date"] = pd.to_datetime(data["date"], errors="coerce", utc=True)
