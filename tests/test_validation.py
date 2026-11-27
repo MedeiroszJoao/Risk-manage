@@ -429,6 +429,6 @@ def test_rfet_rejects_calibration_period_ending_more_than_one_month_before_asses
         rfet_diagnostic(
             pd.DataFrame(),
             as_of_date="2026-04-30",
-            calibration_period_start="2025-03-01",
+            calibration_period_start="2025-03-30",
             calibration_period_end="2026-03-29",
         )
