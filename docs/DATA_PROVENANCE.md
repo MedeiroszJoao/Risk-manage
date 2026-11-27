@@ -49,3 +49,27 @@ Public daily closes do not prove qualifying transaction or committed-quote evide
 ## Licensing
 
 Observe the FRED / source-provider terms for redistribution and derivative use. This repository does not claim ownership of underlying market observations.
+
+
+## SEC Form N-PORT disclosed fund holdings
+
+The repository includes a parser for the SEC's quarterly Form N-PORT flat-file data sets. The parser consumes the extracted `SUBMISSION`, `REGISTRANT`, `FUND_REPORTED_INFO`, `FUND_REPORTED_HOLDING` and `IDENTIFIERS` tables. It requires the caller to select one exact accession and, when the filing has multiple series rows, an exact series ID. It does not silently choose among amendments or merge unrelated series.
+
+Official sources:
+- SEC Form N-PORT Data Sets: https://www.sec.gov/data-research/sec-markets-data/form-n-port-data-sets
+- SEC filing data set README / schemas: https://www.sec.gov/files/dera/data/form-n-port-data-sets/readme.pdf
+- Test filing (iShares Core S&P 500 ETF, report date 2026-06-30, accession 0002071691-26-019760): https://www.sec.gov/Archives/edgar/data/1100663/000207169126019760/xslFormNPORT-P_X01/primary_doc.xml
+
+Run the parser after extracting one official quarterly N-PORT data set:
+
+```bash
+python scripts/parse_sec_nport.py \
+  --dataset-dir path/to/extracted_nport_quarter \
+  --accession 0002071691-26-019760 \
+  --series-id S000004310 \
+  --output-dir data/processed/sec_nport/ivv_2026-06-30
+```
+
+The output is a position-level CSV plus a manifest containing the selected accession, filing/report dates, fund/series metadata, SHA-256 hashes for each input table, selected holding count and SHA-256 for the normalized output. Local raw and processed data remain excluded from Git by `.gitignore`.
+
+**Interpretation boundary:** this produces a snapshot of positions disclosed by a registered fund, not a bank desk's actual positions, not a trade blotter, not daily position history and not Actual P&L. It does not generate market returns or a risk backtest by itself. Reconstructing historical P&L requires appropriately licensed instrument-level market data, corporate-action/contract handling, point-in-time identifiers, and subsequent portfolio snapshots. The exact accession matters because amendments are separate as-filed submissions. The SEC data sets are supplied by filers and may contain extraction errors; verify any material result against the original filing.

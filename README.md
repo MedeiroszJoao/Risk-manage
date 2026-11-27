@@ -19,7 +19,7 @@ The expanded sensitivity model reduces mean absolute residual by 89.7% in this d
 
 ## Implemented scope
 
-- **Data:** public FRED equity/FX/rates and EIA WTI/Brent spot ingestion with source metadata and hashes; deterministic synthetic fixtures for offline testing.
+- **Data:** public FRED equity/FX/rates and EIA WTI/Brent spot ingestion with source metadata and hashes; SEC N-PORT quarterly-data parser for dated, publicly disclosed fund-holdings snapshots; deterministic synthetic fixtures for offline testing.
 - **Hypothetical test books:** Equity Options, FX Options, Rates and Commodities. The commodity exposures are linear spot proxies, not listed futures.
 - **Pricing:** Black–Scholes, Garman–Kohlhagen, Black-76, power-law SSVI and Heston Fourier / QE-M research implementations.
 - **P&L:** close-to-close full-revaluation HPL and separately constructed sensitivity RTPL for positions static during each daily interval; constant-maturity positions are reset after each interval.
