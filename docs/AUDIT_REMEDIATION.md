@@ -27,6 +27,7 @@
 | HES-01 | `heston.py` | Existing tests cover characteristic-function identities, special limits, QE moments and Fourier/MC agreement. They do not yet establish a quantified error budget across quadrature, truncation, time discretisation and sampling. | Add independent reference values, convergence surfaces and separate error components. |
 | VOL-01 | `volatility_surface.py` | Synthetic SSVI parameter/price recovery and sufficient-region checks exist. | Add identifiability, noisy/bid-ask, stale/incomplete quote and temporal OOS studies using independently sourced option data. |
 | UNC-01 | `uncertainty.py` | Current bootstrap uncertainty is conditional on its chosen noise and resampling assumptions. | Quantify failed fits, compare noise models and separate parameter, model and numerical uncertainty. |
+| UNC-02 | `uncertainty.bootstrap_heston_calibration` | Simulated Gaussian quote mids were clipped with `np.maximum(mid, 1e-10)`, creating artificial probability mass at an arbitrary epsilon price and hiding invalid quote panels. | Reject the full replicate if any simulated mid is non-positive; count affected replicates/quotes and disclose the positive-panel conditioning. |
 | EVT-01 | `tail_risk.py` | Threshold grids and bootstrap diagnostics exist, but the financial-loss validation is not a chronological independent test with dependence-aware inference. | Add block/stationary bootstrap or declustering where justified, regime sensitivity and untouched OOS evaluation. |
 | EVT-02 | `tail_risk.fit_pot_gpd_tail_risk` | Coerced losses, confidence levels, thresholds and control parameters implicitly; booleans, strings and fractional replicate counts could enter the API or fail later inconsistently. | Reject invalid types at the boundary and validate integer controls explicitly. |
 | DATA-01 | `sec_nport.py` | Parser tests use a small selected subset from one filing. | Run against a complete official quarterly archive and reconcile all positions, identifiers, totals, amendments and source hashes. |
@@ -48,6 +49,16 @@
 - Outputs identify the population used by each statistical test.
 - New regression tests cover missing-data accounting, transition breaks, boolean/string inputs and confidence validation.
 - The same pre-promotion boolean guard was added to risk, capital, EVT and SSVI numeric-array boundaries.
+
+### UNC-02 — positive-price bootstrap integrity
+
+- Removed silent clipping of non-positive simulated quote mids.
+- A bootstrap replicate is rejected if any simulated mid is non-finite or non-positive.
+- Outputs report rejected replicate and quote counts, the rejection policy and the positive-panel conditioning boundary.
+- Bootstrap replicate count, seed, optimizer starts and evaluation limit are strict integer inputs; noise scale and price floor reject booleans and strings.
+- Added deterministic tests for the rejection mask and invalid scalar controls.
+
+**Interpretation:** this removes artificial epsilon-price mass. It does not eliminate selection effects from rejecting whole panels; the rejection rate must be reported and investigated. Alternative positive-support noise models remain a research question.
 
 ### EVT-02 — strict POT-GPD contracts
 
@@ -115,3 +126,17 @@ Risk-manage is a quantitative market-risk research laboratory. It is not a bank 
 - Live EIA ingestion and integrated FRED/EIA four-desk workflow also completed successfully on the same source revision: [EIA run](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45920629066).
 
 These results verify the tested software paths and reproducibility of the configured runs. They do not establish market calibration, empirical validation of real trading positions, APL/PLA eligibility or regulatory approval.
+
+
+## Verification after uncertainty-bootstrap remediation
+
+**Commit tested:** `a2f534325d8ec79a3a26921a8d0d8e04e51b079e`  
+**GitHub Actions run:** [risk-engine-ci](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45921183208)  
+**Result:** successful on Python 3.11 and 3.12.
+
+- Python 3.11: 255 tests passed in 69.51 seconds; Ruff passed.
+- Python 3.12: 255 tests passed in 50.80 seconds; Ruff passed.
+- Both environments completed the deterministic case and all configured Heston benchmark, calibration, Greeks, delta-hedging, randomized-QMC, parameter-uncertainty, hedge-uncertainty, nested-risk and POT-GPD workflow steps.
+- [Live EIA/FRED integrated workflow](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45921183227) succeeded.
+
+The tests validate the code paths and configured experiments, not a claim of real-market model validity or regulatory approval.
