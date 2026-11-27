@@ -73,27 +73,29 @@ The CI installs the latest versions satisfying lower-bound dependency constraint
 
 ### `src/riskmanage/capital.py::calculate_imcc`
 
-Current implementation:
+Current portfolio-wide implementation:
 
 ```python
 unconstrained = reduced_stress * max(full_current / reduced_current, 1.0)
 ```
 
-The compact MAR33.15 equation is:
+This is consistent with Basel MAR33.6: the portfolio-wide ratio (ES_{F,C}/ES_{R,C}) used to scale (ES_{R,S}) is floored at 1.
 
-[
-IMCC(C)=ES_{R,S}\frac{ES_{F,C}}{ES_{R,C}}
-]
+The partial class-level components used in MAR33.15 are a separate calculation:
 
-However, MAR33.6 explicitly states that the ratio (ES_{F,C}/ES_{R,C}) used to scale (ES_{R,S}) is floored at 1. Therefore the implementation's `max(..., 1.0)` is consistent with the Basel rule for the unconstrained component. The constrained class components are calculated using the separate MAR33.15 class-level ratios.
+```
+IMCC(C_i) = ES_R,S,i * (ES_F,C,i / ES_R,C,i)
+```
 
-**Correction to the audit process:** the earlier suspected defect was a false positive caused by reading MAR33.15 without carrying forward the MAR33.6 scaling rule. No formula change is required; follow-up tests protect both the global floor and the separate class-level ratio convention.
+The portfolio-wide floor is not applied independently to each class ratio. The current `capital.py` implementation preserves this distinction: it floors the portfolio-wide ratio and does not floor each class-level ratio.
+
+**Correction to the audit process:** the earlier suspected defect was a false positive caused by reading MAR33.15 without carrying forward the MAR33.6 scaling rule. No formula change is required.
 
 **Follow-up test coverage:** the branch now includes cases for a portfolio ratio below 1 (floor active), equality, and class-level ratios below 1 (no class-level floor). These tests protect the distinction between MAR33.6 and the partial-ES class calculation.
 
 **Primary references:**
-- Basel MAR33.6 — [ES stress scaling and ratio floor](https://www.bis.org/committees/bcbs/basel-framework/standard/mar/33/inforce/2022-01-01/published/2019-12-15).
-- Basel MAR33.15 — [Constrained/unconstrained IMCC aggregation](https://www.bis.org/committees/bcbs/basel-framework/standard/mar/33/inforce/2022-01-01/published/2019-12-15).
+- Basel MAR33.6 — [ES stress scaling and ratio floor](https://www.bis.org/basel_framework/chapter/MAR/33.htm?inforce=20230101&published=20200327).
+- Basel MAR33.15 — [Constrained/unconstrained IMCC aggregation](https://www.bis.org/basel_framework/chapter/MAR/33.htm?inforce=20230101&published=20200327).
 
 ## 4. File-by-file module audit
 
@@ -302,7 +304,7 @@ This is not a single overall grade. Maturity is dimension-specific.
 | SEC N-PORT | Parser implemented | Schema/units partially checked | Parsing tests | N/A | Public filed snapshots | SEC source fixture | Hash-linked snapshot |
 | Portfolio P&L | Implemented | Approximate factor mapping | Basic reconciliation | No statistical validation | Hypothetical positions | No independent repricing | Partial |
 
-The previous audit's class-level IMCC-floor and RFET-assessment-date P0 findings are resolved in the current branch. The global portfolio IMCC floor is required by MAR33.6 and is not a defect. The new pandas-index alignment guard is committed, but its CI result is pending.
+The previous audit's class-level IMCC-floor and RFET-assessment-date P0 findings are resolved in the current branch. The global portfolio IMCC floor is required by MAR33.6 and is not a defect. The new pandas-index alignment guard is committed, but its CI result is successful on Python 3.11 and 3.12.
 
 The above table intentionally avoids a 9/10 claim. A component may be mathematically useful without empirical evidence; empirical data presence does not by itself establish a valid model.
 
