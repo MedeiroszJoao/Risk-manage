@@ -10,9 +10,14 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"src"))
 from riskmanage.data import load_market_data, validate_market_data
 from riskmanage.fixtures import build_synthetic_market_data
-from riskmanage.pnl import DESK_FACTORS, build_desk_pnl, build_factor_pnl, enrich_market_data, market_state, value_desk
+from riskmanage.pnl import (
+    DESK_FACTORS, build_desk_pnl, build_factor_pnl,
+    build_joint_liquidity_horizon_pnl, enrich_market_data, market_state, value_desk,
+)
 from riskmanage.portfolio import DESKS, build_default_portfolio
-from riskmanage.risk import historical_var_es, rolling_historical_var, liquidity_adjusted_es
+from riskmanage.risk import (
+    LIQUIDITY_HORIZONS, historical_var_es, rolling_historical_var, liquidity_adjusted_es
+)
 from riskmanage.capital import select_stress_window, build_ima_capital
 from riskmanage.validation import backtest_var, pla_test, rfet_diagnostic
 
@@ -143,7 +148,19 @@ def main():
     factor_pnl.to_csv(out/"factor_pnl_attribution.csv",index=False,date_format="%Y-%m-%d")
     factor_names=list(RISK_CLASSES)
     factor_losses={name:-factor_pnl[name].to_numpy() for name in factor_names}
-    liquidity=liquidity_adjusted_es(factor_losses,LIQ_HORIZONS,.975,10)
+    joint_liquidity_pnl = build_joint_liquidity_horizon_pnl(market, LIQ_HORIZONS)
+    joint_liquidity_pnl.to_csv(
+        out/"liquidity_horizon_pnl.csv", index=False, date_format="%Y-%m-%d"
+    )
+    joint_horizon_losses = {
+        horizon: -joint_liquidity_pnl[f"pnl_lh_{horizon}"].to_numpy()
+        for horizon in LIQUIDITY_HORIZONS
+    }
+    liquidity=liquidity_adjusted_es(
+        factor_losses, LIQ_HORIZONS, .975, 10,
+        joint_horizon_losses=joint_horizon_losses,
+        joint_horizon_metadata=joint_liquidity_pnl.attrs["liquidity_horizon_metadata"],
+    )
     stress=select_stress_window(factor_losses,250,.975)
     stress["start_date"]=str(market.date.iloc[stress["start_index"]].date())
     stress["end_date"]=str(market.date.iloc[stress["end_index"]].date())
@@ -207,6 +224,7 @@ def main():
         "Public closing prices are not treated as RFET-qualifying transactions or committed quotes.",
         "All positions and notionals are hypothetical; capital and stress figures are illustrative.",
         "The variance-swap mark is a simplified implied-variance proxy, not a full variance-swap valuation.",
+        "Liquidity-horizon ES uses position-level joint full revaluation under a simplified instrument/factor map; it is not a complete MAR33 instrument-level mapping or regulatory implementation.",
         "WTI and Brent are spot benchmarks; the commodity book uses spot-linked proxies, not futures settlements, and has no futures curve, basis, expiry or roll model.",
         "This is independent research software, not a supervisory-approved IMA implementation."
       ]
@@ -255,7 +273,8 @@ def main():
         if result.get("confidence_interval") is not None
     ) or "not computed"
     md += ["","## Capital and stress outputs","",
-      f"- Liquidity-adjusted ES research diagnostic: USD {liquidity['liquidity_adjusted_es']:,.2f} (10-day base, 97.5%).",
+      f"- Position-level joint-revaluation liquidity-adjusted ES research diagnostic: USD {liquidity['liquidity_adjusted_es']:,.2f} (10-day base, 97.5%).",
+      f"- Liquidity ES calculation method: {liquidity['calculation_method']}; theta excluded from risk-factor shocks.",
       f"- Descriptive 250-observation high-tail window: {stress['start_date']} to {stress['end_date']}.",
       f"- Historical span starts on/before 2007: {stress_history_assessment['starts_on_or_before_2007']} (not a regulatory back-history claim).",
       imcc_report_line,

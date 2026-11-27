@@ -191,3 +191,59 @@ def test_empirical_es_matches_independent_fractional_tail_sum():
 def test_risk_rejects_boolean_mixed_with_float_before_numpy_promotion():
     with pytest.raises(ValueError, match="boolean"):
         historical_var_es([True, 0.5, 1.0, 2.0], 0.75)
+
+
+def test_liquidity_adjusted_es_uses_position_level_joint_horizon_losses():
+    rng = np.random.default_rng(881)
+    factors = {
+        "equity": rng.normal(0.0, 1.0, 500),
+        "equity_vol": rng.normal(0.0, 0.5, 500),
+    }
+    horizons = {"equity": 10, "equity_vol": 20}
+    joint = {
+        10: rng.normal(0.0, 1.0, 500),
+        20: rng.normal(0.0, 0.4, 500),
+        40: rng.normal(0.0, 0.2, 500),
+        60: np.zeros(500),
+        120: np.zeros(500),
+    }
+    metadata = {
+        "factor_subset_by_horizon": {"20": ["equity_vol"], "40": [], "60": [], "120": []},
+        "positions_by_horizon": {"20": [{"label": "equity option"}], "40": [], "60": [], "120": []},
+    }
+    result = liquidity_adjusted_es(
+        factors, horizons, 0.975, 10,
+        joint_horizon_losses=joint,
+        joint_horizon_metadata=metadata,
+    )
+    expected_base = historical_var_es(
+        np.convolve(joint[10], np.ones(10), mode="valid"), 0.975
+    )["expected_shortfall"]
+    expected_20 = historical_var_es(
+        np.convolve(joint[20], np.ones(10), mode="valid"), 0.975
+    )["expected_shortfall"]
+
+    assert result["calculation_method"] == "position_level_joint_full_revaluation"
+    assert result["base_es_10d"] == pytest.approx(expected_base)
+    assert result["components"][0]["partial_es"] == pytest.approx(expected_20)
+    assert result["components"][0]["factors"] == ["equity_vol"]
+    assert result["components"][0]["positions"] == [{"label": "equity option"}]
+
+
+def test_liquidity_adjusted_es_rejects_incomplete_joint_horizon_losses():
+    rng = np.random.default_rng(882)
+    factors = {"equity": rng.normal(size=300)}
+    with pytest.raises(ValueError, match="exactly"):
+        liquidity_adjusted_es(
+            factors, {"equity": 10}, joint_horizon_losses={
+                10: np.ones(300), 20: np.ones(300), 40: np.ones(300)
+            }
+        )
+
+
+def test_liquidity_adjusted_es_labels_legacy_additive_method_as_approximation():
+    rng = np.random.default_rng(883)
+    factors = {"equity": rng.normal(size=300)}
+    result = liquidity_adjusted_es(factors, {"equity": 10})
+    assert result["calculation_method"] == "additive_factor_contribution_approximation"
+    assert result["theta_included"] is None

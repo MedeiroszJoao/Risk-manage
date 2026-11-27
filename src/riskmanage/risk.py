@@ -129,6 +129,8 @@ def liquidity_adjusted_es(
     liquidity_horizons: dict[str, int],
     confidence=0.975,
     base_horizon=10,
+    joint_horizon_losses: dict[int, np.ndarray] | None = None,
+    joint_horizon_metadata: dict | None = None,
 ):
     if not factor_losses:
         raise ValueError("factor loss mapping cannot be empty")
@@ -154,11 +156,37 @@ def liquidity_adjusted_es(
     if len(lengths) != 1:
         raise ValueError("factor loss vectors must be aligned")
 
-    all_daily = np.sum(np.vstack(list(arrays.values())), axis=0)
+    expected_length = len(next(iter(arrays.values())))
+    joint_arrays = None
+    if joint_horizon_losses is not None:
+        if not isinstance(joint_horizon_losses, dict) or set(joint_horizon_losses) != set(LIQUIDITY_HORIZONS):
+            raise ValueError(f"joint_horizon_losses must contain exactly {LIQUIDITY_HORIZONS}")
+        joint_arrays = {
+            horizon: _finite_vector(joint_horizon_losses[horizon], f"joint_horizon_losses[{horizon}]")
+            for horizon in LIQUIDITY_HORIZONS
+        }
+        if any(len(values) != expected_length for values in joint_arrays.values()):
+            raise ValueError("joint horizon loss vectors must align with factor loss history")
+        if joint_horizon_metadata is not None and not isinstance(joint_horizon_metadata, dict):
+            raise ValueError("joint_horizon_metadata must be a dictionary")
+        method = "position_level_joint_full_revaluation"
+        base_daily = joint_arrays[base_horizon]
+    else:
+        method = "additive_factor_contribution_approximation"
+        base_daily = np.sum(np.vstack(list(arrays.values())), axis=0)
+        if joint_horizon_metadata is not None:
+            raise ValueError("joint_horizon_metadata cannot be supplied without joint_horizon_losses")
+
     base_es = historical_var_es(
-        _ten_day_losses(all_daily, base_horizon), confidence
+        _ten_day_losses(base_daily, base_horizon), confidence
     )["expected_shortfall"]
 
+    horizon_metadata = (
+        joint_horizon_metadata.get("liquidity_horizon_metadata", joint_horizon_metadata)
+        if joint_horizon_metadata is not None else {}
+    )
+    factor_subset_by_horizon = horizon_metadata.get("factor_subset_by_horizon", {})
+    positions_by_horizon = horizon_metadata.get("positions_by_horizon", {})
     components = []
     for previous, liquidity_horizon in zip(
         LIQUIDITY_HORIZONS[:-1], LIQUIDITY_HORIZONS[1:]
@@ -168,22 +196,35 @@ def liquidity_adjusted_es(
             for name, horizon in normalized_horizons.items()
             if horizon >= liquidity_horizon
         ]
-        if not names:
+        if joint_arrays is not None:
+            subtotal = joint_arrays[liquidity_horizon]
+            component_es = historical_var_es(
+                _ten_day_losses(subtotal, base_horizon), confidence
+            )["expected_shortfall"]
+            component_factors = factor_subset_by_horizon.get(str(liquidity_horizon), names)
+            included_positions = positions_by_horizon.get(str(liquidity_horizon), [])
+        elif not names:
             component_es = 0.0
+            component_factors = []
+            included_positions = []
         else:
             subtotal = np.sum(np.vstack([arrays[name] for name in names]), axis=0)
             component_es = historical_var_es(
                 _ten_day_losses(subtotal, base_horizon), confidence
             )["expected_shortfall"]
+            component_factors = names
+            included_positions = []
 
         weight = np.sqrt((liquidity_horizon - previous) / base_horizon)
         components.append(
             {
                 "liquidity_horizon": liquidity_horizon,
-                "factors": names,
+                "factors": component_factors,
+                "positions": included_positions,
                 "partial_es": float(component_es),
                 "scaling": float(weight),
                 "scaled_component": float(component_es * weight),
+                "partial_es_method": method,
             }
         )
 
@@ -195,6 +236,9 @@ def liquidity_adjusted_es(
         "liquidity_adjusted_es": total,
         "confidence": confidence,
         "base_horizon": base_horizon,
+        "calculation_method": method,
+        "theta_included": False if joint_arrays is not None else None,
+        "joint_horizon_metadata": horizon_metadata if joint_arrays is not None else None,
         "components": components,
         "empirical_quantile_method": EMPIRICAL_QUANTILE_METHOD,
         "expected_shortfall_convention": "integrated_empirical_quantile_fractional_var_mass",

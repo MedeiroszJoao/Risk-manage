@@ -4,6 +4,8 @@ from riskmanage.pricing import black_scholes_call, garman_kohlhagen_call
 from riskmanage.fixtures import build_synthetic_market_data
 from riskmanage.portfolio import Position
 from riskmanage.pnl import (
+    _effective_position_liquidity_horizon,
+    build_joint_liquidity_horizon_pnl,
     build_desk_pnl,
     _mixed_second_derivative,
     _taylor_rtpl,
@@ -155,3 +157,71 @@ def test_legacy_full_greeks_name_is_deprecated_diagonal_alias():
 
     assert legacy["risk_model"].eq("diagonal_second_order").all()
     assert np.allclose(legacy["rtpl"].to_numpy(), diagonal["rtpl"].to_numpy())
+
+
+def test_effective_position_liquidity_horizon_applies_next_longer_maturity_bucket():
+    assert _effective_position_liquidity_horizon(60, 30 / 252) == 40
+    assert _effective_position_liquidity_horizon(60, 20 / 252) == 40
+    assert _effective_position_liquidity_horizon(20, 15 / 252) == 20
+    assert _effective_position_liquidity_horizon(10, 5 / 252) == 10
+    assert _effective_position_liquidity_horizon(20, 0.0) == 20
+
+
+def test_joint_liquidity_horizon_pnl_revalues_position_level_factor_subsets():
+    market = build_synthetic_market_data(2, seed=771)
+    market.loc[0, "sp500"] = 100.0
+    market.loc[1, "sp500"] = 112.0
+    market.loc[0, "vix"] = 20.0
+    market.loc[1, "vix"] = 42.0
+    position = Position(
+        "Equity Options", "EQUITY_CALL", quantity=1.0,
+        maturity=0.40, strike=100.0, multiplier=1.0,
+    )
+    horizons = {
+        "sp500": 10, "equity_vol": 20, "eurusd": 10, "eurusd_vol": 40,
+        "ust2y": 10, "ust10y": 10, "wti": 20, "brent": 20,
+    }
+    result = build_joint_liquidity_horizon_pnl(market, horizons, positions=[position])
+
+    enriched = enrich_market_data(market)
+    state0 = market_state(enriched.iloc[0])
+    state1 = market_state(enriched.iloc[1])
+    unchanged_aged_value = value_position(position, state0, 1)
+    full_revaluation = value_position(position, state1, 1) - unchanged_aged_value
+
+    vol_only_state = dict(state0)
+    vol_only_state["equity_vol"] = state1["equity_vol"]
+    vol_only_revaluation = (
+        value_position(position, vol_only_state, 1) - unchanged_aged_value
+    )
+    spot_only_state = dict(state0)
+    spot_only_state["sp500"] = state1["sp500"]
+    additive_one_factor_explain = (
+        value_position(position, spot_only_state, 1) - unchanged_aged_value
+        + vol_only_revaluation
+    )
+
+    assert result.loc[0, "pnl_lh_10"] == pytest.approx(full_revaluation)
+    assert result.loc[0, "pnl_lh_20"] == pytest.approx(vol_only_revaluation)
+    assert result.loc[0, "pnl_lh_40"] == pytest.approx(0.0)
+    assert abs(full_revaluation - additive_one_factor_explain) > 1e-5
+    metadata = result.attrs["liquidity_horizon_metadata"]
+    assert metadata["method"] == "position_level_joint_full_revaluation"
+    assert metadata["time_decay_treatment"].startswith("theta is isolated")
+
+
+def test_joint_liquidity_horizon_pnl_rejects_missing_factor_horizon_mapping():
+    market = build_synthetic_market_data(3, seed=772)
+    with pytest.raises(ValueError, match="every declared desk risk factor"):
+        build_joint_liquidity_horizon_pnl(market, {"sp500": 10})
+
+
+def test_joint_liquidity_horizon_pnl_rejects_unmapped_instruments():
+    market = build_synthetic_market_data(3, seed=773)
+    position = Position("Equity Options", "UNKNOWN_INSTRUMENT", 1.0)
+    horizons = {
+        "sp500": 10, "equity_vol": 20, "eurusd": 10, "eurusd_vol": 40,
+        "ust2y": 10, "ust10y": 10, "wti": 20, "brent": 20,
+    }
+    with pytest.raises(ValueError, match="no risk-factor mapping"):
+        build_joint_liquidity_horizon_pnl(market, horizons, positions=[position])

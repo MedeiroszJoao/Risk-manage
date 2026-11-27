@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 from .portfolio import DESKS, Position, build_default_portfolio
 from .pricing import black_scholes_call, black_scholes_put, garman_kohlhagen_call, zero_coupon_bond
+from .risk import LIQUIDITY_HORIZONS
 
 RATE=0.035
 FOREIGN_RATE=0.020
@@ -81,6 +82,183 @@ MODEL_FACTORS={
     "full_hessian":DESK_FACTORS,
 }
 LEGACY_MODEL_ALIASES={"full_greeks":"diagonal_second_order"}
+
+INSTRUMENT_RISK_FACTORS = {
+    "EQUITY_CALL": ("sp500", "equity_vol"),
+    "EQUITY_PUT": ("sp500", "equity_vol"),
+    "VARIANCE_SWAP": ("equity_vol",),
+    "FX_CALL": ("eurusd", "eurusd_vol"),
+    "FX_SPOT": ("eurusd",),
+    "ZERO_BOND_2Y": ("ust2y",),
+    "ZERO_BOND_10Y": ("ust10y",),
+    "WTI_SPOT_PROXY": ("wti",),
+    "BRENT_SPOT_PROXY": ("brent",),
+}
+
+
+def _effective_position_liquidity_horizon(base_horizon: int, maturity_years: float) -> int:
+    """Apply a next-longer permitted liquidity horizon when maturity is shorter."""
+    if isinstance(maturity_years, (bool, np.bool_)) or not isinstance(
+        maturity_years, (int, float, np.integer, np.floating)
+    ):
+        raise ValueError("position maturity must be a finite nonnegative number")
+    maturity = float(maturity_years)
+    if not np.isfinite(maturity) or maturity < 0.0:
+        raise ValueError("position maturity must be a finite nonnegative number")
+    if isinstance(base_horizon, (bool, np.bool_)) or not isinstance(
+        base_horizon, (int, np.integer)
+    ):
+        raise ValueError("base liquidity horizon must be an integer")
+    if int(base_horizon) not in LIQUIDITY_HORIZONS:
+        raise ValueError("base liquidity horizon is not a permitted Basel horizon")
+    if maturity == 0.0:
+        return int(base_horizon)
+
+    maturity_days = maturity * TRADING_DAYS
+    if maturity_days >= int(base_horizon):
+        return int(base_horizon)
+    eligible = [horizon for horizon in LIQUIDITY_HORIZONS if horizon > maturity_days]
+    if not eligible:
+        raise ValueError("no permitted liquidity horizon exceeds position maturity")
+    return int(min(eligible))
+
+
+def build_joint_liquidity_horizon_pnl(
+    market_data: pd.DataFrame,
+    liquidity_horizons: dict[str, int],
+    positions: list[Position] | None = None,
+) -> pd.DataFrame:
+    """Revalue each position under the risk-factor subset for each liquidity horizon.
+
+    For each position, only mapped factors whose effective horizon is at least
+    the threshold are shocked. All other factors for that position stay at the
+    prior-day values. Both marks use the same one-day aged valuation, isolating
+    market-factor P&L from theta. This is a research implementation of the
+    MAR33.4 position-level subset structure, not a full regulatory model.
+    """
+    data = enrich_market_data(market_data)
+    if len(data) < 2:
+        raise ValueError("at least two market observations are required")
+    expected_factors = {
+        factor for factor_tuple in DESK_FACTORS.values() for factor in factor_tuple
+    }
+    if not isinstance(liquidity_horizons, dict) or set(liquidity_horizons) != expected_factors:
+        raise ValueError(
+            "liquidity_horizons must map every declared desk risk factor exactly once"
+        )
+
+    normalized_horizons = {}
+    for factor, value in liquidity_horizons.items():
+        if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
+            raise ValueError(f"liquidity_horizon[{factor}] must be an integer")
+        horizon = int(value)
+        if horizon not in LIQUIDITY_HORIZONS:
+            raise ValueError(f"liquidity_horizon[{factor}] is not a permitted horizon")
+        normalized_horizons[factor] = horizon
+
+    if positions is None:
+        positions = build_default_portfolio(market_state(data.iloc[0]))
+    if not positions:
+        raise ValueError("at least one position is required")
+
+    position_maps = []
+    for index, position in enumerate(positions):
+        if position.desk not in DESKS:
+            raise ValueError(f"unknown position desk: {position.desk!r}")
+        if position.instrument not in INSTRUMENT_RISK_FACTORS:
+            raise ValueError(f"no risk-factor mapping for instrument {position.instrument!r}")
+        base_map = {
+            factor: normalized_horizons[factor]
+            for factor in INSTRUMENT_RISK_FACTORS[position.instrument]
+        }
+        effective_map = {
+            factor: _effective_position_liquidity_horizon(base, position.maturity)
+            for factor, base in base_map.items()
+        }
+        position_maps.append({
+            "position_index": int(index),
+            "desk": position.desk,
+            "instrument": position.instrument,
+            "label": position.label or f"{position.desk}:{position.instrument}",
+            "maturity_years": float(position.maturity),
+            "base_factor_horizons": base_map,
+            "effective_factor_horizons": effective_map,
+            "position": position,
+        })
+
+    factor_subset_by_horizon = {}
+    positions_by_horizon = {}
+    for horizon in LIQUIDITY_HORIZONS:
+        factor_subset, included_positions = set(), []
+        for item in position_maps:
+            selected = [
+                factor for factor, eff in item["effective_factor_horizons"].items()
+                if eff >= horizon
+            ]
+            factor_subset.update(selected)
+            if selected:
+                included_positions.append({
+                    "position_index": item["position_index"],
+                    "desk": item["desk"],
+                    "instrument": item["instrument"],
+                    "label": item["label"],
+                    "selected_factors": selected,
+                })
+        factor_subset_by_horizon[str(horizon)] = sorted(factor_subset)
+        positions_by_horizon[str(horizon)] = included_positions
+
+    rows = []
+    for row_index in range(1, len(data)):
+        previous_state = market_state(data.iloc[row_index - 1])
+        current_state = market_state(data.iloc[row_index])
+        row = {"date": pd.Timestamp(data.iloc[row_index]["date"])}
+        for horizon in LIQUIDITY_HORIZONS:
+            joint_pnl = 0.0
+            for item in position_maps:
+                position = item["position"]
+                selected = [
+                    factor for factor, eff in item["effective_factor_horizons"].items()
+                    if eff >= horizon
+                ]
+                if not selected:
+                    continue
+                shocked_state = dict(previous_state)
+                for factor in selected:
+                    shocked_state[factor] = current_state[factor]
+                joint_pnl += (
+                    value_position(position, shocked_state, day_offset=1)
+                    - value_position(position, previous_state, day_offset=1)
+                )
+            row[f"pnl_lh_{horizon}"] = float(joint_pnl)
+        rows.append(row)
+
+    result = pd.DataFrame(rows)
+    result.attrs["liquidity_horizon_metadata"] = {
+        "method": "position_level_joint_full_revaluation",
+        "risk_factor_mapping": "INSTRUMENT_RISK_FACTORS plus supplied factor liquidity horizons",
+        "factor_subset_by_horizon": factor_subset_by_horizon,
+        "positions_by_horizon": positions_by_horizon,
+        "position_factor_horizons": [
+            {key: value for key, value in item.items() if key != "position"}
+            for item in position_maps
+        ],
+        "maturity_convention": (
+            "maturity_years multiplied by 252 trading days; if maturity is shorter "
+            "than the mapped base liquidity horizon, use the smallest permitted "
+            "horizon strictly longer than maturity; maturity zero means a non-expiring "
+            "spot proxy and no maturity cap"
+        ),
+        "time_decay_treatment": (
+            "theta is isolated by valuing both prior-state and shocked-state positions "
+            "at day_offset=1; only selected market-factor shocks vary"
+        ),
+        "scope": (
+            "research implementation; instrument coverage, factor map, desk mapping "
+            "and maturity conventions are simplified and not regulatory validated"
+        ),
+    }
+    return result
+
 
 def _bump_size(name: str, value: float) -> float:
     if name in ("ust2y", "ust10y"):
