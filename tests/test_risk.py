@@ -186,3 +186,8 @@ def test_empirical_es_matches_independent_fractional_tail_sum():
     result = historical_var_es(losses, confidence)
     assert result["expected_shortfall"] == pytest.approx(independent_es)
     assert result["expected_shortfall"] >= result["var"]
+
+
+def test_risk_rejects_boolean_mixed_with_float_before_numpy_promotion():
+    with pytest.raises(ValueError, match="boolean"):
+        historical_var_es([True, 0.5, 1.0, 2.0], 0.75)
