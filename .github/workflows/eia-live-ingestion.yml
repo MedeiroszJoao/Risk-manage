@@ -1,0 +1,157 @@
+name: eia-live-ingestion
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/riskmanage/eia.py"
+      - "src/riskmanage/commodity.py"
+      - "src/riskmanage/risk.py"
+      - "src/riskmanage/data.py"
+      - "scripts/download_eia_petroleum_spot.py"
+      - "scripts/run_commodity_spot_case.py"
+      - "scripts/download_market_data.py"
+      - "scripts/run_case.py"
+      - ".github/workflows/eia-live-ingestion.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eia-live-ingestion-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  download-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+      - name: Download public EIA PET bulk archive
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            if python scripts/download_eia_petroleum_spot.py --start 2007-01-01 --timeout 300; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "EIA download attempt $attempt failed; retrying in 15 seconds."
+              sleep 15
+            fi
+          done
+          echo "EIA bulk download failed after three attempts."
+          exit 1
+      - name: Validate live EIA snapshot and run commodity risk case
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+          import pandas as pd
+
+          csv_path = Path("data/processed/eia_petroleum_spot.csv")
+          manifest_path = Path("data/processed/eia_petroleum_spot_manifest.json")
+          frame = pd.read_csv(csv_path)
+          manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+          expected = {"PET.RWTC.D", "PET.RBRTE.D"}
+
+          assert len(frame) > 0, "EIA normalized dataset is empty"
+          assert set(frame["series_id"]) == expected, "WTI/Brent series coverage is incomplete"
+          assert not frame.duplicated(["date", "series_id"]).any(), "duplicate daily observations"
+          assert (pd.to_datetime(frame["date"]) >= pd.Timestamp("2007-01-01")).all()
+          assert set(frame["units"].dropna()) == {"Dollars per Barrel"}
+          archive = Path(manifest["download"]["archive_path"])
+          assert archive.is_file(), "raw PET.zip archive was not retained"
+          digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+          assert digest == manifest["download"]["sha256"], "raw archive SHA-256 mismatch"
+
+          wti_event = frame.loc[
+              (frame["series_id"] == "PET.RWTC.D") & (frame["date"] == "2020-04-20"),
+              "value",
+          ]
+          assert len(wti_event) == 1 and abs(float(wti_event.iloc[0]) + 36.98) < 0.02, (
+              "historical negative WTI spot observation was not preserved"
+          )
+
+          print(json.dumps({
+              "rows": len(frame),
+              "start": frame["date"].min(),
+              "end": frame["date"].max(),
+              "series": sorted(frame["series_id"].unique().tolist()),
+              "archive_bytes": manifest["download"]["bytes"],
+              "archive_sha256": digest,
+              "normalized_sha256": manifest["normalized_sha256"],
+              "negative_wti_2020_04_20": float(wti_event.iloc[0]),
+          }, indent=2))
+          PY
+          python scripts/run_commodity_spot_case.py
+          python -m json.tool reports/generated/commodity_spot_risk.json > /dev/null
+      - name: Upload immutable EIA source snapshot and empirical outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: eia-petroleum-live-snapshot
+          path: |
+            data/raw/eia/petroleum_spot/
+            data/processed/eia_petroleum_spot.csv
+            data/processed/eia_petroleum_spot_manifest.json
+            reports/generated/commodity_spot_pnl.csv
+            reports/generated/commodity_spot_risk.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Build integrated FRED/EIA panel and run four-desk validation
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            if python scripts/download_market_data.py --start 2007-01-01 --fred-timeout 60 --eia-timeout 300; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "Integrated FRED/EIA download failed after three attempts."
+              exit 1
+            fi
+            echo "Integrated download attempt $attempt failed; retrying in 15 seconds."
+            sleep 15
+          done
+          python scripts/run_case.py --data data/market_data.csv --output /tmp/riskmanage-integrated-public-run > /tmp/riskmanage-integrated-public-run.stdout.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+
+          panel = pd.read_csv("data/market_data.csv")
+          manifest = json.loads(Path("data/source_manifest.json").read_text(encoding="utf-8"))
+          summary = json.loads(
+              Path("/tmp/riskmanage-integrated-public-run/executive_summary.json").read_text(encoding="utf-8")
+          )
+          required = {"date", "sp500", "vix", "eurusd", "usdjpy", "ust2y", "ust10y", "wti", "brent"}
+          assert required.issubset(panel.columns), "integrated panel is missing required factors"
+          assert len(panel) >= 310, "integrated panel is too short for the risk validation protocol"
+          assert not panel["date"].duplicated().any(), "integrated panel has duplicate dates"
+          assert summary["data_classification"] == "public_fred_eia_spot_panel"
+          assert summary["observations"] == len(panel)
+          assert len(summary["desks"]) == 4, "four-desk validation did not complete"
+          assert summary["stress_history_assessment"]["starts_on_or_before_2007"] is False, (
+              "unexpectedly claims full 2007 regulatory stress-history coverage"
+          )
+          assert manifest["classification"] == "public_observed_source_data_with_limited_calendar_alignment"
+          assert manifest["coverage_warnings"], "expected source-coverage warning was not recorded"
+
+          print(json.dumps({
+              "integrated_panel_rows": len(panel),
+              "date_range": summary["date_range"],
+              "desk_count": len(summary["desks"]),
+              "coverage_warning_count": len(manifest["coverage_warnings"]),
+              "full_2007_stress_history_available": summary["stress_history_assessment"]["starts_on_or_before_2007"],
+              "rfet_status": summary["rfet"]["status"],
+              "classification": manifest["classification"],
+          }, indent=2))
+          PY

@@ -1,0 +1,117 @@
+name: risk-engine-ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: risk-engine-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Test
+        run: pytest -q
+      - name: Lint
+        run: ruff check src tests scripts
+      - name: Run deterministic case
+        run: python scripts/run_case.py --synthetic
+      - name: Run Heston Fourier / QE-M benchmark
+        run: |
+          python scripts/run_heston_benchmark.py --paths 4000 --steps 32 --pilot-paths 512 --output /tmp/heston_benchmark.json
+          python -m json.tool /tmp/heston_benchmark.json > /dev/null
+      - name: Upload Heston benchmark report
+        uses: actions/upload-artifact@v4
+        with:
+          name: heston-benchmark-python-${{ matrix.python-version }}
+          path: /tmp/heston_benchmark.json
+      - name: Run Heston calibration recovery
+        run: |
+          python scripts/run_heston_calibration.py --objective mid --starts 2 --max-nfev 40 --output /tmp/heston_calibration.json
+          python -m json.tool /tmp/heston_calibration.json > /dev/null
+      - name: Upload Heston calibration report
+        uses: actions/upload-artifact@v4
+        with:
+          name: heston-calibration-python-${{ matrix.python-version }}
+          path: /tmp/heston_calibration.json
+      - name: Run Heston Monte Carlo Greeks benchmark
+        run: |
+          python scripts/run_heston_greeks.py --paths 5000 --steps 32 --output /tmp/heston_greeks.json
+          python -m json.tool /tmp/heston_greeks.json > /dev/null
+      - name: Upload Heston Greeks report
+        uses: actions/upload-artifact@v4
+        with:
+          name: heston-greeks-python-${{ matrix.python-version }}
+          path: /tmp/heston_greeks.json
+      - name: Run Heston delta-hedging and tail-risk experiment
+        run: |
+          python scripts/run_heston_delta_hedging.py --paths 500 --steps 6 --cost-bps 2 --output /tmp/heston_delta_hedging.json
+          python -m json.tool /tmp/heston_delta_hedging.json > /dev/null
+      - name: Upload Heston delta-hedging report
+        uses: actions/upload-artifact@v4
+        with:
+          name: heston-delta-hedging-python-${{ matrix.python-version }}
+          path: /tmp/heston_delta_hedging.json
+      - name: Run Heston randomized QMC benchmark
+        run: |
+          python scripts/run_heston_qmc_benchmark.py --sobol-power 7 --scrambles 4 --steps 16 --output /tmp/heston_qmc_benchmark.json
+          python -m json.tool /tmp/heston_qmc_benchmark.json > /dev/null
+      - name: Upload Heston randomized QMC report
+        uses: actions/upload-artifact@v4
+        with:
+          name: heston-rqmc-python-${{ matrix.python-version }}
+          path: /tmp/heston_qmc_benchmark.json
+      - name: Run Heston calibration uncertainty experiment
+        run: |
+          python scripts/run_heston_uncertainty.py --replicates 3 --profile-points 3 --starts 1 --max-nfev 80 --bootstrap-max-nfev 80 --output /tmp/heston_parameter_uncertainty.json
+          python -m json.tool /tmp/heston_parameter_uncertainty.json > /dev/null
+      - name: Upload Heston uncertainty report
+        uses: actions/upload-artifact@v4
+        with:
+          name: heston-parameter-uncertainty-python-${{ matrix.python-version }}
+          path: /tmp/heston_parameter_uncertainty.json
+      - name: Run Heston hedge parameter-uncertainty experiment
+        run: |
+          python scripts/run_heston_hedge_uncertainty.py --bootstrap-replicates 3 --paths 150 --steps 3 --confidence 0.90 --output /tmp/heston_hedge_parameter_uncertainty.json
+          python -m json.tool /tmp/heston_hedge_parameter_uncertainty.json > /dev/null
+      - name: Upload Heston hedge parameter-uncertainty report
+        uses: actions/upload-artifact@v4
+        with:
+          name: heston-hedge-uncertainty-python-${{ matrix.python-version }}
+          path: /tmp/heston_hedge_parameter_uncertainty.json
+      - name: Run crossed Heston calibration/scenario risk decomposition
+        run: |
+          python scripts/run_heston_nested_hedge_risk.py --bootstrap-replicates 3 --scenario-replicates 2 --paths 120 --steps 2 --confidence 0.90 --output /tmp/heston_nested_hedge_risk.json
+          python -m json.tool /tmp/heston_nested_hedge_risk.json > /dev/null
+      - name: Upload crossed Heston hedge-risk decomposition
+        uses: actions/upload-artifact@v4
+        with:
+          name: heston-nested-hedge-risk-python-${{ matrix.python-version }}
+          path: /tmp/heston_nested_hedge_risk.json
+      - name: Run Heston hedge POT-GPD tail-risk experiment
+        run: |
+          python scripts/run_heston_hedge_evt.py --paths 500 --steps 6 --cost-bps 2 --confidence-levels 0.975 --thresholds 0.90 0.95 --min-exceedances 20 --bootstrap 2 --full-sample-bootstrap 2 --output /tmp/heston_hedge_evt.json
+          python -m json.tool /tmp/heston_hedge_evt.json > /dev/null
+      - name: Upload Heston hedge EVT report
+        uses: actions/upload-artifact@v4
+        with:
+          name: heston-hedge-evt-python-${{ matrix.python-version }}
+          path: /tmp/heston_hedge_evt.json
