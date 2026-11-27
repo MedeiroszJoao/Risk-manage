@@ -210,13 +210,18 @@ def main():
       "|---|---:|---:|---:|"]
     for desk,m in validation.items():
         md.append(f"| {desk} | {m['pla_delta_only']['zone']} | {m['pla_full_greeks']['zone']} | {m['residual_reduction_full_greeks']:.1%} |")
+    imcc_report_line = (
+      f"- Research IMCC formula primitive (non-regulatory): USD {capital['imcc']['imcc']:,.2f}."
+      if capital["imcc"] is not None
+      else f"- Research IMCC formula primitive: not computed; selected set omits risk classes {capital['missing_selected_risk_classes']}."
+    )
     md += ["","## Capital and stress outputs","",
-      f"- Liquidity-adjusted ES: USD {liquidity['liquidity_adjusted_es']:,.2f} (10-day base, 97.5%).",
-      f"- Selected 250-day stress window: {stress['start_date']} to {stress['end_date']}.",
+      f"- Liquidity-adjusted ES research diagnostic: USD {liquidity['liquidity_adjusted_es']:,.2f} (10-day base, 97.5%).",
+      f"- Descriptive 250-observation high-tail window: {stress['start_date']} to {stress['end_date']}.",
       f"- Historical span starts on/before 2007: {stress_history_assessment['starts_on_or_before_2007']} (not a regulatory back-history claim).",
-      f"- Illustrative IMCC: USD {capital['imcc']['imcc']:,.2f}.",
-      f"- Reduced-factor current ES coverage: {capital['reduced_set']['explained_ratio']:.1%}.",
-      f"- Reduced-factor 12-week mean coverage: {capital['reduced_set']['coverage_12w'].get('mean_ratio')}.",
+      imcc_report_line,
+      f"- Current selected/full ES ratio (in-sample): {capital['reduced_set']['explained_ratio']:.1%}.",
+      f"- Mean ratio over 60 overlapping endpoints (in-sample; not OOS): {capital['reduced_set']['coverage_12w'].get('mean_ratio')}.",
       "- RFET: public-close-only evidence is not used to certify modellability.",
       "","## Interpretation guardrails","",
       "- HPL backtesting is not APL backtesting.",
@@ -228,7 +233,12 @@ def main():
     print(json.dumps(json_safe({
       "summary_path":str(out/"executive_summary.json"),"date_range":summary["date_range"],
       "desk_status":desk_status,"liquidity_adjusted_es":liquidity["liquidity_adjusted_es"],
-      "stress_window":stress,"illustrative_imcc":capital["imcc"]["imcc"],
+      "stress_window":stress,
+      "research_imcc_primitive":capital["imcc"]["imcc"] if capital["imcc"] is not None else None,
+      "imcc_status":capital["imcc_status"],
+      "capital_label":capital["capital_label"],
+      "regulatory_status":capital["regulatory_status"],
+      "reduced_factor_coverage_is_out_of_sample":capital["reduced_set"]["coverage_is_out_of_sample"],
       "rfet_status":rfet["status"],
       "max_factor_reconciliation_error":factor_reconciliation["max_abs_reconciliation_error"]
     }),indent=2))

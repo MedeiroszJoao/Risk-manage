@@ -53,7 +53,7 @@ The implemented Basel-style PLA zones are:
 - Red: Spearman < 0.70 or KS > 0.12.
 - Amber: all intermediate cases.
 
-The code reports an insufficient-sample state unless 250 paired observations exist. If Spearman is undefined (for example, because HPL or RTPL is constant), it returns not_classifiable and no PLA zone; it does not replace an undefined correlation with zero.
+The code reports an insufficient-sample state unless 250 paired observations exist. If Spearman is undefined (for example, because HPL or RTPL is constant), it returns `not_classifiable` and no PLA zone; it does not replace an undefined correlation with zero. If Spearman is undefined (for example, because HPL or RTPL is constant), it returns not_classifiable and no PLA zone; it does not replace an undefined correlation with zero.
 
 ## 4. Instrument valuation and RTPL
 
@@ -191,6 +191,15 @@ In addition to empirical inverse-CDF VaR and fractional-boundary ES, the hedge P
 Thresholds are presented as a stability grid; no automatic choice is made. The usual KS p-value is omitted because parameters are estimated from the same exceedances. If fitted shape \(\xi\geq1\), the fitted GPD has no finite mean and ES is reported as undefined/infinite. The bootstrap is conditional on the observed threshold and exceedance count and does not cover threshold selection, serial clustering, structural breaks or model risk.
 
 See [TAIL_RISK_EVT.md](TAIL_RISK_EVT.md) for the derivation and reproducible Heston hedge tail-risk benchmark.
+
+
+## Regulatory boundary: RFET, liquidity horizons and APL
+
+The RFET module calculates only a numerical evidence-count screen. A count does not establish that a row is a valid real-price observation or that the factor mapping is representative. Third-party observations require vendor audit information and documented counts/dates and identifier mapping. The output is therefore a candidate for independent review or not evidenced; it never issues a regulatory modellability pass.
+
+The 10/20/40/60/120-day liquidity-horizon scaling shape is implemented as a research primitive. Production FRTB mapping is instrument/risk-factor-specific under MAR33; the generic factor labels and manually supplied horizon values in this project do not implement that mapping.
+
+The Basel desk backtest is not complete without Actual P&L. Public daily closes and hypothetical HPL cannot stand in for the bank's APL. See [MATURITY_REGISTER.md](MATURITY_REGISTER.md).
 
 
 ## Regulatory boundary: RFET, liquidity horizons and APL
