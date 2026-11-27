@@ -149,9 +149,10 @@ def parse_nport_dataset(
     registrant = registrant_rows[0]
     _require_fields(registrant, {"CIK", "REGISTRANT_NAME"}, "REGISTRANT")
 
-    fund_rows = _rows_for_accession(table_paths["fund_info"], accession_digits)
+    all_fund_rows = _rows_for_accession(table_paths["fund_info"], accession_digits)
+    fund_rows = all_fund_rows
     if series_id is not None:
-        fund_rows = [row for row in fund_rows if row.get("SERIES_ID") == series_id]
+        fund_rows = [row for row in all_fund_rows if row.get("SERIES_ID") == series_id]
     if len(fund_rows) != 1:
         raise ValueError(
             f"expected exactly one FUND_REPORTED_INFO row for accession {accession} "
@@ -166,6 +167,28 @@ def parse_nport_dataset(
     holding_rows = _rows_for_accession(table_paths["holdings"], accession_digits)
     if not holding_rows:
         raise ValueError(f"no holdings found for accession {accession}")
+    if len(all_fund_rows) > 1:
+        if "SERIES_ID" not in holding_rows[0]:
+            raise ValueError(
+                "the accession contains multiple fund series, but the holdings table "
+                "has no SERIES_ID field; refusing to mix positions across series"
+            )
+        holding_rows = [
+            row for row in holding_rows if row.get("SERIES_ID") == fund["SERIES_ID"]
+        ]
+        if not holding_rows:
+            raise ValueError(
+                f"no holdings linked to selected series {fund['SERIES_ID']}"
+            )
+    elif "SERIES_ID" in holding_rows[0]:
+        holding_rows = [
+            row for row in holding_rows if row.get("SERIES_ID") == fund["SERIES_ID"]
+        ]
+        if not holding_rows:
+            raise ValueError(
+                f"no holdings linked to selected series {fund['SERIES_ID']}"
+            )
+
     required_holding_fields = {
         "HOLDING_ID",
         "ISSUER_NAME",

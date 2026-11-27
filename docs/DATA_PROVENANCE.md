@@ -53,7 +53,7 @@ Observe the FRED / source-provider terms for redistribution and derivative use. 
 
 ## SEC Form N-PORT disclosed fund holdings
 
-The repository includes a parser for the SEC's quarterly Form N-PORT flat-file data sets. The parser consumes the extracted `SUBMISSION`, `REGISTRANT`, `FUND_REPORTED_INFO`, `FUND_REPORTED_HOLDING` and `IDENTIFIERS` tables. It requires the caller to select one exact accession and, when the filing has multiple series rows, an exact series ID. It does not silently choose among amendments or merge unrelated series.
+The repository includes a parser for the SEC's quarterly Form N-PORT flat-file data sets. The parser consumes the extracted `SUBMISSION`, `REGISTRANT`, `FUND_REPORTED_INFO`, `FUND_REPORTED_HOLDING` and `IDENTIFIERS` tables. It requires the caller to select one exact accession and, when the filing has multiple series rows, an exact series ID. When holdings cannot be linked unambiguously to that series, the parser fails closed instead of mixing funds. It does not silently choose among amendments or merge unrelated series.
 
 Official sources:
 - SEC Form N-PORT Data Sets: https://www.sec.gov/data-research/sec-markets-data/form-n-port-data-sets

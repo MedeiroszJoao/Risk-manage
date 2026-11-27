@@ -111,6 +111,14 @@ def test_nport_parser_requires_explicit_series_if_filing_has_multiple(
     )
     with pytest.raises(ValueError, match="supply --series-id"):
         parse_nport_dataset(nport_dataset, ACCESSION)
+    with pytest.raises(ValueError, match="no SERIES_ID field"):
+        parse_nport_dataset(nport_dataset, ACCESSION, series_id="S000004310")
+
+    holding_path = nport_dataset / "FUND_REPORTED_HOLDING.tsv"
+    lines = holding_path.read_text(encoding="utf-8").splitlines()
+    lines[0] += "\\tSERIES_ID"
+    lines = [lines[0]] + [line + "\\tS000004310" for line in lines[1:]]
+    holding_path.write_text("\\n".join(lines) + "\\n", encoding="utf-8")
     positions, manifest = parse_nport_dataset(
         nport_dataset, ACCESSION, series_id="S000004310"
     )
