@@ -134,3 +134,27 @@ def test_pot_gpd_reports_empirical_tail_and_no_extrapolation_p_value():
             assert "ks_uniform_distance_descriptive" in fit["fit"]
             assert "p_value" not in fit["fit"]
             assert fit["exceedance_count"] >= 20
+
+
+@pytest.mark.parametrize("losses", [["1", "2", "3"] * 20, [True, False] * 25])
+def test_pot_gpd_rejects_string_and_boolean_loss_coercion(losses):
+    with pytest.raises(ValueError, match="numeric vector"):
+        fit_pot_gpd_tail_risk(losses, n_bootstrap=0, n_full_sample_bootstrap=0)
+
+
+@pytest.mark.parametrize("kwargs", [
+    {"confidence_levels": ("0.99",)},
+    {"confidence_levels": (True,)},
+    {"threshold_quantiles": ("0.90",)},
+    {"threshold_quantiles": (False,)},
+    {"min_exceedances": 5.5},
+    {"n_bootstrap": 2.5},
+    {"n_full_sample_bootstrap": True},
+    {"seed": False},
+])
+def test_pot_gpd_rejects_implicit_scalar_coercion(kwargs):
+    losses = np.random.default_rng(901).standard_normal(500)
+    with pytest.raises(ValueError):
+        fit_pot_gpd_tail_risk(
+            losses, n_bootstrap=0, n_full_sample_bootstrap=0, **kwargs
+        )
