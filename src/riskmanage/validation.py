@@ -348,7 +348,7 @@ def _strict_true(values: pd.Series) -> pd.Series:
     return values.map(lambda value: isinstance(value, (bool, np.bool_)) and bool(value))
 
 
-def rfet_diagnostic(evidence_ledger: pd.DataFrame, lookback_days: int = 365):
+def rfet_diagnostic(\n    evidence_ledger: pd.DataFrame,\n    *,\n    as_of_date: str | pd.Timestamp,\n    lookback_days: int = 365,\n):
     """Compute an RFET count screen, never a regulatory modellability pass.
 
     The ledger schema cannot prove valid real-price observations, vendor audit,
@@ -370,18 +370,29 @@ def rfet_diagnostic(evidence_ledger: pd.DataFrame, lookback_days: int = 365):
     ):
         raise ValueError("lookback_days must be a positive integer")
 
+    try:
+        assessment_date = pd.Timestamp(pd.to_datetime(as_of_date, errors="raise", utc=True))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("as_of_date must be a valid explicit assessment date") from exc
+    if pd.isna(assessment_date):
+        raise ValueError("as_of_date must be a valid explicit assessment date")
+    assessment_date = assessment_date.normalize()
+
     data = evidence_ledger.copy()
     input_rows = int(len(data))
     data["date"] = pd.to_datetime(data["date"], errors="coerce", utc=True)
     invalid_date = data["date"].isna()
+    future_date = data["date"] > assessment_date
     missing_factor = (
         data["factor_id"].isna()
         | data["factor_id"].astype("string").str.strip().eq("").fillna(True)
     )
     invalid_date_rows = int(invalid_date.sum())
     missing_factor_id_rows = int(missing_factor.sum())
-    excluded_rows = int((invalid_date | missing_factor).sum())
-    data = data.loc[~(invalid_date | missing_factor)].copy()
+    future_date_rows = int(future_date.sum())
+    excluded_mask = invalid_date | missing_factor | future_date
+    excluded_rows = int(excluded_mask.sum())
+    data = data.loc[~excluded_mask].copy()
     if data.empty:
         return {
             "status": "not_evidenced",
@@ -392,10 +403,11 @@ def rfet_diagnostic(evidence_ledger: pd.DataFrame, lookback_days: int = 365):
             "invalid_date_rows": invalid_date_rows,
             "missing_factor_id_rows": missing_factor_id_rows,
             "excluded_rows": excluded_rows,
+            "future_date_rows": future_date_rows,
+            "as_of_date": assessment_date.date().isoformat(),
         }
 
-    latest = data["date"].max()
-    cutoff = latest - pd.Timedelta(days=int(lookback_days) - 1)
+    cutoff = assessment_date - pd.Timedelta(days=int(lookback_days) - 1)
     direct_types = {"transaction", "arm_length_transaction", "committed_quote"}
     third_party_type = "qualifying_third_party_quote"
     data["_verified_bool"] = _strict_true(data["verified"])
@@ -428,7 +440,7 @@ def rfet_diagnostic(evidence_ledger: pd.DataFrame, lookback_days: int = 365):
         dates = eligible["date"].dt.normalize().drop_duplicates().sort_values()
         count = int(len(dates))
         if count:
-            final_window_start = latest.normalize() - pd.Timedelta(days=89)
+            final_window_start = assessment_date - pd.Timedelta(days=89)
             starts = pd.date_range(cutoff.normalize(), final_window_start, freq="D")
             min_90 = (
                 min(
@@ -443,8 +455,17 @@ def rfet_diagnostic(evidence_ledger: pd.DataFrame, lookback_days: int = 365):
         rule_100_count = count >= 100
         rule_24_and_90 = count >= 24 and min_90 >= 4
         screen_met = bool(rule_100_count or rule_24_and_90)
+        latest_eligible_date = dates.max() if count else None
+        latest_eligible_age_days = (
+            int((assessment_date - latest_eligible_date).days)
+            if latest_eligible_date is not None else None
+        )
         results[str(factor)] = {
             "eligible_candidate_real_price_days": count,
+            "latest_eligible_observation_date": (
+                latest_eligible_date.date().isoformat() if latest_eligible_date is not None else None
+            ),
+            "latest_eligible_observation_age_days": latest_eligible_age_days,
             "minimum_candidate_days_in_any_90d_window": min_90,
             "count_screen_100_days_met": bool(rule_100_count),
             "count_screen_24_days_and_90d_distribution_met": bool(rule_24_and_90),
@@ -462,6 +483,8 @@ def rfet_diagnostic(evidence_ledger: pd.DataFrame, lookback_days: int = 365):
         "invalid_date_rows": invalid_date_rows,
         "missing_factor_id_rows": missing_factor_id_rows,
         "excluded_rows": excluded_rows,
+        "future_date_rows": future_date_rows,
+        "as_of_date": assessment_date.date().isoformat(),
         "lookback_days": int(lookback_days),
         "eligible_evidence_types": sorted(direct_types | {third_party_type}),
         "factors": results,
