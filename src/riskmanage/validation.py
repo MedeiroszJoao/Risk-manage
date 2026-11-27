@@ -352,7 +352,9 @@ def rfet_diagnostic(\n    evidence_ledger: pd.DataFrame,\n    *,\n    as_of_date
     """Compute an RFET count screen, never a regulatory modellability pass.
 
     The ledger schema cannot prove valid real-price observations, vendor audit,
-    identifier mapping, representativeness or complete source controls.
+    identifier mapping, representativeness or complete source controls. The caller
+    must provide the explicit assessment date; evidence is evaluated only through
+    that UTC calendar day, never relative to the newest row in the ledger.
     """
     required = {"date", "factor_id", "evidence_type", "verified"}
     if not required.issubset(evidence_ledger.columns):
@@ -370,8 +372,12 @@ def rfet_diagnostic(\n    evidence_ledger: pd.DataFrame,\n    *,\n    as_of_date
     ):
         raise ValueError("lookback_days must be a positive integer")
 
-    if as_of_date is None:
-        raise ValueError("as_of_date must be a valid explicit assessment date")
+    if (
+        isinstance(as_of_date, (bool, np.bool_, int, np.integer, float, np.floating))
+        or not isinstance(as_of_date, (str, pd.Timestamp, np.datetime64))
+        and not hasattr(as_of_date, "isoformat")
+    ):
+        raise ValueError("as_of_date must be a date, datetime, Timestamp or ISO date string")
     try:
         assessment_date = pd.Timestamp(pd.to_datetime(as_of_date, errors="raise", utc=True))
     except (TypeError, ValueError) as exc:
