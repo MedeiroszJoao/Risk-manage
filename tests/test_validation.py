@@ -275,3 +275,12 @@ def test_rfet_empty_valid_population_still_reports_exclusions():
     assert result["status"] == "not_evidenced"
     assert result["input_rows"] == 1
     assert result["excluded_rows"] == 1
+
+
+def test_validation_rejects_boolean_mixed_with_numeric_before_numpy_promotion():
+    from riskmanage.validation import _one_dimensional_numeric
+
+    with pytest.raises(ValueError, match="booleans"):
+        _one_dimensional_numeric([True, 0.25, 0.5], "sample")
+    with pytest.raises(ValueError, match="booleans"):
+        christoffersen_independence([True, 0, 1])
