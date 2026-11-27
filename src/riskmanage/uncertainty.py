@@ -36,6 +36,17 @@ def _strict_integer(value, name: str, minimum: int = 0) -> int:
     return result
 
 
+def _strict_real(value, name: str) -> float:
+    if isinstance(value, (bool, np.bool_)) or not isinstance(
+        value, (int, float, np.integer, np.floating)
+    ):
+        raise ValueError(f"{name} must be a numeric scalar")
+    result = float(value)
+    if not np.isfinite(result):
+        raise ValueError(f"{name} must be finite")
+    return result
+
+
 def _positive_quote_mids(
     fitted_prices: np.ndarray, noise_sd: np.ndarray, rng
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -90,7 +101,8 @@ def _quote_noise_scales(
 ) -> np.ndarray:
     if not quotes:
         raise ValueError("at least one quote is required")
-    if not np.isfinite(min_price_scale) or min_price_scale <= 0.0:
+    min_price_scale = _strict_real(min_price_scale, "min_price_scale")
+    if min_price_scale <= 0.0:
         raise ValueError("min_price_scale must be finite and positive")
     if any(quote.bid is None or quote.ask is None for quote in quotes):
         raise ValueError(
@@ -185,9 +197,11 @@ def bootstrap_heston_calibration(
     seed = _strict_integer(seed, "seed")
     n_starts = _strict_integer(n_starts, "n_starts", minimum=1)
     max_nfev = _strict_integer(max_nfev, "max_nfev", minimum=1)
-    if not np.isfinite(noise_scale) or noise_scale <= 0.0:
+    noise_scale = _strict_real(noise_scale, "noise_scale")
+    min_price_scale = _strict_real(min_price_scale, "min_price_scale")
+    if noise_scale <= 0.0:
         raise ValueError("noise_scale must be finite and positive")
-    if not np.isfinite(min_price_scale) or min_price_scale <= 0.0:
+    if min_price_scale <= 0.0:
         raise ValueError("min_price_scale must be finite and positive")
     if fitted_parameters.vol_of_variance <= 0.0:
         raise ValueError("fitted vol_of_variance must be positive for calibration")
@@ -337,7 +351,9 @@ def bootstrap_heston_calibration(
         "uncertainty_boundary": (
             "Intervals and covariance are conditional on the fitted Heston model, fixed quote "
             "panel, Gaussian spread-derived quote-noise model, fixed curves/carry and optimizer "
-            "bounds. They exclude model misspecification, quote dependence, stale/crossed markets, "
+            "bounds. Replicates with any non-positive simulated mid are rejected, so successful "
+            "draws are conditional on positive quote panels; the rejection rate is reported. "
+            "Results exclude model misspecification, quote dependence, stale/crossed markets, "
             "curve uncertainty and physical-measure parameter uncertainty."
         ),
     }
