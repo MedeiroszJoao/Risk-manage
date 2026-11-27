@@ -5,7 +5,13 @@ from scipy.optimize import least_squares
 
 
 def _finite_array(values, name: str) -> np.ndarray:
-    array = np.asarray(values, dtype=float)
+    objects = np.asarray(values, dtype=object)
+    if any(isinstance(value, (bool, np.bool_)) for value in objects.flat):
+        raise ValueError(f"{name} must not contain boolean values")
+    array = np.asarray(values)
+    if array.dtype.kind not in "iuf":
+        raise ValueError(f"{name} must contain numeric values without implicit coercion")
+    array = array.astype(float, copy=False)
     if not np.isfinite(array).all():
         raise ValueError(f"{name} must contain only finite values")
     return array
