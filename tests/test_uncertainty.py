@@ -194,3 +194,16 @@ def test_heston_bootstrap_rejects_non_integer_controls(kwargs):
     options.update(kwargs)
     with pytest.raises(ValueError, match="integer"):
         bootstrap_heston_calibration(quote_panel(), market, market, **options)
+
+@pytest.mark.parametrize("kwargs", [
+    {"noise_scale": True},
+    {"noise_scale": "1.0"},
+    {"min_price_scale": False},
+    {"min_price_scale": "0.01"},
+])
+def test_heston_bootstrap_rejects_implicit_numeric_scalar_coercion(kwargs):
+    market = parameters()
+    with pytest.raises(ValueError, match="numeric scalar"):
+        bootstrap_heston_calibration(
+            quote_panel(), market, market, n_bootstrap=2, **kwargs
+        )
