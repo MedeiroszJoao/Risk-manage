@@ -141,3 +141,48 @@ def test_liquidity_adjusted_es_requires_ten_day_base_horizon():
     factors = {"equity": np.random.default_rng(91).normal(size=300)}
     with pytest.raises(ValueError, match="fixed 10-day base horizon"):
         liquidity_adjusted_es(factors, {"equity": 10}, base_horizon=5)
+
+
+@pytest.mark.parametrize("values", [["1", "2", "3"], [True, False, True]])
+def test_risk_rejects_string_and_boolean_losses_before_numeric_coercion(values):
+    with pytest.raises(ValueError, match="1D numeric vector"):
+        historical_var_es(values, 0.95)
+
+
+@pytest.mark.parametrize("confidence", [True, "0.95", np.nan, np.inf])
+def test_risk_rejects_non_numeric_or_non_finite_confidence(confidence):
+    with pytest.raises(ValueError, match="confidence"):
+        historical_var_es(np.arange(1, 51, dtype=float), confidence)
+
+
+@pytest.mark.parametrize("window", [20.5, True, "50"])
+def test_rolling_var_rejects_non_integer_window(window):
+    with pytest.raises(ValueError, match="window must be an integer"):
+        rolling_historical_var(np.arange(1, 101, dtype=float), window=window)
+
+
+@pytest.mark.parametrize("window_days", [20.5, True])
+def test_stress_window_rejects_non_integer_window(window_days):
+    with pytest.raises(ValueError, match="window_days must be an integer"):
+        select_stress_window(
+            {"desk": np.arange(1, 101, dtype=float)}, window_days=window_days
+        )
+
+
+def test_liquidity_adjusted_es_rejects_fractional_liquidity_horizon():
+    factors = {"equity": np.random.default_rng(93).normal(size=300)}
+    with pytest.raises(ValueError, match="liquidity_horizon"):
+        liquidity_adjusted_es(factors, {"equity": 10.5})
+
+
+def test_empirical_es_matches_independent_fractional_tail_sum():
+    losses = np.array([1, 2, 2, 3, 4, 5, 6, 7], dtype=float)
+    confidence = 0.80
+    ordered = np.sort(losses)[::-1]
+    mass = len(losses) * (1.0 - confidence)
+    whole = int(np.floor(mass))
+    fraction = mass - whole
+    independent_es = (ordered[:whole].sum() + fraction * ordered[whole]) / mass
+    result = historical_var_es(losses, confidence)
+    assert result["expected_shortfall"] == pytest.approx(independent_es)
+    assert result["expected_shortfall"] >= result["var"]

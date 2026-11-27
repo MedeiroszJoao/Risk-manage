@@ -10,10 +10,36 @@ EMPIRICAL_QUANTILE_METHOD = "inverted_cdf"
 
 
 def _finite_vector(values, name="values"):
-    x = np.asarray(values, dtype=float)
-    if x.ndim != 1 or len(x) < 2 or not np.isfinite(x).all():
-        raise ValueError(f"{name} must be a finite 1D vector with at least two observations")
+    raw = np.asarray(values)
+    if raw.ndim != 1 or raw.dtype.kind not in "iuf":
+        raise ValueError(
+            f"{name} must be a 1D numeric vector; boolean, string and object "
+            "coercion is not allowed"
+        )
+    x = raw.astype(float, copy=False)
+    if len(x) < 2 or not np.isfinite(x).all():
+        raise ValueError(f"{name} must be finite and contain at least two observations")
     return x
+
+
+def _confidence_level(confidence):
+    if isinstance(confidence, (bool, np.bool_)) or not isinstance(
+        confidence, (int, float, np.integer, np.floating)
+    ):
+        raise ValueError("confidence must be a numeric value in (0.5, 1)")
+    value = float(confidence)
+    if not np.isfinite(value) or not 0.5 < value < 1.0:
+        raise ValueError("confidence must be finite and in (0.5, 1)")
+    return value
+
+
+def _strict_integer(value, name: str, minimum: int = 1) -> int:
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
+        raise ValueError(f"{name} must be an integer")
+    result = int(value)
+    if result < minimum:
+        raise ValueError(f"{name} must be at least {minimum}")
+    return result
 
 
 def historical_var_es(losses, confidence=0.975):
@@ -25,8 +51,7 @@ def historical_var_es(losses, confidence=0.975):
     required fractional mass at that boundary is included.
     """
     x = _finite_vector(losses, "losses")
-    if not 0.5 < confidence < 1:
-        raise ValueError("confidence must be between 0.5 and 1")
+    confidence = _confidence_level(confidence)
 
     var = float(np.quantile(x, confidence, method=EMPIRICAL_QUANTILE_METHOD))
     strict_tail = x[x > var]
@@ -69,13 +94,12 @@ def historical_var_es(losses, confidence=0.975):
 
 
 def rolling_historical_var(losses, window=250, confidence=0.99):
-    x = np.asarray(losses, dtype=float)
-    if x.ndim != 1 or window < 20 or len(x) <= window:
+    """One-step-ahead VaR using only the preceding window of trading observations."""
+    x = _finite_vector(losses, "loss series")
+    window = _strict_integer(window, "window", minimum=20)
+    confidence = _confidence_level(confidence)
+    if len(x) <= window:
         raise ValueError("need a 1D series longer than the forecast window")
-    if not np.isfinite(x).all():
-        raise ValueError("loss series contains non-finite values")
-    if not 0.5 < confidence < 1:
-        raise ValueError("confidence must be between 0.5 and 1")
 
     out = np.full(len(x), np.nan)
     for i in range(window, len(x)):
@@ -89,9 +113,8 @@ def rolling_historical_var(losses, window=250, confidence=0.99):
 
 def _ten_day_losses(daily_losses, horizon=10):
     x = _finite_vector(daily_losses, "daily losses")
-    if not isinstance(horizon, (int, np.integer)) or isinstance(horizon, (bool, np.bool_)):
-        raise ValueError("horizon must be an integer")
-    if horizon < 1 or len(x) < horizon:
+    horizon = _strict_integer(horizon, "horizon")
+    if len(x) < horizon:
         raise ValueError("insufficient observations for requested horizon")
     return np.convolve(x, np.ones(horizon), mode="valid")
 
@@ -104,17 +127,23 @@ def liquidity_adjusted_es(
 ):
     if not factor_losses:
         raise ValueError("factor loss mapping cannot be empty")
-    if base_horizon != 10 or isinstance(base_horizon, (bool, np.bool_)):
+    base_horizon = _strict_integer(base_horizon, "base_horizon")
+    if base_horizon != 10:
         raise ValueError("the Basel-style liquidity adjustment uses a fixed 10-day base horizon")
     if set(factor_losses) != set(liquidity_horizons):
         raise ValueError("each factor must have one liquidity horizon")
+    normalized_horizons = {
+        key: _strict_integer(value, f"liquidity_horizon[{key}]")
+        for key, value in liquidity_horizons.items()
+    }
     invalid = {
         key: value
-        for key, value in liquidity_horizons.items()
+        for key, value in normalized_horizons.items()
         if value not in LIQUIDITY_HORIZONS
     }
     if invalid:
         raise ValueError(f"invalid liquidity horizon mapping: {invalid}")
+    confidence = _confidence_level(confidence)
     arrays = {key: _finite_vector(value, key) for key, value in factor_losses.items()}
     lengths = {len(value) for value in arrays.values()}
     if len(lengths) != 1:
@@ -131,7 +160,7 @@ def liquidity_adjusted_es(
     ):
         names = [
             name
-            for name, horizon in liquidity_horizons.items()
+            for name, horizon in normalized_horizons.items()
             if horizon >= liquidity_horizon
         ]
         if not names:
@@ -183,10 +212,8 @@ def select_stress_window(
     """
     if not factor_losses:
         raise ValueError("factor loss mapping cannot be empty")
-    if not isinstance(window_days, (int, np.integer)) or window_days < 1:
-        raise ValueError("window_days must be a positive integer")
-    if not 0.5 < confidence < 1:
-        raise ValueError("confidence must be between 0.5 and 1")
+    window_days = _strict_integer(window_days, "window_days")
+    confidence = _confidence_level(confidence)
 
     arrays = {
         str(name): _finite_vector(values, f"{name} losses")
