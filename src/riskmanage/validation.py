@@ -40,6 +40,24 @@ def _one_dimensional_numeric(values, name: str) -> np.ndarray:
     return raw.astype(float, copy=False)
 
 
+def _validate_series_alignment(left, right, left_name: str, right_name: str) -> None:
+    """Preserve pandas index semantics before converting dated series to arrays."""
+    left_is_series = isinstance(left, pd.Series)
+    right_is_series = isinstance(right, pd.Series)
+    if left_is_series != right_is_series:
+        raise ValueError(
+            f"{left_name} and {right_name} must both be pandas Series or both be array-like"
+        )
+    if not left_is_series:
+        return
+    if not left.index.equals(right.index):
+        raise ValueError(f"{left_name} and {right_name} must have the same index")
+    if not left.index.is_unique or not left.index.is_monotonic_increasing:
+        raise ValueError(
+            f"{left_name} and {right_name} Series index must be unique and increasing"
+        )
+
+
 def _binary_sequence(values) -> np.ndarray:
     if _contains_boolean(values):
         raise ValueError("exceptions must contain numeric 0/1 values; booleans are not allowed")
@@ -147,10 +165,14 @@ def backtest_var(
     """HPL-only daily VaR backtest with desk-level MAR32.19 thresholds.
 
     MAR32.18 counts a missing HPL or VaR as an outlier. This function therefore
-    never drops unmatched dates. It cannot establish desk eligibility because
+    never drops unmatched dates. When pandas Series are supplied, HPL and VaR
+    indexes must match exactly; datetime indexes must also be unique and
+    increasing. Plain arrays retain a positional-alignment contract. It cannot
+    establish desk eligibility because
     Actual P&L (APL) is absent; a count above the HPL limit is sufficient to
     fail the numerical desk threshold, but a count below it is not an approval.
     """
+    _validate_series_alignment(hpl, var_forecast, "HPL", "VaR")
     h = _one_dimensional_numeric(hpl, "hpl")
     v = _one_dimensional_numeric(var_forecast, "var_forecast")
     c = _probability(confidence)
@@ -266,8 +288,10 @@ def pla_test(hpl, rtpl, window: int = 250):
     """HPL-versus-RTPL distribution diagnostic using the latest 250 pairs.
 
     Missing values are not silently removed: the PLA window is unclassifiable
-    unless all 250 HPL/RTPL pairs are present and finite.
+    unless all 250 HPL/RTPL pairs are present and finite. If pandas Series are
+    supplied, their indexes must match exactly and be unique and increasing.
     """
+    _validate_series_alignment(hpl, rtpl, "HPL", "RTPL")
     h = _one_dimensional_numeric(hpl, "hpl")
     r = _one_dimensional_numeric(rtpl, "rtpl")
     if h.size != r.size:
