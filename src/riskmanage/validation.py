@@ -352,36 +352,15 @@ def rfet_diagnostic(
     evidence_ledger: pd.DataFrame,
     *,
     as_of_date: str | pd.Timestamp,
-    lookback_days: int = 365,
+    calibration_period_start: str | pd.Timestamp,
+    calibration_period_end: str | pd.Timestamp,
 ):
-    """Compute an RFET count screen, never a regulatory modellability pass.
+    """Compute a Basel MAR31.13-aligned RFET count screen, not a modellability pass.
 
-    The ledger schema cannot prove valid real-price observations, vendor audit,
-    identifier mapping, representativeness or complete source controls. The caller
-    must provide the explicit assessment date; evidence is evaluated only through
-    that UTC calendar day, never relative to the newest row in the ledger.
+    The 24-observation rule is counted over the explicit current ES calibration
+    period. The 4-per-90-day and 100-observation rules use the previous
+    12 calendar months ending on the explicit RFET assessment date.
     """
-    if (
-        isinstance(as_of_date, (bool, np.bool_, int, np.integer, float, np.floating))
-        or not isinstance(as_of_date, (str, pd.Timestamp, np.datetime64))
-        and not hasattr(as_of_date, "isoformat")
-    ):
-        raise ValueError("as_of_date must be a date, datetime, Timestamp or ISO date string")
-    try:
-        assessment_date = pd.Timestamp(pd.to_datetime(as_of_date, errors="raise", utc=True))
-    except (TypeError, ValueError) as exc:
-        raise ValueError("as_of_date must be a valid explicit assessment date") from exc
-    if pd.isna(assessment_date):
-        raise ValueError("as_of_date must be a valid explicit assessment date")
-    assessment_date = assessment_date.normalize()
-
-    if (
-        not isinstance(lookback_days, (int, np.integer))
-        or isinstance(lookback_days, (bool, np.bool_))
-        or lookback_days < 1
-    ):
-        raise ValueError("lookback_days must be a positive integer")
-
     required = {"date", "factor_id", "evidence_type", "verified"}
     if not required.issubset(evidence_ledger.columns):
         missing = sorted(required - set(evidence_ledger.columns))
@@ -389,10 +368,51 @@ def rfet_diagnostic(
             "status": "not_evidenced",
             "reason": f"missing fields: {missing}",
             "factors": {},
-            "as_of_date": assessment_date.date().isoformat(),
-            "lookback_days": int(lookback_days),
             "regulatory_status": "not_assessed",
         }
+
+    def parse_explicit_date(value, name: str) -> pd.Timestamp:
+        if (
+            value is None
+            or isinstance(value, (bool, np.bool_, int, np.integer, float, np.floating))
+            or not isinstance(value, (str, pd.Timestamp, np.datetime64))
+            and not hasattr(value, "isoformat")
+        ):
+            raise ValueError(f"{name} must be an explicit date or timestamp")
+        try:
+            parsed = pd.Timestamp(pd.to_datetime(value, errors="raise", utc=True))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{name} must be a valid explicit date") from exc
+        if pd.isna(parsed):
+            raise ValueError(f"{name} must be a valid explicit date")
+        return parsed.normalize()
+
+    assessment_date = parse_explicit_date(as_of_date, "as_of_date")
+    calibration_start = parse_explicit_date(
+        calibration_period_start, "calibration_period_start"
+    )
+    calibration_end = parse_explicit_date(
+        calibration_period_end, "calibration_period_end"
+    )
+
+    if calibration_start > calibration_end:
+        raise ValueError("calibration period start must not exceed its end")
+    calibration_period_days = int((calibration_end - calibration_start).days + 1)
+    if calibration_period_days not in (365, 366):
+        raise ValueError(
+            "calibration period must span one calendar year (365 or 366 days)"
+        )
+    earliest_allowed_end = assessment_date - pd.DateOffset(months=1)
+    if calibration_end > assessment_date or calibration_end < earliest_allowed_end:
+        raise ValueError(
+            "calibration period end must be on or before, and no more than one month "
+            "before, the RFET assessment date"
+        )
+
+    rfet_window_start = (
+        assessment_date - pd.DateOffset(months=12) + pd.Timedelta(days=1)
+    )
+
     data = evidence_ledger.copy()
     input_rows = int(len(data))
     data["date"] = pd.to_datetime(data["date"], errors="coerce", utc=True)
@@ -408,21 +428,30 @@ def rfet_diagnostic(
     excluded_mask = invalid_date | missing_factor | future_date
     excluded_rows = int(excluded_mask.sum())
     data = data.loc[~excluded_mask].copy()
+
+    common_metadata = {
+        "input_rows": input_rows,
+        "invalid_date_rows": invalid_date_rows,
+        "missing_factor_id_rows": missing_factor_id_rows,
+        "excluded_rows": excluded_rows,
+        "future_date_rows": future_date_rows,
+        "as_of_date": assessment_date.date().isoformat(),
+        "rfet_12m_window_start": rfet_window_start.date().isoformat(),
+        "calibration_period_start": calibration_start.date().isoformat(),
+        "calibration_period_end": calibration_end.date().isoformat(),
+        "calibration_period_days": calibration_period_days,
+        "calibration_period_lag_days": int((assessment_date - calibration_end).days),
+    }
+
     if data.empty:
         return {
             "status": "not_evidenced",
             "reason": "no rows with valid dates and non-empty factor identifiers",
             "factors": {},
             "regulatory_status": "not_assessed",
-            "input_rows": input_rows,
-            "invalid_date_rows": invalid_date_rows,
-            "missing_factor_id_rows": missing_factor_id_rows,
-            "excluded_rows": excluded_rows,
-            "future_date_rows": future_date_rows,
-            "as_of_date": assessment_date.date().isoformat(),
+            **common_metadata,
         }
 
-    cutoff = assessment_date - pd.Timedelta(days=int(lookback_days) - 1)
     direct_types = {"transaction", "arm_length_transaction", "committed_quote"}
     third_party_type = "qualifying_third_party_quote"
     data["_verified_bool"] = _strict_true(data["verified"])
@@ -452,38 +481,61 @@ def rfet_diagnostic(
     results = {}
     for factor, group in data.groupby("factor_id"):
         observation_days = group["date"].dt.normalize()
-        eligible = group[
-            (observation_days >= cutoff.normalize())
+        eligible_12m = group[
+            (observation_days >= rfet_window_start)
             & (observation_days <= assessment_date)
             & group["_eligible_evidence"]
         ]
-        dates = eligible["date"].dt.normalize().drop_duplicates().sort_values()
-        count = int(len(dates))
-        if count:
-            final_window_start = assessment_date - pd.Timedelta(days=89)
-            starts = pd.date_range(cutoff.normalize(), final_window_start, freq="D")
-            min_90 = (
-                min(
-                    int(((dates >= start) & (dates < start + pd.Timedelta(days=90))).sum())
-                    for start in starts
+        rfet_dates = (
+            eligible_12m["date"].dt.normalize().drop_duplicates().sort_values()
+        )
+        count_12m = int(len(rfet_dates))
+
+        eligible_calibration = group[
+            (observation_days >= calibration_start)
+            & (observation_days <= calibration_end)
+            & group["_eligible_evidence"]
+        ]
+        calibration_dates = (
+            eligible_calibration["date"]
+            .dt.normalize()
+            .drop_duplicates()
+            .sort_values()
+        )
+        calibration_count = int(len(calibration_dates))
+
+        final_window_start = assessment_date - pd.Timedelta(days=89)
+        starts = pd.date_range(rfet_window_start, final_window_start, freq="D")
+        min_90 = (
+            min(
+                int(
+                    (
+                        (rfet_dates >= window_start)
+                        & (rfet_dates < window_start + pd.Timedelta(days=90))
+                    ).sum()
                 )
-                if len(starts)
-                else count
+                for window_start in starts
             )
-        else:
-            min_90 = 0
-        rule_100_count = count >= 100
-        rule_24_and_90 = count >= 24 and min_90 >= 4
+            if len(starts)
+            else count_12m
+        )
+
+        rule_100_count = count_12m >= 100
+        rule_24_and_90 = calibration_count >= 24 and min_90 >= 4
         screen_met = bool(rule_100_count or rule_24_and_90)
-        latest_eligible_date = dates.max() if count else None
+        latest_eligible_date = rfet_dates.max() if count_12m else None
         latest_eligible_age_days = (
             int((assessment_date - latest_eligible_date).days)
-            if latest_eligible_date is not None else None
+            if latest_eligible_date is not None
+            else None
         )
         results[str(factor)] = {
-            "eligible_candidate_real_price_days": count,
+            "eligible_candidate_real_price_days": count_12m,
+            "calibration_period_real_price_days": calibration_count,
             "latest_eligible_observation_date": (
-                latest_eligible_date.date().isoformat() if latest_eligible_date is not None else None
+                latest_eligible_date.date().isoformat()
+                if latest_eligible_date is not None
+                else None
             ),
             "latest_eligible_observation_age_days": latest_eligible_age_days,
             "minimum_candidate_days_in_any_90d_window": min_90,
@@ -493,24 +545,21 @@ def rfet_diagnostic(
             "classification": (
                 "candidate_for_independent_RFET_review"
                 if screen_met
-                else ("below_count_screen" if count else "not_evidenced")
+                else ("below_count_screen" if count_12m or calibration_count else "not_evidenced")
             ),
         }
+
     return {
         "status": "independent_review_required",
         "regulatory_status": "not_assessed",
-        "input_rows": input_rows,
-        "invalid_date_rows": invalid_date_rows,
-        "missing_factor_id_rows": missing_factor_id_rows,
-        "excluded_rows": excluded_rows,
-        "future_date_rows": future_date_rows,
-        "as_of_date": assessment_date.date().isoformat(),
-        "lookback_days": int(lookback_days),
+        **common_metadata,
         "eligible_evidence_types": sorted(direct_types | {third_party_type}),
         "factors": results,
         "note": (
             "This is only a numerical evidence-count screen. It does not establish "
             "valid real-price observations, vendor audit controls, representative "
-            "factor mapping, source eligibility or Basel RFET modellability."
+            "factor mapping, source eligibility or Basel RFET modellability. The 24-day "
+            "count uses the explicit ES calibration period; the 90-day distribution "
+            "and 100-day count use the previous 12 calendar months at the assessment date."
         ),
     }
