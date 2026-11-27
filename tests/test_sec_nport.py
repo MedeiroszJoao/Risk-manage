@@ -161,7 +161,7 @@ def test_nport_rejects_wrong_accession(nport_dataset: Path):
 def test_nport_short_payoff_is_signed_negative(nport_dataset: Path):
     holding_path = nport_dataset / "FUND_REPORTED_HOLDING.tsv"
     content = holding_path.read_text(encoding="utf-8")
-    content = content.replace("\\tLong\\tEC\\t", "\\tShort\\tEC\\t", 1)
+    content = content.replace("\tLong\tEC\t", "\tShort\tEC\t", 1)
     holding_path.write_text(content, encoding="utf-8")
     positions, _ = parse_nport_dataset(nport_dataset, ACCESSION)
     assert positions[0]["position_direction"] == "short"
