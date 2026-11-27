@@ -18,13 +18,13 @@ The repository has a broad and technically nontrivial research implementation. I
 
 The latest inspected CI run completed successfully on Python 3.11 and 3.12:
 
-- 283 pytest tests passed on each interpreter.
+- 287 pytest tests passed on each interpreter.
 - Ruff passed on both.
 - The deterministic desk case and the Heston Fourier/QE-M, calibration, Monte Carlo Greeks, delta-hedging, randomized-QMC, calibration-uncertainty, hedge-uncertainty, crossed risk-decomposition and EVT experiment steps completed successfully.
 
 CI proves that the committed code executes under those environments and passes its current test suite. It does **not** establish mathematical correctness, independent validation, market calibration, OOS performance, or regulatory compliance.
 
-**The IMCC unconstrained floor in `capital.py` is not a defect.** I initially compared the implementation only with the compact MAR33.15 equation and missed the preceding MAR33.6 rule, which explicitly floors the current full/reduced ES ratio at 1. The implementation's `max(full_current / reduced_current, 1.0)` is consistent with MAR33.6. The current test uses a ratio above 1, however, so a regression test below 1 is still needed to prove that the floor branch is intentional and correct.
+**The IMCC unconstrained floor in `capital.py` is not a defect.** I initially compared the implementation only with the compact MAR33.15 equation and missed the preceding MAR33.6 rule, which explicitly floors the current full/reduced ES ratio at 1. The implementation's `max(full_current / reduced_current, 1.0)` is consistent with MAR33.6. Follow-up tests now cover the below-one portfolio floor, equality, and class-level ratios below one.
 
 The project should retain its identity as a quantitative market-risk research laboratory. The remedy is not a rewrite. It is to close specific mathematical, statistical, numerical and empirical evidence gaps in the existing modules.
 
@@ -132,7 +132,7 @@ Status labels:
 
 ## 5. Test-suite audit
 
-All 21 test modules were inventoried. The current suite has 283 passing tests on each supported Python version.
+All 21 test modules were inventoried. The latest completed suite has 287 passing tests on each supported Python version; four further index-alignment tests are now committed and their CI is pending.
 
 The suite has useful deterministic, edge-case, property-like and cross-method checks. It is not yet an independent validation suite.
 
@@ -151,7 +151,7 @@ The suite has useful deterministic, edge-case, property-like and cross-method ch
 2. **Independent Heston oracle:** Fourier and QE-M are different methods, but both are implemented in this repository. This is cross-method evidence, not an external reference.
 3. **Calibration identifiability:** synthetic parameter recovery is not proof that parameters are uniquely identified.
 4. **Empirical option quotes:** no dated real bid/ask option chain is present.
-5. **Temporal validation:** no comprehensive chronological OOS design for tail risk, calibration or portfolio risk.
+5. **Temporal validation:** no comprehensive chronological OOS design for tail risk, calibration or portfolio risk. The pandas Series index guard now protects validation inputs when indexes are supplied; plain arrays still rely on positional alignment and no venue calendar is enforced.
 6. **Dependence-aware uncertainty:** no block bootstrap or explicit conditional heteroskedastic error design in tail-risk bootstrap.
 7. **Data point-in-time:** no complete publication-time/vintage tests for the multi-source panel.
 8. **Performance:** no benchmark suite measuring time, memory and accuracy together.
@@ -296,7 +296,7 @@ This is not a single overall grade. Maturity is dimension-specific.
 | VaR / ES | Implemented | Empirical convention explicit | Basic edge cases | Basic tests | Public proxies only | Manual independent tail-sum test | Partial |
 | Backtesting / PLA | Implemented | Test statistics present | N/A | HPL diagnostics; power not studied | HPL proxy only | Regulatory formula/source checks partial | Partial |
 | RFET | Diagnostic implemented | Criteria encoded in part | N/A | Evidence-window counts | No authenticated transaction evidence | Basel criteria mapped; evidence authenticity absent | Ledger metadata |
-| IMCC / NMRF | Formula primitives implemented | **IMCC unconstrained floor defect open** | Basic tests | N/A | No bank portfolio | Basel formula comparison found defect | Partial |
+| IMCC / NMRF | Formula primitives implemented | Portfolio floor matches MAR33.6; class-level ratio treatment tested | Basic tests | N/A | No bank portfolio | Basel formula traceability; complete IMA not implemented | Partial |
 | EVT | Implemented | GPD formula conditions present | MLE/bootstrap diagnostics | IID uncertainty only | Synthetic/hedge-simulated | No independent EVT package comparison | Seeded scripts |
 | Data ingestion | Implemented | Schema and provenance checks | Data-quality checks partial | N/A | FRED/EIA observed data | Official source ingestion | Hash manifests, no full PIT |
 | SEC N-PORT | Parser implemented | Schema/units partially checked | Parsing tests | N/A | Public filed snapshots | SEC source fixture | Hash-linked snapshot |
@@ -312,9 +312,9 @@ The above table intentionally avoids a 9/10 claim. A component may be mathematic
 
 ### P0 — Correctness blockers
 
-1. Add below/equal/above-one regression cases for the IMCC floor and verify the class-level ratios against MAR33.15.
+1. Complete CI for the pandas Series index-alignment guard in `validation.py`.
 2. Reconcile every remaining formula in `capital.py` against the exact applicable Basel MAR33 paragraphs, including numerator/denominator definitions and stress/current period conventions.
-3. Reconcile `liquidity_adjusted_es` to the exact intended liquidity-horizon formula, including assumptions about independent/non-overlapping risk-factor shocks and scaling.
+3. Reconcile `liquidity_adjusted_es` to MAR33.4 at position/instrument level, including maturity caps and the assumptions behind additive daily P&L aggregation.
 4. Audit all price/return/loss sign conventions and units end-to-end from source data through P&L and VaR/ES.
 5. Confirm that no data transformation creates an implicit future-information leak.
 
@@ -365,9 +365,9 @@ A correction is not complete until all applicable items below are satisfied:
 - Result is reviewed for numerical stability and economic interpretation.
 - Maturity register updated without overstating validation.
 
-### First authorized code task after this audit
+### First follow-up code task after this audit
 
-**Fix the IMCC unconstrained ratio floor and add the missing regression cases.** This is a small, localized correction with a clear primary-source formula and a falsifiable acceptance test. It does not require restructuring the module or changing the project's architecture.
+**Preserve time-index semantics in model validation.** The new guard rejects mismatched pandas Series indexes before array conversion; its four regression tests must pass on both Python versions before the fix is considered complete.
 
 ---
 
@@ -376,7 +376,7 @@ A correction is not complete until all applicable items below are satisfied:
 - Basel Committee, [MAR33 — Internal models approach: capital requirements calculation](https://www.bis.org/committees/bcbs/basel-framework/standard/mar/33/inforce/2022-01-01/published/2019-12-15).
 - Basel Committee, [MAR32 — Backtesting and P&L attribution test requirements](https://www.bis.org/basel_framework/chapter/MAR/32.htm?inforce=20230101&published=20200327).
 - Basel Committee, [MAR31 — Internal models approach: model requirements and RFET](https://www.bis.org/committees/bcbs/basel-framework/standard/mar/31/inforce/2023-01-01/published/2020-03-27).
-- Risk-manage CI: [run 45922623187](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45922623187).
+- Risk-manage CI: [run 45923474678](https://github.com/MedeiroszJoao/Risk-manage/actions/runs/45923474678).
 - Materials repository: [README](https://github.com/MedeiroszJoao/materials/blob/main/README.md) and [GOVERNANCE](https://github.com/MedeiroszJoao/materials/blob/main/GOVERNANCE.md).
 
 ---
