@@ -168,7 +168,7 @@ def test_effective_position_liquidity_horizon_applies_next_longer_maturity_bucke
 
 
 def test_joint_liquidity_horizon_pnl_revalues_position_level_factor_subsets():
-    market = build_synthetic_market_data(2, seed=771)
+    market = build_synthetic_market_data(300, seed=771)
     market.loc[0, "sp500"] = 100.0
     market.loc[1, "sp500"] = 112.0
     market.loc[0, "vix"] = 20.0
@@ -211,13 +211,13 @@ def test_joint_liquidity_horizon_pnl_revalues_position_level_factor_subsets():
 
 
 def test_joint_liquidity_horizon_pnl_rejects_missing_factor_horizon_mapping():
-    market = build_synthetic_market_data(3, seed=772)
+    market = build_synthetic_market_data(300, seed=772)
     with pytest.raises(ValueError, match="every declared desk risk factor"):
         build_joint_liquidity_horizon_pnl(market, {"sp500": 10})
 
 
 def test_joint_liquidity_horizon_pnl_rejects_unmapped_instruments():
-    market = build_synthetic_market_data(3, seed=773)
+    market = build_synthetic_market_data(300, seed=773)
     position = Position("Equity Options", "UNKNOWN_INSTRUMENT", 1.0)
     horizons = {
         "sp500": 10, "equity_vol": 20, "eurusd": 10, "eurusd_vol": 40,
