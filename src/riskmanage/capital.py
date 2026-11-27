@@ -54,6 +54,11 @@ def _align_factor_losses(factor_losses):
         raise ValueError("factor losses cannot be empty")
     values = {}
     for name, series in factor_losses.items():
+        objects = np.asarray(series, dtype=object)
+        if any(isinstance(value, (bool, np.bool_)) for value in objects.flat):
+            raise ValueError(
+                f"factor losses for {name} must not contain boolean observations"
+            )
         raw = np.asarray(series)
         if raw.ndim != 1 or raw.dtype.kind not in "iuf":
             raise ValueError(
