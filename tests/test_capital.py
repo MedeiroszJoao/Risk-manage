@@ -253,3 +253,44 @@ def test_imcc_does_not_floor_individual_risk_class_ratios_at_one():
     assert result["class_components"]["equity"] == pytest.approx(105.0)
     assert result["constrained_sum"] == pytest.approx(125.0)
     assert result["imcc"] == pytest.approx(137.5)
+
+
+def test_imcc_portfolio_scaling_ratio_below_one_is_floored_by_mar33_6():
+    result = calculate_imcc(
+        es_full_current=80.0,
+        es_reduced_current=100.0,
+        es_reduced_stress=120.0,
+        class_components={
+            "equity": {
+                "full_current": 40.0,
+                "reduced_current": 80.0,
+                "reduced_stress": 10.0,
+            },
+        },
+    )
+
+    # MAR33.6: the portfolio-wide full/reduced current ES ratio is floored at 1.
+    # MAR33.15: the partial class ratio is not independently floored.
+    assert result["unconstrained"] == pytest.approx(120.0)
+    assert result["class_components"]["equity"] == pytest.approx(5.0)
+    assert result["constrained_sum"] == pytest.approx(5.0)
+    assert result["imcc"] == pytest.approx(62.5)
+
+
+def test_imcc_portfolio_scaling_ratio_equal_to_one_is_unchanged():
+    result = calculate_imcc(
+        es_full_current=100.0,
+        es_reduced_current=100.0,
+        es_reduced_stress=120.0,
+        class_components={
+            "equity": {
+                "full_current": 50.0,
+                "reduced_current": 50.0,
+                "reduced_stress": 20.0,
+            },
+        },
+    )
+
+    assert result["unconstrained"] == pytest.approx(120.0)
+    assert result["class_components"]["equity"] == pytest.approx(20.0)
+    assert result["imcc"] == pytest.approx(70.0)
