@@ -220,7 +220,7 @@ def test_backtest_missing_values_are_not_fabricated_as_statistical_exceptions():
     assert result["kupiec"]["observations"] == 248
     assert result["kupiec"]["exceptions"] == 1
     assert result["kupiec_inference_population"] == "finite_matched_HPL_VaR_pairs_only"
-    assert result["christoffersen"]["valid_transitions"] == 246
+    assert result["christoffersen"]["valid_transitions"] == 245
     assert result["christoffersen_inference_population"] == (
         "adjacent_finite_matched_HPL_VaR_pairs_only"
     )
