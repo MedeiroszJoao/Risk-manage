@@ -96,3 +96,24 @@ def test_bid_ask_objective_and_quote_validation():
         HestonOptionQuote(100, 1, "call", 10, bid=9.9)
     with pytest.raises(ValueError, match="inside"):
         HestonOptionQuote(100, 1, "call", 10, bid=10.1, ask=10.2)
+
+
+@pytest.mark.parametrize("field", ["strike", "maturity", "mid_price", "weight"])
+def test_heston_option_quote_rejects_boolean_fields(field):
+    values = {
+        "strike": 100.0,
+        "maturity": 1.0,
+        "option_type": "call",
+        "mid_price": 10.0,
+        "bid": 9.0,
+        "ask": 11.0,
+        "weight": 1.0,
+    }
+    values[field] = True
+    with pytest.raises(ValueError, match="numeric scalars"):
+        HestonOptionQuote(**values)
+
+
+def test_heston_option_quote_rejects_boolean_bid_ask():
+    with pytest.raises(ValueError, match="numeric scalars"):
+        HestonOptionQuote(100.0, 1.0, "call", 10.0, bid=True, ask=11.0)
