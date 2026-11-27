@@ -225,3 +225,31 @@ def test_imcc_does_not_apply_portfolio_floor_to_individual_risk_classes():
     assert result["class_components"]["rates"] == pytest.approx(30.0)
     assert result["constrained_sum"] == pytest.approx(35.0)
     assert result["imcc"] == pytest.approx(73.75)
+
+
+def test_imcc_does_not_floor_individual_risk_class_ratios_at_one():
+    result = calculate_imcc(
+        es_full_current=100.0,
+        es_reduced_current=80.0,
+        es_reduced_stress=120.0,
+        class_components={
+            "rates": {
+                "full_current": 30.0,
+                "reduced_current": 60.0,
+                "reduced_stress": 40.0,
+            },
+            "equity": {
+                "full_current": 70.0,
+                "reduced_current": 20.0,
+                "reduced_stress": 30.0,
+            },
+        },
+    )
+
+    # MAR33.6 floors the portfolio-wide scaling ratio; MAR33.15 does not
+    # independently floor each partial risk-class ratio.
+    assert result["unconstrained"] == pytest.approx(150.0)
+    assert result["class_components"]["rates"] == pytest.approx(20.0)
+    assert result["class_components"]["equity"] == pytest.approx(105.0)
+    assert result["constrained_sum"] == pytest.approx(125.0)
+    assert result["imcc"] == pytest.approx(137.5)
