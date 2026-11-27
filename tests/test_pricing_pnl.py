@@ -1,12 +1,14 @@
 import numpy as np
+import pandas as pd
 import pytest
 from riskmanage.pricing import black_scholes_call, garman_kohlhagen_call
 from riskmanage.fixtures import build_synthetic_market_data
 from riskmanage.portfolio import Position
 from riskmanage.pnl import (
     _effective_position_liquidity_horizon,
-    build_joint_liquidity_horizon_pnl,
     build_desk_pnl,
+    build_joint_liquidity_horizon_10d_pnl,
+    build_joint_liquidity_horizon_pnl,
     enrich_market_data,
     market_state,
     _mixed_second_derivative,
@@ -227,3 +229,75 @@ def test_joint_liquidity_horizon_pnl_rejects_unmapped_instruments():
     }
     with pytest.raises(ValueError, match="no risk-factor mapping"):
         build_joint_liquidity_horizon_pnl(market, horizons, positions=[position])
+
+
+def test_direct_ten_day_liquidity_horizon_revalues_overlapping_static_windows():
+    data = build_synthetic_market_data(40, seed=20261127)
+    positions = [
+        Position(
+            "Equity Options",
+            "EQUITY_CALL",
+            quantity=1.0,
+            maturity=0.5,
+            strike=100.0,
+            multiplier=1.0,
+            label="test call",
+        )
+    ]
+    horizons = {
+        "sp500": 10,
+        "equity_vol": 20,
+        "eurusd": 10,
+        "eurusd_vol": 40,
+        "ust2y": 10,
+        "ust10y": 10,
+        "wti": 20,
+        "brent": 20,
+    }
+
+    direct = build_joint_liquidity_horizon_10d_pnl(
+        data, horizons, positions=positions
+    )
+    daily = build_joint_liquidity_horizon_pnl(
+        data, horizons, positions=positions
+    )
+    enriched = enrich_market_data(data)
+    start_state = market_state(enriched.iloc[0])
+    end_state = market_state(enriched.iloc[10])
+
+    full_shock = dict(start_state)
+    full_shock["sp500"] = end_state["sp500"]
+    full_shock["equity_vol"] = end_state["equity_vol"]
+    expected_full = (
+        value_position(positions[0], full_shock, day_offset=10)
+        - value_position(positions[0], start_state, day_offset=10)
+    )
+
+    volatility_only = dict(start_state)
+    volatility_only["equity_vol"] = end_state["equity_vol"]
+    expected_vol_only = (
+        value_position(positions[0], volatility_only, day_offset=10)
+        - value_position(positions[0], start_state, day_offset=10)
+    )
+
+    assert len(direct) == len(data) - 10
+    assert direct.iloc[0]["date"] == pd.Timestamp(enriched.iloc[10]["date"])
+    assert direct.iloc[0]["pnl_lh_10"] == pytest.approx(expected_full, rel=1e-12, abs=1e-10)
+    assert direct.iloc[0]["pnl_lh_20"] == pytest.approx(expected_vol_only, rel=1e-12, abs=1e-10)
+    assert direct.iloc[0]["pnl_lh_40"] == pytest.approx(0.0, abs=1e-12)
+    metadata = direct.attrs["liquidity_horizon_metadata"]
+    assert metadata["observation_horizon_days"] == 10
+    assert metadata["overlapping_windows"] is True
+    assert metadata["theta_included"] is False
+    assert metadata["method"] == (
+        "position_level_joint_10d_overlapping_full_revaluation"
+    )
+
+    # The legacy rolling-book sum holds a one-day aged maturity at every daily
+    # mark; it is a distinct estimator for a nonlinear option position.
+    daily_roll_ten_day = np.convolve(
+        daily["pnl_lh_10"].to_numpy(), np.ones(10), mode="valid"
+    )
+    assert not np.isclose(
+        daily_roll_ten_day[0], direct.iloc[0]["pnl_lh_10"], rtol=1e-7, atol=1e-9
+    )

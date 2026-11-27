@@ -247,3 +247,71 @@ def test_liquidity_adjusted_es_labels_legacy_additive_method_as_approximation():
     result = liquidity_adjusted_es(factors, {"equity": 10})
     assert result["calculation_method"] == "additive_factor_contribution_approximation"
     assert result["theta_included"] is None
+
+
+def test_liquidity_adjusted_es_uses_direct_ten_day_joint_losses_without_double_aggregation():
+    rng = np.random.default_rng(884)
+    daily_factors = {"equity": rng.normal(size=500)}
+    horizons = {"equity": 10}
+    direct_10d = {
+        horizon: rng.normal(0.0, 1.0 / np.sqrt(horizon / 10.0), 491)
+        for horizon in (10, 20, 40, 60, 120)
+    }
+    metadata = {
+        "method": "position_level_joint_10d_overlapping_full_revaluation",
+        "observation_horizon_days": 10,
+        "theta_included": False,
+        "factor_subset_by_horizon": {
+            "20": ["equity"], "40": ["equity"],
+            "60": ["equity"], "120": ["equity"],
+        },
+    }
+
+    result = liquidity_adjusted_es(
+        daily_factors,
+        horizons,
+        0.975,
+        10,
+        joint_horizon_losses=direct_10d,
+        joint_horizon_metadata=metadata,
+    )
+    expected_direct = historical_var_es(direct_10d[10], 0.975)["expected_shortfall"]
+    incorrectly_rolled = historical_var_es(
+        np.convolve(direct_10d[10], np.ones(10), mode="valid"), 0.975
+    )["expected_shortfall"]
+
+    assert result["base_es_10d"] == pytest.approx(expected_direct)
+    assert result["base_es_10d"] != pytest.approx(incorrectly_rolled)
+    assert result["joint_horizon_input_observation_days"] == 10
+    assert result["calculation_method"] == (
+        "position_level_joint_10d_overlapping_full_revaluation"
+    )
+
+
+def test_liquidity_adjusted_es_validates_direct_ten_day_joint_horizon_contract():
+    rng = np.random.default_rng(885)
+    factors = {"equity": rng.normal(size=500)}
+    horizons = {"equity": 10}
+    bad_length = {
+        horizon: rng.normal(size=500)
+        for horizon in (10, 20, 40, 60, 120)
+    }
+    with pytest.raises(ValueError, match="declared observation horizon"):
+        liquidity_adjusted_es(
+            factors,
+            horizons,
+            joint_horizon_losses=bad_length,
+            joint_horizon_metadata={"observation_horizon_days": 10},
+        )
+
+    correct_length = {
+        horizon: rng.normal(size=491)
+        for horizon in (10, 20, 40, 60, 120)
+    }
+    with pytest.raises(ValueError, match="observation_horizon_days must be 1 or the 10-day"):
+        liquidity_adjusted_es(
+            factors,
+            horizons,
+            joint_horizon_losses=correct_length,
+            joint_horizon_metadata={"observation_horizon_days": 5},
+        )

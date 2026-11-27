@@ -123,37 +123,36 @@ def _effective_position_liquidity_horizon(base_horizon: int, maturity_years: flo
     return int(min(eligible))
 
 
-def build_joint_liquidity_horizon_pnl(
+def _prepare_joint_liquidity_horizon_positions(
     market_data: pd.DataFrame,
     liquidity_horizons: dict[str, int],
-    positions: list[Position] | None = None,
-) -> pd.DataFrame:
-    """Revalue each position under the risk-factor subset for each liquidity horizon.
-
-    For each position, only mapped factors whose effective horizon is at least
-    the threshold are shocked. All other factors for that position stay at the
-    prior-day values. Both marks use the same one-day aged valuation, isolating
-    market-factor P&L from theta. This is a research implementation of the
-    MAR33.4 position-level subset structure, not a full regulatory model.
-    """
+    positions: list[Position] | None,
+):
     data = enrich_market_data(market_data)
     if len(data) < 2:
         raise ValueError("at least two market observations are required")
     expected_factors = {
         factor for factor_tuple in DESK_FACTORS.values() for factor in factor_tuple
     }
-    if not isinstance(liquidity_horizons, dict) or set(liquidity_horizons) != expected_factors:
+    if (
+        not isinstance(liquidity_horizons, dict)
+        or set(liquidity_horizons) != expected_factors
+    ):
         raise ValueError(
             "liquidity_horizons must map every declared desk risk factor exactly once"
         )
 
     normalized_horizons = {}
     for factor, value in liquidity_horizons.items():
-        if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
+        if isinstance(value, (bool, np.bool_)) or not isinstance(
+            value, (int, np.integer)
+        ):
             raise ValueError(f"liquidity_horizon[{factor}] must be an integer")
         horizon = int(value)
         if horizon not in LIQUIDITY_HORIZONS:
-            raise ValueError(f"liquidity_horizon[{factor}] is not a permitted horizon")
+            raise ValueError(
+                f"liquidity_horizon[{factor}] is not a permitted horizon"
+            )
         normalized_horizons[factor] = horizon
 
     if positions is None:
@@ -166,7 +165,9 @@ def build_joint_liquidity_horizon_pnl(
         if position.desk not in DESKS:
             raise ValueError(f"unknown position desk: {position.desk!r}")
         if position.instrument not in INSTRUMENT_RISK_FACTORS:
-            raise ValueError(f"no risk-factor mapping for instrument {position.instrument!r}")
+            raise ValueError(
+                f"no risk-factor mapping for instrument {position.instrument!r}"
+            )
         base_map = {
             factor: normalized_horizons[factor]
             for factor in INSTRUMENT_RISK_FACTORS[position.instrument]
@@ -207,6 +208,28 @@ def build_joint_liquidity_horizon_pnl(
         factor_subset_by_horizon[str(horizon)] = sorted(factor_subset)
         positions_by_horizon[str(horizon)] = included_positions
 
+    return data, position_maps, factor_subset_by_horizon, positions_by_horizon
+
+
+def build_joint_liquidity_horizon_pnl(
+    market_data: pd.DataFrame,
+    liquidity_horizons: dict[str, int],
+    positions: list[Position] | None = None,
+) -> pd.DataFrame:
+    """Daily position-level full revaluation for a constant-maturity rolling book.
+
+    For each daily close-to-close interval and liquidity-horizon threshold, only
+    mapped factors whose effective horizon is at least the threshold are shocked.
+    Both marks use the same one-day aged position, so theta is excluded. These
+    daily P&Ls are later summed into overlapping 10-observation totals. This is
+    a daily-roll approximation, not a direct static-position 10-day revaluation.
+    """
+    data, position_maps, factor_subset_by_horizon, positions_by_horizon = (
+        _prepare_joint_liquidity_horizon_positions(
+            market_data, liquidity_horizons, positions
+        )
+    )
+
     rows = []
     for row_index in range(1, len(data)):
         previous_state = market_state(data.iloc[row_index - 1])
@@ -235,7 +258,17 @@ def build_joint_liquidity_horizon_pnl(
     result = pd.DataFrame(rows)
     result.attrs["liquidity_horizon_metadata"] = {
         "method": "position_level_joint_full_revaluation",
-        "risk_factor_mapping": "INSTRUMENT_RISK_FACTORS plus supplied factor liquidity horizons",
+        "observation_horizon_days": 1,
+        "time_series_aggregation": (
+            "rolling sum of ten daily full-revaluation market-factor P&Ls"
+        ),
+        "position_policy": (
+            "constant-maturity daily roll; positions are re-established at declared "
+            "maturity after each daily interval"
+        ),
+        "risk_factor_mapping": (
+            "INSTRUMENT_RISK_FACTORS plus supplied factor liquidity horizons"
+        ),
         "factor_subset_by_horizon": factor_subset_by_horizon,
         "positions_by_horizon": positions_by_horizon,
         "position_factor_horizons": [
@@ -249,12 +282,113 @@ def build_joint_liquidity_horizon_pnl(
             "spot proxy and no maturity cap"
         ),
         "time_decay_treatment": (
-            "theta is isolated by valuing both prior-state and shocked-state positions "
-            "at day_offset=1; only selected market-factor shocks vary"
+            "theta is excluded by valuing both prior-state and shocked-state positions "
+            "at day_offset=1; ten-day risk totals are sums of daily rolling-book P&Ls"
         ),
+        "theta_included": False,
         "scope": (
-            "research implementation; instrument coverage, factor map, desk mapping "
-            "and maturity conventions are simplified and not regulatory validated"
+            "research daily-roll alternative; instrument coverage, factor map, desk "
+            "mapping and maturity conventions are simplified and not regulatory validated"
+        ),
+    }
+    return result
+
+
+def build_joint_liquidity_horizon_10d_pnl(
+    market_data: pd.DataFrame,
+    liquidity_horizons: dict[str, int],
+    positions: list[Position] | None = None,
+) -> pd.DataFrame:
+    """Directly revalue overlapping ten-observation shocks for a static window book.
+
+    Each output row is one overlapping 10-observation interval from t-10 to t.
+    The supplied positions are held fixed during that interval. For each
+    liquidity-horizon threshold, only the risk factors with effective horizons
+    at least as long as the threshold are shocked; all other factors stay at
+    their values at t-10. Both marks use the same ten-day aged maturity, which
+    excludes theta while retaining full nonlinear repricing under the direct
+    ten-day risk-factor move. No shorter-horizon P&L is scaled or summed.
+    """
+    base_horizon_days = 10
+    data, position_maps, factor_subset_by_horizon, positions_by_horizon = (
+        _prepare_joint_liquidity_horizon_positions(
+            market_data, liquidity_horizons, positions
+        )
+    )
+    if len(data) <= base_horizon_days:
+        raise ValueError(
+            "at least eleven market observations are required for a 10-day interval"
+        )
+
+    rows = []
+    for end_index in range(base_horizon_days, len(data)):
+        start_index = end_index - base_horizon_days
+        previous_state = market_state(data.iloc[start_index])
+        current_state = market_state(data.iloc[end_index])
+        row = {"date": pd.Timestamp(data.iloc[end_index]["date"])}
+        for horizon in LIQUIDITY_HORIZONS:
+            joint_pnl = 0.0
+            for item in position_maps:
+                position = item["position"]
+                selected = [
+                    factor for factor, eff in item["effective_factor_horizons"].items()
+                    if eff >= horizon
+                ]
+                if not selected:
+                    continue
+                shocked_state = dict(previous_state)
+                for factor in selected:
+                    shocked_state[factor] = current_state[factor]
+                joint_pnl += (
+                    value_position(
+                        position, shocked_state, day_offset=base_horizon_days
+                    )
+                    - value_position(
+                        position, previous_state, day_offset=base_horizon_days
+                    )
+                )
+            row[f"pnl_lh_{horizon}"] = float(joint_pnl)
+        rows.append(row)
+
+    result = pd.DataFrame(rows)
+    result.attrs["liquidity_horizon_metadata"] = {
+        "method": "position_level_joint_10d_overlapping_full_revaluation",
+        "observation_horizon_days": base_horizon_days,
+        "base_horizon_days": base_horizon_days,
+        "overlapping_windows": True,
+        "window_construction": (
+            "ten consecutive close-to-close observations; each row revalues the "
+            "portfolio from data index t-10 to t"
+        ),
+        "position_policy": (
+            "same supplied positions are held fixed within each ten-observation "
+            "window; positions are reinitialized at the declared book state for "
+            "each overlapping historical window"
+        ),
+        "risk_factor_mapping": (
+            "INSTRUMENT_RISK_FACTORS plus supplied factor liquidity horizons"
+        ),
+        "factor_subset_by_horizon": factor_subset_by_horizon,
+        "positions_by_horizon": positions_by_horizon,
+        "position_factor_horizons": [
+            {key: value for key, value in item.items() if key != "position"}
+            for item in position_maps
+        ],
+        "maturity_convention": (
+            "maturity_years multiplied by 252 trading days; if maturity is shorter "
+            "than the mapped base liquidity horizon, use the smallest permitted "
+            "horizon strictly longer than maturity; maturity zero means a non-expiring "
+            "spot proxy and no maturity cap"
+        ),
+        "time_decay_treatment": (
+            "theta excluded; both start and end marks use the same ten-day aged "
+            "position, so only the full ten-day risk-factor shock changes value"
+        ),
+        "theta_included": False,
+        "scope": (
+            "research implementation of direct 10-day position-level joint revaluation; "
+            "instrument coverage, factor map, desk mapping, maturity assumptions, stress "
+            "calibration and regulatory controls remain incomplete"
         ),
     }
     return result

@@ -249,3 +249,15 @@ The 2026-11-27 audit is the current baseline. It does not claim that the remaini
 **Remediation:** report the observation unit, path independence assumption and within-path time-dependence treatment explicitly. The conditional exceedance bootstrap resamples fitted exceedances; the full-sample bootstrap resamples complete terminal path losses and reselects the numerical threshold in every replicate. The experiment is labelled pathwise Monte Carlo rather than empirical market evidence.
 
 **Interpretation restrictions:** path-level IID resampling supports Monte Carlo sampling uncertainty conditional on the scenario generator. It is not evidence about serial dependence, clustering or regime shifts in a historical daily P&L series. Neither bootstrap addresses physical-parameter uncertainty, model risk or QE-M discretization bias.
+
+
+
+## LIQ-01 — Separate direct 10-day full revaluation from daily-roll aggregation
+
+**Finding:** the earlier joint liquidity-horizon method performed full revaluation for each one-day market-factor move at a fixed one-day aged maturity, then summed ten daily P&Ls. That represents a constant-maturity daily-roll approximation. For nonlinear positions it is not generally equivalent to revaluing a fixed position under the full 10-observation risk-factor move. The two estimators were not separately reported.
+
+**Remediation:** retain the daily-roll calculation as an explicit alternative and add direct overlapping 10-observation revaluation. Each 10-day window holds the supplied positions fixed, shocks only the risk-factor subset eligible for the relevant liquidity-horizon threshold, holds other factors at the window-start values, and revalues at the endpoint under the full 10-observation factor move. Both marks use the same 10-day aged maturity to isolate theta. The liquidity ES aggregator now accepts either aligned one-day P&L arrays (which it rolls by ten) or already-computed 10-day window P&Ls (which it must not roll again).
+
+**Basel traceability:** MAR33.4 defines a 10-day base horizon, the position-level factor subsets and the use of changes over the base interval without scaling from a shorter horizon; it permits overlapping observations. Official source: https://www.bis.org/committees/bcbs/basel-framework/standard/mar?allChapters=true
+
+**Interpretation restrictions:** this is a research implementation of that horizon structure, not a complete MAR33 implementation. The factor and desk maps, instrument coverage, maturity treatment, data calibration, stress-period selection, full class requirements, NMRF and supervisory controls remain incomplete. Theta is excluded in both research estimators; the direct method uses the same 10-day aged maturity at both marks. The difference between estimators is reported rather than hidden.

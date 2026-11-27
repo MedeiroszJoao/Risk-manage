@@ -12,7 +12,8 @@ from riskmanage.data import load_market_data, validate_market_data
 from riskmanage.fixtures import build_synthetic_market_data
 from riskmanage.pnl import (
     DESK_FACTORS, build_desk_pnl, build_factor_pnl,
-    build_joint_liquidity_horizon_pnl, enrich_market_data, market_state, value_desk,
+    build_joint_liquidity_horizon_10d_pnl, build_joint_liquidity_horizon_pnl,
+    enrich_market_data, market_state, value_desk,
 )
 from riskmanage.portfolio import DESKS, build_default_portfolio
 from riskmanage.risk import (
@@ -148,18 +149,37 @@ def main():
     factor_pnl.to_csv(out/"factor_pnl_attribution.csv",index=False,date_format="%Y-%m-%d")
     factor_names=list(RISK_CLASSES)
     factor_losses={name:-factor_pnl[name].to_numpy() for name in factor_names}
-    joint_liquidity_pnl = build_joint_liquidity_horizon_pnl(market, LIQ_HORIZONS)
-    joint_liquidity_pnl.to_csv(
+    joint_liquidity_daily_roll = build_joint_liquidity_horizon_pnl(
+        market, LIQ_HORIZONS
+    )
+    joint_liquidity_10d = build_joint_liquidity_horizon_10d_pnl(
+        market, LIQ_HORIZONS
+    )
+    joint_liquidity_10d.to_csv(
         out/"liquidity_horizon_pnl.csv", index=False, date_format="%Y-%m-%d"
     )
+    joint_liquidity_daily_roll.to_csv(
+        out/"liquidity_horizon_pnl_daily_roll_approximation.csv",
+        index=False,
+        date_format="%Y-%m-%d",
+    )
     joint_horizon_losses = {
-        horizon: -joint_liquidity_pnl[f"pnl_lh_{horizon}"].to_numpy()
+        horizon: -joint_liquidity_10d[f"pnl_lh_{horizon}"].to_numpy()
         for horizon in LIQUIDITY_HORIZONS
     }
-    liquidity=liquidity_adjusted_es(
+    liquidity = liquidity_adjusted_es(
         factor_losses, LIQ_HORIZONS, .975, 10,
         joint_horizon_losses=joint_horizon_losses,
-        joint_horizon_metadata=joint_liquidity_pnl.attrs["liquidity_horizon_metadata"],
+        joint_horizon_metadata=joint_liquidity_10d.attrs["liquidity_horizon_metadata"],
+    )
+    daily_roll_horizon_losses = {
+        horizon: -joint_liquidity_daily_roll[f"pnl_lh_{horizon}"].to_numpy()
+        for horizon in LIQUIDITY_HORIZONS
+    }
+    liquidity_daily_roll_approximation = liquidity_adjusted_es(
+        factor_losses, LIQ_HORIZONS, .975, 10,
+        joint_horizon_losses=daily_roll_horizon_losses,
+        joint_horizon_metadata=joint_liquidity_daily_roll.attrs["liquidity_horizon_metadata"],
     )
     stress=select_stress_window(factor_losses,250,.975)
     stress["start_date"]=str(market.date.iloc[stress["start_index"]].date())
@@ -215,7 +235,9 @@ def main():
       "reduced_factor_temporal_stability":capital["reduced_factor_stability"],
       "date_range":{"start":str(market.date.min().date()),"end":str(market.date.max().date())},
       "desks":validation,"desk_status":desk_status,"factor_pnl_reconciliation":factor_reconciliation,
-      "liquidity_adjusted_es":liquidity,"stress_window":stress,"ima_capital":capital,
+      "liquidity_adjusted_es":liquidity,
+      "liquidity_adjusted_es_daily_roll_approximation":liquidity_daily_roll_approximation,
+      "stress_window":stress,"ima_capital":capital,
       "stress_history_assessment":stress_history_assessment,
       "rfet":rfet,"scenario_stress":scenario_stress.to_dict("records"),
       "scope_limitations":[
@@ -232,7 +254,9 @@ def main():
     }
     (out/"desk_validation.json").write_text(json.dumps(json_safe(validation),indent=2))
     (out/"capital_summary.json").write_text(json.dumps(json_safe({
-      "liquidity_adjusted_es":liquidity,"stress_window":stress,"ima_capital":capital,
+      "liquidity_adjusted_es":liquidity,
+      "liquidity_adjusted_es_daily_roll_approximation":liquidity_daily_roll_approximation,
+      "stress_window":stress,"ima_capital":capital,
       "rfet":rfet,"factor_pnl_reconciliation":factor_reconciliation
     }),indent=2))
     (out/"executive_summary.json").write_text(json.dumps(json_safe(summary),indent=2))
@@ -310,8 +334,9 @@ def main():
     ]
     md += fold_report_rows
     md += ["","## Capital and stress outputs","",
-      f"- Position-level joint-revaluation liquidity-adjusted ES research diagnostic: USD {liquidity['liquidity_adjusted_es']:,.2f} (10-day base, 97.5%).",
-      f"- Liquidity ES calculation method: {liquidity['calculation_method']}; theta excluded from risk-factor shocks.",
+      f"- Direct overlapping 10-day position-level full-revaluation ES research diagnostic: USD {liquidity['liquidity_adjusted_es']:,.2f} (97.5%).",
+      f"- Direct 10-day calculation method: {liquidity['calculation_method']}; input observations already represent 10-day shocks; theta excluded.",
+      f"- Daily-roll alternative (sum of ten daily P&Ls): USD {liquidity_daily_roll_approximation['liquidity_adjusted_es']:,.2f}; not equivalent to direct 10-day revaluation for nonlinear positions.",
       f"- Descriptive 250-observation high-tail window: {stress['start_date']} to {stress['end_date']}.",
       f"- Historical span starts on/before 2007: {stress_history_assessment['starts_on_or_before_2007']} (not a regulatory back-history claim).",
       imcc_report_line,

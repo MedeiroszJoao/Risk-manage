@@ -158,33 +158,68 @@ def liquidity_adjusted_es(
 
     expected_length = len(next(iter(arrays.values())))
     joint_arrays = None
+    joint_input_horizon_days = None
+    horizon_metadata = {}
     if joint_horizon_losses is not None:
         if not isinstance(joint_horizon_losses, dict) or set(joint_horizon_losses) != set(LIQUIDITY_HORIZONS):
             raise ValueError(f"joint_horizon_losses must contain exactly {LIQUIDITY_HORIZONS}")
-        joint_arrays = {
-            horizon: _finite_vector(joint_horizon_losses[horizon], f"joint_horizon_losses[{horizon}]")
-            for horizon in LIQUIDITY_HORIZONS
-        }
-        if any(len(values) != expected_length for values in joint_arrays.values()):
-            raise ValueError("joint horizon loss vectors must align with factor loss history")
         if joint_horizon_metadata is not None and not isinstance(joint_horizon_metadata, dict):
             raise ValueError("joint_horizon_metadata must be a dictionary")
-        method = "position_level_joint_full_revaluation"
+        if joint_horizon_metadata is not None:
+            horizon_metadata = joint_horizon_metadata.get(
+                "liquidity_horizon_metadata", joint_horizon_metadata
+            )
+            if not isinstance(horizon_metadata, dict):
+                raise ValueError("liquidity_horizon_metadata must be a dictionary")
+
+        joint_input_horizon_days = horizon_metadata.get(
+            "observation_horizon_days", 1
+        )
+        if (
+            isinstance(joint_input_horizon_days, (bool, np.bool_))
+            or not isinstance(joint_input_horizon_days, (int, np.integer))
+            or int(joint_input_horizon_days) not in (1, base_horizon)
+        ):
+            raise ValueError(
+                "joint observation_horizon_days must be 1 or the 10-day base horizon"
+            )
+        joint_input_horizon_days = int(joint_input_horizon_days)
+        expected_joint_length = (
+            expected_length
+            if joint_input_horizon_days == 1
+            else expected_length - base_horizon + 1
+        )
+        if expected_joint_length <= 0:
+            raise ValueError("insufficient daily factor history for the 10-day base horizon")
+
+        joint_arrays = {
+            horizon: _finite_vector(
+                joint_horizon_losses[horizon], f"joint_horizon_losses[{horizon}]"
+            )
+            for horizon in LIQUIDITY_HORIZONS
+        }
+        if any(len(values) != expected_joint_length for values in joint_arrays.values()):
+            raise ValueError(
+                "joint horizon loss vectors must match the declared observation horizon"
+            )
+        method = horizon_metadata.get(
+            "method", "position_level_joint_full_revaluation"
+        )
         base_daily = joint_arrays[base_horizon]
+        base_losses = (
+            base_daily
+            if joint_input_horizon_days == base_horizon
+            else _ten_day_losses(base_daily, base_horizon)
+        )
     else:
         method = "additive_factor_contribution_approximation"
         base_daily = np.sum(np.vstack(list(arrays.values())), axis=0)
+        base_losses = _ten_day_losses(base_daily, base_horizon)
         if joint_horizon_metadata is not None:
             raise ValueError("joint_horizon_metadata cannot be supplied without joint_horizon_losses")
 
-    base_es = historical_var_es(
-        _ten_day_losses(base_daily, base_horizon), confidence
-    )["expected_shortfall"]
+    base_es = historical_var_es(base_losses, confidence)["expected_shortfall"]
 
-    horizon_metadata = (
-        joint_horizon_metadata.get("liquidity_horizon_metadata", joint_horizon_metadata)
-        if joint_horizon_metadata is not None else {}
-    )
     factor_subset_by_horizon = horizon_metadata.get("factor_subset_by_horizon", {})
     positions_by_horizon = horizon_metadata.get("positions_by_horizon", {})
     components = []
@@ -198,8 +233,13 @@ def liquidity_adjusted_es(
         ]
         if joint_arrays is not None:
             subtotal = joint_arrays[liquidity_horizon]
+            component_losses = (
+                subtotal
+                if joint_input_horizon_days == base_horizon
+                else _ten_day_losses(subtotal, base_horizon)
+            )
             component_es = historical_var_es(
-                _ten_day_losses(subtotal, base_horizon), confidence
+                component_losses, confidence
             )["expected_shortfall"]
             component_factors = factor_subset_by_horizon.get(str(liquidity_horizon), names)
             included_positions = positions_by_horizon.get(str(liquidity_horizon), [])
@@ -237,7 +277,11 @@ def liquidity_adjusted_es(
         "confidence": confidence,
         "base_horizon": base_horizon,
         "calculation_method": method,
-        "theta_included": False if joint_arrays is not None else None,
+        "theta_included": (
+            bool(horizon_metadata.get("theta_included", False))
+            if joint_arrays is not None else None
+        ),
+        "joint_horizon_input_observation_days": joint_input_horizon_days,
         "joint_horizon_metadata": horizon_metadata if joint_arrays is not None else None,
         "components": components,
         "empirical_quantile_method": EMPIRICAL_QUANTILE_METHOD,
