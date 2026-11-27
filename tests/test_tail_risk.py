@@ -158,3 +158,11 @@ def test_pot_gpd_rejects_implicit_scalar_coercion(kwargs):
         options = {"n_bootstrap": 0, "n_full_sample_bootstrap": 0}
         options.update(kwargs)
         fit_pot_gpd_tail_risk(losses, **options)
+
+
+def test_pot_gpd_rejects_boolean_mixed_with_float_before_numpy_promotion():
+    losses = [True, *np.linspace(0.1, 10.0, 99)]
+    with pytest.raises(ValueError, match="boolean"):
+        fit_pot_gpd_tail_risk(
+            losses, n_bootstrap=0, n_full_sample_bootstrap=0
+        )
